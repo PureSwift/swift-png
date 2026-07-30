@@ -172,12 +172,6 @@ png_get_signature(png_const_structrp png_ptr, png_const_inforp info_ptr)
 }
 
 int PNGAPI
-png_get_text(png_const_structrp png_ptr, png_inforp info_ptr, png_textp *text_ptr, int *num_text)
-{
-   png_error(png_ptr, "png_get_text is not implemented");
-}
-
-int PNGAPI
 png_get_unknown_chunks(png_const_structrp png_ptr, png_inforp info_ptr, png_unknown_chunkpp entries)
 {
    png_error(png_ptr, "png_get_unknown_chunks is not implemented");
@@ -314,12 +308,6 @@ int PNGAPI
 png_reset_zstream(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_reset_zstream is not implemented");
-}
-
-void PNGAPI
-png_set_IHDR(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 width, png_uint_32 height, int bit_depth, int color_type, int interlace_method, int compression_method, int filter_method)
-{
-   png_error(png_ptr, "png_set_IHDR is not implemented");
 }
 
 void PNGAPI
@@ -668,12 +656,6 @@ void PNGAPI
 png_set_tRNS_to_alpha(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_set_tRNS_to_alpha is not implemented");
-}
-
-void PNGAPI
-png_set_text(png_const_structrp png_ptr, png_inforp info_ptr, png_const_textp text_ptr, int num_text)
-{
-   png_error(png_ptr, "png_set_text is not implemented");
 }
 
 void PNGAPI
