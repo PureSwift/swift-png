@@ -1,0 +1,33 @@
+# The images the transform sweeps run over.
+#
+# A representative subset rather than the whole corpus, and representative of one thing in
+# particular: the shapes a transform can care about.  One image per colour type, per depth, per
+# interlacing — because the matrix is combinations times images times read modes, and an image that
+# differs from another only in its pixels adds nothing here.
+#
+# One list, read by both sweeps.  The fixed matrix and the random draw have to agree on which images
+# they cover, because the differences recorded against these names are what the random draw excludes
+# from its pool.
+gray1-w13.png
+gray2-w13.png
+gray4-w13.png
+gray8-filter0.png
+gray16-filter2.png
+rgb8-filter0.png
+rgb16-filter4.png
+rgba16-filter1.png
+rgba8-filter0.png
+graya8-filter0.png
+palette1.png
+palette2.png
+palette4.png
+palette8.png
+meta-rgb-trns-bkgd.png
+meta-gray-sbit-trns.png
+meta-palette-trns-hist-bkgd.png
+meta-rgb16-sbit-bkgd.png
+interlaced-rgb8-9x9.png
+interlaced-rgba8-16x16.png
+interlaced-gray2-9x9.png
+interlaced-palette8-10x10.png
+interlaced-rgb16-11x7.png

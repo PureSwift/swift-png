@@ -30,32 +30,9 @@ if [ ! -x "$ours" ] || [ ! -x "$reference" ] || [ ! -d "$corpus" ]; then
     exit 2
 fi
 
-# One image per shape a transform can care about.
-images="
-gray1-w13.png
-gray2-w13.png
-gray4-w13.png
-gray8-filter0.png
-gray16-filter2.png
-rgb8-filter0.png
-rgb16-filter4.png
-rgba16-filter1.png
-rgba8-filter0.png
-graya8-filter0.png
-palette1.png
-palette2.png
-palette4.png
-palette8.png
-meta-rgb-trns-bkgd.png
-meta-gray-sbit-trns.png
-meta-palette-trns-hist-bkgd.png
-meta-rgb16-sbit-bkgd.png
-interlaced-rgb8-9x9.png
-interlaced-rgba8-16x16.png
-interlaced-gray2-9x9.png
-interlaced-palette8-10x10.png
-interlaced-rgb16-11x7.png
-"
+# One image per shape a transform can care about, listed next to the differences recorded against
+# those names so the two cannot drift apart.
+images=$(sed 's/#.*//' "$(dirname "$0")/../Conformance/transform-images.txt")
 
 # Every transform on its own, then combinations, then combinations reordered.
 combinations="
