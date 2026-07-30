@@ -36,7 +36,7 @@ extension Header {
         /// Nothing is owned across a call here: a client may jump out of its warning
         /// handler at any of them, and the caller has already gathered everything it
         /// needs into this value.
-        func report(to host: Host) {
+        public func report(to host: Host) {
             if self.contains(.zeroWidth) {
                 host.warn("Image width is zero in IHDR")
             }
