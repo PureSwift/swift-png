@@ -84,6 +84,15 @@ gamma_dark
 gamma_slight
 gamma_steep
 gamma_shallow
+rgb_to_gray
+rgb_to_gray_warn
+rgb_to_gray_weighted
+rgb_to_gray,expand
+rgb_to_gray,strip_16
+rgb_to_gray,gray_to_rgb
+rgb_to_gray,gamma_bright
+rgb_to_gray,packing
+rgb_to_gray,add_alpha
 gamma_bright,expand
 gamma_bright,gray_to_rgb
 gamma_bright,strip_alpha
@@ -132,6 +141,8 @@ bgr,gray_to_rgb
 add_alpha,gray_to_rgb
 packswap,packing
 invert_mono,packing
+expand,rgb_to_gray
+gray_to_rgb,rgb_to_gray
 expand,gamma_bright
 gray_to_rgb,gamma_bright
 strip_16,gamma_dark
