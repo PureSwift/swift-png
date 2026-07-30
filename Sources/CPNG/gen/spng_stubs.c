@@ -292,22 +292,10 @@ png_read_png(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_void
    png_error(png_ptr, "png_read_png is not implemented");
 }
 
-void PNGAPI
-png_read_update_info(png_structrp png_ptr, png_inforp info_ptr)
-{
-   png_error(png_ptr, "png_read_update_info is not implemented");
-}
-
 int PNGAPI
 png_reset_zstream(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_reset_zstream is not implemented");
-}
-
-void PNGAPI
-png_set_add_alpha(png_structrp png_ptr, png_uint_32 filler, int flags)
-{
-   png_error(png_ptr, "png_set_add_alpha is not implemented");
 }
 
 void PNGAPI
@@ -332,12 +320,6 @@ void PNGAPI
 png_set_background_fixed(png_structrp png_ptr, png_const_color_16p background_color, int background_gamma_code, int need_expand, png_fixed_point background_gamma)
 {
    png_error(png_ptr, "png_set_background_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_bgr(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_bgr is not implemented");
 }
 
 void PNGAPI
@@ -419,30 +401,6 @@ png_set_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep exif)
 }
 
 void PNGAPI
-png_set_expand(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_expand is not implemented");
-}
-
-void PNGAPI
-png_set_expand_16(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_expand_16 is not implemented");
-}
-
-void PNGAPI
-png_set_expand_gray_1_2_4_to_8(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_expand_gray_1_2_4_to_8 is not implemented");
-}
-
-void PNGAPI
-png_set_filler(png_structrp png_ptr, png_uint_32 filler, int flags)
-{
-   png_error(png_ptr, "png_set_filler is not implemented");
-}
-
-void PNGAPI
 png_set_filter(png_structrp png_ptr, int method, int filters)
 {
    png_error(png_ptr, "png_set_filter is not implemented");
@@ -479,27 +437,9 @@ png_set_gamma_fixed(png_structrp png_ptr, png_fixed_point screen_gamma, png_fixe
 }
 
 void PNGAPI
-png_set_gray_to_rgb(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_gray_to_rgb is not implemented");
-}
-
-void PNGAPI
 png_set_invalid(png_const_structrp png_ptr, png_inforp info_ptr, int mask)
 {
    png_error(png_ptr, "png_set_invalid is not implemented");
-}
-
-void PNGAPI
-png_set_invert_alpha(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_invert_alpha is not implemented");
-}
-
-void PNGAPI
-png_set_invert_mono(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_invert_mono is not implemented");
 }
 
 void PNGAPI
@@ -518,24 +458,6 @@ void PNGAPI
 png_set_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp purpose, png_int_32 X0, png_int_32 X1, int type, int nparams, png_const_charp units, png_charpp params)
 {
    png_error(png_ptr, "png_set_pCAL is not implemented");
-}
-
-void PNGAPI
-png_set_packing(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_packing is not implemented");
-}
-
-void PNGAPI
-png_set_packswap(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_packswap is not implemented");
-}
-
-void PNGAPI
-png_set_palette_to_rgb(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_palette_to_rgb is not implemented");
 }
 
 void PNGAPI
@@ -602,48 +524,6 @@ void PNGAPI
 png_set_sRGB_gAMA_and_cHRM(png_const_structrp png_ptr, png_inforp info_ptr, int srgb_intent)
 {
    png_error(png_ptr, "png_set_sRGB_gAMA_and_cHRM is not implemented");
-}
-
-void PNGAPI
-png_set_scale_16(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_scale_16 is not implemented");
-}
-
-void PNGAPI
-png_set_shift(png_structrp png_ptr, png_const_color_8p true_bits)
-{
-   png_error(png_ptr, "png_set_shift is not implemented");
-}
-
-void PNGAPI
-png_set_strip_16(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_strip_16 is not implemented");
-}
-
-void PNGAPI
-png_set_strip_alpha(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_strip_alpha is not implemented");
-}
-
-void PNGAPI
-png_set_swap(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_swap is not implemented");
-}
-
-void PNGAPI
-png_set_swap_alpha(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_swap_alpha is not implemented");
-}
-
-void PNGAPI
-png_set_tRNS_to_alpha(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_tRNS_to_alpha is not implemented");
 }
 
 void PNGAPI
