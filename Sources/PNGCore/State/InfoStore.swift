@@ -1,35 +1,205 @@
 // InfoStore.swift - what the client reads back about the image
 //
-// This backs `png_info`.  It holds what the header and the metadata chunks said,
-// which is what the accessor functions report.
+// This backs `png_info`.  It holds what the header and the metadata chunks said, which
+// is what the accessor functions report.
 //
-// The distinction that matters here is between values and payloads.  A value like
-// the width is copied out to the client and can live as an ordinary Swift
-// property.  A payload like the palette is exposed as a pointer the client may
-// hold, and may even take ownership of, so it has to be allocated through the
-// client's own allocator; those land in a later milestone, and this file grows a
-// `RawBuffer` per payload when they do.
+// The distinction that runs through it is between values and payloads.  A value like
+// the width or the gamma is copied out to the client and lives as an ordinary Swift
+// property.  A payload like the palette is reported as a pointer the client may hold,
+// and may take ownership of, so it lives in memory from the client's allocator and is
+// released here only while this library still owns it.
+//
+// Which chunks were present is tracked separately from their contents, in the same bit
+// set the API exposes.  A chunk can legitimately carry values that are indistinguishable
+// from the defaults, so "was it there" cannot be inferred from what it said.
 
 /// The image description a client reads through the `png_get_` accessors.
 public final class InfoStore {
-    /// Present once the header has been parsed. Accessors report zero until then,
-    /// which is what a client that asks too early sees.
+    /// Where payloads are allocated from.
+    ///
+    /// Held because the memory has to come from the client's allocator, which lives on
+    /// the control structure this info structure was created from.
+    public let host: Host
+
+    /// Present once the header has been parsed. Accessors report zero until then, which
+    /// is what a client that asks too early sees.
     public var header: Header?
 
     /// Which optional chunks were present, as the bits `png_get_valid` reports.
     public var validChunks: UInt32 = 0
 
-    public init() {}
+    // -- values ---------------------------------------------------------------
+
+    public var gamma: FixedPoint = 0
+    public var chromaticity = Chromaticity()
+    public var srgbIntent: UInt8 = 0
+    public var significantBits = SignificantBits()
+    public var physicalDimensions = PhysicalDimensions()
+    public var offset = ImageOffset()
+    public var timestamp = Timestamp()
+    public var codePoints = CodingIndependentCodePoints()
+    public var contentLightLevel = ContentLightLevel()
+    public var masteringDisplay = MasteringDisplayColorVolume()
+
+    /// The background colour, in whatever form the image's colour type calls for: a
+    /// palette index for an indexed image, channel values otherwise.
+    public var background = Rgb16()
+
+    /// How many entries the transparency table holds, for an indexed image.
+    public var transparentCount = 0
+
+    /// The transparent colour for a non-indexed image.
+    public var transparentColor = Rgb16()
+
+    /// How the profile was compressed. Only one method is defined.
+    public var profileCompression: UInt8 = 0
+
+    // -- payloads -------------------------------------------------------------
+
+    public var palette = EscapingBuffer<Rgb8>()
+
+    /// One alpha value per palette entry, for an indexed image.
+    public var transparentAlpha = EscapingBuffer<UInt8>()
+
+    /// One frequency per palette entry.
+    public var histogram = EscapingBuffer<UInt16>()
+
+    public var profileName = TextStorage()
+    public var profile = EscapingBuffer<UInt8>()
+
+    public var exif = EscapingBuffer<UInt8>()
+
+    public var scale = PhysicalScale()
+
+    /// The text entries, in the order they were found.
+    ///
+    /// A Swift array is safe here even though a client may jump out of a callback: it is
+    /// owned by this object rather than by a frame, and growing it uses Swift's allocator,
+    /// which cannot transfer control to the client.
+    public var textEntries: [TextEntry] = []
+
+    /// Storage for the tables the boundary builds in the published structures' layouts.
+    ///
+    /// Several accessors report a pointer to a structure rather than copying values out, and
+    /// those structures are declared in the public header, which this module deliberately
+    /// cannot see. So the boundary builds them and these hold them, since they have to live
+    /// as long as the pointers handed out of them.
+    ///
+    /// One slot per field, and not one shared buffer: a client may call two of these
+    /// accessors and hold both pointers, and a shared buffer would have the second call
+    /// overwrite the first client's data.
+    var exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
+
+    public init(host: Host) {
+        self.host = host
+    }
+
+    /// Releases every payload, then clears everything.
+    ///
+    /// Has to work from any state, including one a client jump left half built.
+    public func release() {
+        self.releaseText()
+
+        for slot in self.exportSlots {
+            slot.deallocate(host: self.host)
+        }
+        self.exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
+
+        self.palette.deallocate(host: self.host)
+        self.transparentAlpha.deallocate(host: self.host)
+        self.histogram.deallocate(host: self.host)
+        self.profile.deallocate(host: self.host)
+        self.exif.deallocate(host: self.host)
+        self.profileName.deallocate(host: self.host)
+        self.scale.width.deallocate(host: self.host)
+        self.scale.height.deallocate(host: self.host)
+
+        self.palette = EscapingBuffer()
+        self.transparentAlpha = EscapingBuffer()
+        self.histogram = EscapingBuffer()
+        self.profile = EscapingBuffer()
+        self.exif = EscapingBuffer()
+        self.profileName = TextStorage()
+        self.scale = PhysicalScale()
+    }
 
     /// Clears everything, as `png_info_init_3` does for a reused structure.
     public func reset() {
+        self.release()
+
         self.header = nil
         self.validChunks = 0
+        self.gamma = 0
+        self.chromaticity = Chromaticity()
+        self.srgbIntent = 0
+        self.significantBits = SignificantBits()
+        self.physicalDimensions = PhysicalDimensions()
+        self.offset = ImageOffset()
+        self.timestamp = Timestamp()
+        self.codePoints = CodingIndependentCodePoints()
+        self.contentLightLevel = ContentLightLevel()
+        self.masteringDisplay = MasteringDisplayColorVolume()
+        self.background = Rgb16()
+        self.transparentCount = 0
+        self.transparentColor = Rgb16()
+        self.profileCompression = 0
     }
 
-    // The geometry accessors report zero rather than failing when the header has
-    // not been read, matching what the reference implementation does for a client
-    // that asks before png_read_info.
+    /// Which reported structure a slot holds.
+    ///
+    /// Named rather than counted, so that adding an accessor cannot accidentally reuse
+    /// another one's storage.
+    public enum ExportSlot: Int, Sendable {
+        case significantBits
+        case timestamp
+        case transparentColor
+        case background
+        case text
+
+        static let count = 5
+    }
+
+    /// Makes room for a table in the published layout, whose element size only the boundary
+    /// module knows.
+    ///
+    /// Reallocated rather than grown in place, and the old table released only after the new
+    /// one exists, so that a failure leaves the previous one intact.
+    public func reserveExportTable(
+        _ slot: ExportSlot,
+        byteCount: Int
+    ) throws -> UnsafeMutableRawPointer? {
+        guard byteCount > 0 else { return nil }
+
+        if self.exportSlots[slot.rawValue].count < byteCount {
+            let fresh = try RawBuffer.allocate(byteCount, host: self.host)
+            let previous = self.exportSlots[slot.rawValue]
+
+            self.exportSlots[slot.rawValue] = fresh
+            previous.deallocate(host: self.host)
+        }
+
+        self.exportSlots[slot.rawValue].zero()
+
+        return self.exportSlots[slot.rawValue].base
+    }
+
+    /// Records that a chunk was present.
+    public func markValid(_ flag: UInt32) {
+        self.validChunks |= flag
+    }
+
+    public func isValid(_ flag: UInt32) -> Bool {
+        self.validChunks & flag != 0
+    }
+
+    public func markInvalid(_ flag: UInt32) {
+        self.validChunks &= ~flag
+    }
+
+    // -- derived geometry -----------------------------------------------------
+    //
+    // These report zero rather than failing when the header has not been read,
+    // matching what the reference does for a client that asks before png_read_info.
 
     public var width: UInt32 { UInt32(self.header?.width ?? 0) }
     public var height: UInt32 { UInt32(self.header?.height ?? 0) }
@@ -40,9 +210,40 @@ public final class InfoStore {
 
     /// Bytes in a row as the client will receive it.
     ///
-    /// Equal to the stored row size until transforms are configured, at which
-    /// point `png_read_update_info` recomputes it.
+    /// Equal to the stored row size until transforms are configured, at which point
+    /// `png_read_update_info` recomputes it.
     public var rowBytes: Int { self.header?.rowBytes ?? 0 }
 
     public var pixelDepth: UInt8 { UInt8(self.header?.pixelDepth ?? 0) }
+}
+
+/// A palette entry: three eight bit channels, laid out to match the published
+/// structure so that the array can be handed to a client directly.
+public struct Rgb8: Sendable {
+    public var red: UInt8 = 0
+    public var green: UInt8 = 0
+    public var blue: UInt8 = 0
+
+    public init() {}
+
+    public init(red: UInt8, green: UInt8, blue: UInt8) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+}
+
+/// A colour at the widest depth the format uses, with a palette index alongside.
+///
+/// One type covers the background and the transparent colour because the format stores
+/// both this way: sixteen bits per channel whatever the image's own depth, plus an index
+/// for when the image is indexed.
+public struct Rgb16: Sendable {
+    public var index: UInt8 = 0
+    public var red: UInt16 = 0
+    public var green: UInt16 = 0
+    public var blue: UInt16 = 0
+    public var gray: UInt16 = 0
+
+    public init() {}
 }
