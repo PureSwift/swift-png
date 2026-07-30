@@ -36,6 +36,12 @@ public struct Host {
     public typealias Read =
         @convention(c) (Owner?, UnsafeMutablePointer<UInt8>?, UInt) -> Void
 
+    /// Hands bytes to whatever the caller writes through.
+    ///
+    /// Absent for a caller that only reads, which is how a decode-only host says so.
+    public typealias Write =
+        @convention(c) (Owner?, UnsafeMutablePointer<UInt8>?, UInt) -> Void
+
     /// Reports a condition that does not stop the decode.
     ///
     /// Takes a length rather than expecting a terminator, because the messages
@@ -72,6 +78,9 @@ public struct Host {
     /// C boundary.
     public let userTransform: UserTransform?
 
+    /// Absent for a caller that only reads.
+    public let writeBytes: Write?
+
     public init(
         owner: Owner,
         allocate: Allocate,
@@ -79,7 +88,8 @@ public struct Host {
         read: Read,
         warn: Warn,
         warnChunk: WarnChunk,
-        userTransform: UserTransform? = nil
+        userTransform: UserTransform? = nil,
+        writeBytes: Write? = nil
     ) {
         self.owner = owner
         self.allocate = allocate
@@ -88,6 +98,7 @@ public struct Host {
         self.warn = warn
         self.warnChunk = warnChunk
         self.userTransform = userTransform
+        self.writeBytes = writeBytes
     }
 }
 

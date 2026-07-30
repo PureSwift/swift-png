@@ -50,6 +50,9 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
                 channels,
                 colorType
             )
+        },
+        writeBytes: { owner, data, count in
+            spng_c_call_write(owner?.pngStruct, data, size_t(count))
         }
     )
 }
