@@ -144,6 +144,18 @@ public func png_set_shift(_ png_ptr: png_structrp?, _ true_bits: png_const_color
     bits.gray = true_bits.pointee.gray
     bits.alpha = true_bits.pointee.alpha
 
+    // Checked here rather than when the pipeline is built, which is where it would be cheaper and
+    // where the reference does not do it.  The difference shows whenever another call would also
+    // complain: a client is told about the first mistake it made, in the order it made them.
+    //
+    do {
+        try context.validateShift(bits)
+    } catch let diagnostic as Diagnostic {
+        report(diagnostic, to: png_ptr)
+    } catch {
+        spng_c_error(png_ptr, "internal error")
+    }
+
     context.shiftBits = bits
     context.transformFlags.insert(.shift)
 }
@@ -249,8 +261,7 @@ public func png_set_rgb_to_gray_fixed(
 ) {
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
 
-    context.rgbToGray.errorAction =
-        RgbToGrayState.ErrorAction(rawValue: error_action) ?? .none
+    context.rgbToGray.request(RgbToGrayState.ErrorAction(rawValue: error_action) ?? .none)
 
     // Supplied as fractions scaled by 100000 and held as weights out of 32768, which is what lets the
     // sum be integer arithmetic.
@@ -360,7 +371,21 @@ public func png_set_alpha_mode_fixed(
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
 
     let alphaMode = AlphaMode(rawValue: mode) ?? .png
+
+    // Every arrangement but the format's own is a blend against black, so it wants the compositing
+    // machinery for itself — and refuses to share it.  A client that has already named a background,
+    // or already asked for an arrangement, is told rather than quietly having one request win.
+    //
+    // Which makes the pair order-dependent: naming a background after an arrangement is accepted and
+    // replaces the black, while doing it the other way round is an error.  That is the reference's
+    // behaviour, and a client meeting it is being told its two requests do not compose.
+    if alphaMode != .png,
+       context.transformFlags.contains(.compose) || context.alphaModeComposes {
+        spng_c_error(png_ptr, "conflicting calls to set alpha mode and background")
+    }
+
     context.alphaMode = alphaMode
+    context.alphaModeComposes = context.alphaModeComposes || alphaMode != .png
 
     // Taken from what the client said, before the arrangement gets to override it below: the default is
     // that the file was encoded for the display the client just named, whatever the library then does
