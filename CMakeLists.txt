@@ -230,5 +230,5 @@ install(CODE "
 
 if(SPNG_BUILD_TESTS)
     enable_testing()
-    add_subdirectory(tests/abi)
+    add_subdirectory(Conformance)
 endif()
