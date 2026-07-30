@@ -122,8 +122,8 @@ public final class PngContext {
         try self.reader.readRow(into: destination, context: self)
     }
 
-    public func readEnd() throws {
-        try self.reader.readEnd(context: self)
+    public func readEnd(into info: InfoStore?) throws {
+        try self.reader.readEnd(info: info, context: self)
     }
 
     /// The number of rows the image has, or zero before the header is read.
