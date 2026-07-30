@@ -17,9 +17,9 @@ the control structure lifecycle, the allocator and stream callbacks, and every m
 chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
 embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
 range signalling, and all three text chunks. Interlaced images decode too, both ways a client can
-ask for them, and twenty-three of the read transforms work — the expansions, the depth conversions, the
-channel rearrangements, the filler, the shift, gamma correction and the conversion to greyscale.
-Compositing, alpha mode and quantisation are still to come, as is writing.
+ask for them, and twenty-five of the read transforms work — the expansions, the depth conversions, the
+channel rearrangements, the filler, the shift, gamma correction, the conversion to greyscale and
+compositing against a background. Alpha mode and quantisation are still to come, as is writing.
 
 ## Building
 
@@ -91,6 +91,15 @@ Discarding colour is a weighted sum in integer arithmetic, and the two depths ro
 the eight bit path truncates and the sixteen bit path adds a half first. Nothing suggests that
 asymmetry and it shows on almost every pixel, so it was found by arithmetic rather than by reading —
 computing both candidates for one pixel and seeing which the reference agreed with.
+
+Compositing an image over a background is the same shape of problem and taught the same lesson twice.
+The background lives in two spaces at once: a fully transparent pixel becomes it as the display should
+see it, and a partly covered one is blended against it as light. Which exponent reaches each depends on
+the space the client said the colour was in, not on the image's own curve — using the image's exponent
+for a colour that was never in the file's space is the mistake that took longest to find. An indexed
+image is composited in its palette, once, and its rows left as indices; a request to composite an image
+with nothing transparent in it is dropped entirely, and dropping it has to take the implied palette
+expansion with it.
 
 Averaging samples at all is only meaningful on light levels, and a file's samples are not light
 levels: they carry the file's own curve. So when a gamma correction is in force the conversion decodes
