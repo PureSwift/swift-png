@@ -472,6 +472,77 @@ static void apply_alpha_optimized(png_structp p, png_infop i)
 static void apply_alpha_broken(png_structp p, png_infop i)
 { (void)i; png_set_alpha_mode(p, PNG_ALPHA_BROKEN, 2.2); }
 
+/* Transforms of the client's own.
+ *
+ * Three shapes of client, because the interesting question is not what the transform computes but
+ * what it does to the row's description: one that leaves the shape alone, one that declares a wider
+ * row and fills it, and one that declares a narrower row and collapses into it.  Each also reads the
+ * description it is handed, so where the call sits in the order is visible in the output.
+ */
+static void invert_bytes(png_structp p, png_row_infop info, png_bytep row)
+{
+   (void)p;
+   for (size_t k = 0; k < info->rowbytes; k++)
+      row[k] = (png_byte)~row[k];
+}
+
+static void widen_to_eight(png_structp p, png_row_infop info, png_bytep row)
+{
+   /* One sample per byte, taken from whatever depth the row arrived at.  Written backwards so the
+    * row can be expanded where it lies.
+    */
+   png_uint_32 x;
+   int depth = info->bit_depth;
+   unsigned max = (1u << depth) - 1u;
+
+   (void)p;
+
+   if (depth >= 8) return;
+
+   for (x = info->width; x-- > 0; )
+   {
+      unsigned per_byte = 8u / (unsigned)depth;
+      unsigned shift = (unsigned)(8 - depth) - (x % per_byte) * (unsigned)depth;
+      unsigned sample = (row[x / per_byte] >> shift) & max;
+
+      row[x] = (png_byte)(sample * 255u / max);
+   }
+}
+
+static void first_channel_only(png_structp p, png_row_infop info, png_bytep row)
+{
+   png_uint_32 x;
+
+   /* A row narrower than a byte has no channels to choose between, so it is widened instead: the
+    * declared shape has to be filled whatever arrives, or the comparison is of leftover bytes.
+    */
+   if (info->bit_depth < 8) { widen_to_eight(p, info, row); return; }
+
+   (void)p;
+
+   if (info->bit_depth != 8) return;
+
+   for (x = 0; x < info->width; x++)
+      row[x] = row[x * info->channels];
+}
+
+static void apply_user_invert(png_structp p, png_infop i)
+{ (void)i; png_set_read_user_transform_fn(p, invert_bytes); }
+
+static void apply_user_widen(png_structp p, png_infop i)
+{
+   (void)i;
+   png_set_read_user_transform_fn(p, widen_to_eight);
+   png_set_user_transform_info(p, (png_voidp)"widen", 8, 1);
+}
+
+static void apply_user_first_channel(png_structp p, png_infop i)
+{
+   (void)i;
+   png_set_read_user_transform_fn(p, first_channel_only);
+   png_set_user_transform_info(p, (png_voidp)"first", 8, 1);
+}
+
 static void
 apply_shift(png_structp p, png_infop i)
 {
@@ -531,6 +602,9 @@ static const struct transform_entry transforms[] = {
    { "alpha_premultiplied_linear", apply_alpha_premultiplied_linear },
    { "alpha_optimized", apply_alpha_optimized },
    { "alpha_broken", apply_alpha_broken },
+   { "user_invert", apply_user_invert },
+   { "user_widen", apply_user_widen },
+   { "user_first_channel", apply_user_first_channel },
 };
 
 #define TRANSFORM_COUNT ((int)(sizeof transforms / sizeof transforms[0]))
