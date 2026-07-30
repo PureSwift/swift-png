@@ -45,6 +45,14 @@ public final class PngContext {
     /// What the client declared through `png_set_sig_bytes`.
     public var signatureBytesConsumed = 0
 
+    /// Whether the client asked for an interlaced image's passes to arrive as full-width
+    /// rows rather than as the narrower rows each pass actually stores.
+    ///
+    /// Set by `png_set_interlace_handling`. With it, a client reading every pass into the
+    /// same row buffers ends up with the whole picture; without it, the client is handed the
+    /// subimages and has to place their pixels itself.
+    public var spreadsInterlacedRows = false
+
     public init(host: Host, isReading: Bool) {
         self.host = host
         self.isReading = isReading
@@ -122,6 +130,31 @@ public final class PngContext {
         try self.reader.readRow(into: destination, context: self)
     }
 
+    /// Decodes the whole image, resolving interlacing.
+    public func readImage(
+        rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>
+    ) throws {
+        try self.reader.readImage(rows: rows, context: self)
+    }
+
+    /// How many times a client has to read every row to receive the whole image.
+    ///
+    /// Seven for an interlaced image, one otherwise. Reported by
+    /// `png_set_interlace_handling`, which is also how a client asks for the passes to be
+    /// spread across full-width rows.
+    public func enableInterlaceHandling() -> Int {
+        guard let header = self.header, header.isInterlaced else { return 1 }
+
+        self.spreadsInterlacedRows = true
+
+        return Adam7.passCount
+    }
+
+    /// Which pass the next row belongs to, which `png_get_current_pass_number` reports.
+    public var currentPass: UInt8 {
+        UInt8(min(self.reader.pass, Adam7.passCount - 1))
+    }
+
     public func readEnd(into info: InfoStore?) throws {
         try self.reader.readEnd(info: info, context: self)
     }
@@ -131,9 +164,12 @@ public final class PngContext {
         self.header?.height ?? 0
     }
 
-    /// The row the next read will produce, which `png_get_current_row_number`
-    /// reports.
+    /// The row the next read will produce, which `png_get_current_row_number` reports.
+    ///
+    /// Which counter that is depends on how the client is reading: when the passes are being
+    /// spread across full-width rows, a row means a row of the image, and otherwise it means a
+    /// scanline of the current pass.
     public var currentRow: UInt32 {
-        UInt32(self.reader.rowIndex)
+        UInt32(self.spreadsInterlacedRows ? self.reader.imageRowIndex : self.reader.rowIndex)
     }
 }
