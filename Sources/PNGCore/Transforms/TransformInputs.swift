@@ -25,6 +25,12 @@ struct TransformInputs {
     /// How many bits of each channel were significant, for the shift.
     var significantBits = SignificantBits()
 
+    /// The correction table, exhaustive over eight bit samples.
+    ///
+    /// Built once when the pipeline is resolved rather than per row, which is what makes the
+    /// correction cheap enough to be a lookup at all.
+    var gammaTable = GammaTable(exponent: GammaState.one)
+
     init() {}
 
     init(_ info: InfoStore) {
