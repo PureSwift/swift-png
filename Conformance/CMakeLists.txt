@@ -150,7 +150,8 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
     add_test(NAME differential_write
         COMMAND ${SPNG_SCRIPTS}/compare_write.sh
                 $<TARGET_FILE:pngwrite>
-                $<TARGET_FILE:pngwrite_reference>)
+                $<TARGET_FILE:pngwrite_reference>
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-write-differences.txt)
 
     # The transforms, over combinations rather than one at a time: the interesting defects are in
     # the interactions, and in whether the order the client asked in leaks into the result.
