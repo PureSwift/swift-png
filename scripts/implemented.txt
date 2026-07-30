@@ -214,3 +214,12 @@ png_set_text_compression_mem_level
 png_set_text_compression_strategy
 png_set_text_compression_window_bits
 png_set_text_compression_method
+png_write_chunk
+png_write_chunk_start
+png_write_chunk_data
+png_write_chunk_end
+png_set_flush
+png_write_flush
+png_set_rows
+png_get_rows
+png_write_png

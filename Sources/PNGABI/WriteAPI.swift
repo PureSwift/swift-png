@@ -251,3 +251,139 @@ public func png_set_text_compression_method(_ png_ptr: png_structrp?, _ method: 
 
     context.textCompression.method = 8
 }
+
+// -- chunks of the client's own ----------------------------------------------
+//
+// A client that knows about a chunk this library does not can write it itself.  What it gets from
+// here is the framing — the length, the type and the check value — because those are what it would
+// have to get exactly right and what it has no way to compute without the writer's state.
+
+/// Writes a whole chunk the client has built.
+@c @implementation
+public func png_write_chunk(
+    _ png_ptr: png_structrp?,
+    _ chunk_name: png_const_bytep?,
+    _ data: png_const_bytep?,
+    _ length: size_t
+) {
+    png_write_chunk_start(png_ptr, chunk_name, png_uint_32(length))
+    png_write_chunk_data(png_ptr, data, length)
+    png_write_chunk_end(png_ptr)
+}
+
+/// Starts a chunk whose contents the client will write in pieces.
+@c @implementation
+public func png_write_chunk_start(
+    _ png_ptr: png_structrp?,
+    _ chunk_name: png_const_bytep?,
+    _ length: png_uint_32
+) {
+    attempt(png_ptr) { context in
+        guard let chunk_name else { throw Diagnostic("png_write_chunk_start given no name") }
+
+        try context.beginChunk(
+            ChunkName(
+                chunk_name[0],
+                chunk_name[1],
+                chunk_name[2],
+                chunk_name[3]
+            ),
+            length: Int(length)
+        )
+    }
+}
+
+@c @implementation
+public func png_write_chunk_data(
+    _ png_ptr: png_structrp?,
+    _ data: png_const_bytep?,
+    _ length: size_t
+) {
+    attempt(png_ptr) { context in
+        context.writeChunkData(
+            UnsafeBufferPointer(start: data, count: Int(length))
+        )
+    }
+}
+
+@c @implementation
+public func png_write_chunk_end(_ png_ptr: png_structrp?) {
+    attempt(png_ptr) { context in
+        context.endChunk()
+    }
+}
+
+// -- flushing ----------------------------------------------------------------
+
+/// Asks for the output to be flushed every so many rows.
+///
+/// For a client writing to something slow, or something another process is reading: without this the
+/// bytes appear whenever the compressor happens to produce them, which for a small image can be not
+/// until the end.
+@c @implementation
+public func png_set_flush(_ png_ptr: png_structrp?, _ nrows: Int32) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    context.flushEveryRows = max(Int(nrows), 0)
+}
+
+@c @implementation
+public func png_write_flush(_ png_ptr: png_structrp?) {
+    attempt(png_ptr) { context in
+        try context.flushOutput()
+    }
+}
+
+// -- writing an image the client holds whole ---------------------------------
+
+/// Records the rows a client holds, so that `png_write_png` can find them.
+@c @implementation
+public func png_set_rows(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ row_pointers: png_bytepp?
+) {
+    guard let info_ptr, let info = InfoStore.from(info_ptr) else { return }
+
+    info.rows = row_pointers
+}
+
+@c @implementation
+public func png_get_rows(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?
+) -> png_bytepp? {
+    guard let info_ptr, let info = InfoStore.from(png_inforp(mutating: info_ptr)) else {
+        return nil
+    }
+
+    return info.rows
+}
+
+/// Writes a whole file in one call, from rows the client has already set.
+///
+/// The transform argument is what this does not yet honour.  Anything but the identity would change
+/// the rows on their way out, and a request that was accepted and then ignored would produce a file
+/// that is wrong rather than one that is missing something — so it is refused instead, and says so.
+@c @implementation
+public func png_write_png(
+    _ png_ptr: png_structrp?,
+    _ info_ptr: png_inforp?,
+    _ transforms: Int32,
+    _ params: png_voidp?
+) {
+    attempt(png_ptr, info_ptr) { context, info in
+        guard transforms == 0 else {
+            throw Diagnostic("png_write_png: transforms are not implemented in this build")
+        }
+
+        guard let rows = info.rows else {
+            throw Diagnostic("Invalid image height in IHDR")
+        }
+
+        png_write_info(png_ptr, png_const_inforp(info_ptr))
+
+        try context.writeImage(rows: rows)
+        try context.writeEnd(info)
+    }
+}

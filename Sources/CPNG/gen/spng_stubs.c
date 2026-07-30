@@ -123,12 +123,6 @@ png_get_progressive_ptr(png_const_structrp png_ptr)
    png_error(png_ptr, "png_get_progressive_ptr is not implemented");
 }
 
-png_bytepp PNGAPI
-png_get_rows(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_rows is not implemented");
-}
-
 png_uint_32 PNGAPI
 png_get_sCAL(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, double *width, double *height)
 {
@@ -335,12 +329,6 @@ png_set_filter_heuristics_fixed(png_structrp png_ptr, int heuristic_method, int 
 }
 
 void PNGAPI
-png_set_flush(png_structrp png_ptr, int nrows)
-{
-   png_error(png_ptr, "png_set_flush is not implemented");
-}
-
-void PNGAPI
 png_set_invalid(png_const_structrp png_ptr, png_inforp info_ptr, int mask)
 {
    png_error(png_ptr, "png_set_invalid is not implemented");
@@ -380,12 +368,6 @@ void PNGAPI
 png_set_read_user_chunk_fn(png_structrp png_ptr, png_voidp user_chunk_ptr, png_user_chunk_ptr read_user_chunk_fn)
 {
    png_error(png_ptr, "png_set_read_user_chunk_fn is not implemented");
-}
-
-void PNGAPI
-png_set_rows(png_const_structrp png_ptr, png_inforp info_ptr, png_bytepp row_pointers)
-{
-   png_error(png_ptr, "png_set_rows is not implemented");
 }
 
 void PNGAPI
@@ -434,40 +416,4 @@ void PNGAPI
 png_set_write_user_transform_fn(png_structrp png_ptr, png_user_transform_ptr write_user_transform_fn)
 {
    png_error(png_ptr, "png_set_write_user_transform_fn is not implemented");
-}
-
-void PNGAPI
-png_write_chunk(png_structrp png_ptr, png_const_bytep chunk_name, png_const_bytep data, size_t length)
-{
-   png_error(png_ptr, "png_write_chunk is not implemented");
-}
-
-void PNGAPI
-png_write_chunk_data(png_structrp png_ptr, png_const_bytep data, size_t length)
-{
-   png_error(png_ptr, "png_write_chunk_data is not implemented");
-}
-
-void PNGAPI
-png_write_chunk_end(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_write_chunk_end is not implemented");
-}
-
-void PNGAPI
-png_write_chunk_start(png_structrp png_ptr, png_const_bytep chunk_name, png_uint_32 length)
-{
-   png_error(png_ptr, "png_write_chunk_start is not implemented");
-}
-
-void PNGAPI
-png_write_flush(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_write_flush is not implemented");
-}
-
-void PNGAPI
-png_write_png(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)
-{
-   png_error(png_ptr, "png_write_png is not implemented");
 }
