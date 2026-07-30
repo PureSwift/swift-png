@@ -41,12 +41,18 @@ spng_stage_message(png_const_structrp png_ptr, png_const_charp message)
    return mutable_ptr->message;
 }
 
-/* Prefix a message with a chunk name, as "IHDR: message". */
+/* Prefix a message with a chunk name, as "IHDR: message".
+ *
+ * Assembled in a local buffer before being copied into place, because the caller
+ * may well have staged `message` into that same buffer already; building in place
+ * would overwrite the text while reading it.
+ */
 static png_const_charp
 spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
     png_const_charp message)
 {
    png_structp mutable_ptr = (png_structp)png_ptr;
+   char staged[SPNG_MESSAGE_MAX];
    size_t offset = 0;
 
    if (mutable_ptr == NULL)
@@ -56,14 +62,14 @@ spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
    {
       while (offset + 2 < SPNG_MESSAGE_MAX && chunk_name[offset] != '\0')
       {
-         mutable_ptr->message[offset] = chunk_name[offset];
+         staged[offset] = chunk_name[offset];
          ++offset;
       }
 
       if (offset + 2 < SPNG_MESSAGE_MAX)
       {
-         mutable_ptr->message[offset++] = ':';
-         mutable_ptr->message[offset++] = ' ';
+         staged[offset++] = ':';
+         staged[offset++] = ' ';
       }
    }
 
@@ -72,10 +78,12 @@ spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
       size_t index = 0;
 
       while (offset + 1 < SPNG_MESSAGE_MAX && message[index] != '\0')
-         mutable_ptr->message[offset++] = message[index++];
+         staged[offset++] = message[index++];
    }
 
-   mutable_ptr->message[offset] = '\0';
+   staged[offset] = '\0';
+
+   memcpy(mutable_ptr->message, staged, offset + 1);
 
    return mutable_ptr->message;
 }
@@ -210,6 +218,28 @@ void
 spng_c_warning(png_const_structrp png_ptr, png_const_charp message)
 {
    png_warning(png_ptr, message);
+}
+
+void
+spng_c_warning_bytes(png_const_structrp png_ptr, const char *message,
+    size_t length)
+{
+   png_structp mutable_ptr = (png_structp)png_ptr;
+   size_t count = length;
+
+   if (mutable_ptr == NULL || message == NULL)
+      return;
+
+   if (count > SPNG_MESSAGE_MAX - 1)
+      count = SPNG_MESSAGE_MAX - 1;
+
+   memcpy(mutable_ptr->message, message, count);
+   mutable_ptr->message[count] = '\0';
+
+   /* Pass the staged copy rather than the caller's bytes, which are not
+    * terminated.
+    */
+   png_warning(png_ptr, mutable_ptr->message);
 }
 
 void
