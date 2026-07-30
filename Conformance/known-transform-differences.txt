@@ -184,6 +184,7 @@ meta-rgb16-sbit-bkgd.png expand,alpha_premultiplied As above.
 meta-rgb16-sbit-bkgd.png alpha_premultiplied,gray_to_rgb As above.
 meta-rgb16-sbit-bkgd.png gray_to_rgb,alpha_premultiplied As above.
 meta-rgb16-sbit-bkgd.png alpha_premultiplied,strip_16 As above.
+meta-rgb16-sbit-bkgd.png gamma_bright,user_invert As above, seen through a transform of the client's own: it inverts bytes that already differ.
 
 # Reversing sub-byte samples within a byte, for an interlaced image.
 #
