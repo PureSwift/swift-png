@@ -134,7 +134,7 @@ extension SequentialWriter {
     /// A buffer rather than a stream, because a chunk's length comes before its contents: the whole
     /// compressed form has to exist before any of it can be written.  That is unlike the image data,
     /// which is written a bufferful at a time precisely to avoid this.
-    private func compressed(
+    func compressed(
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext
     ) throws -> (buffer: RawBuffer, count: Int) {
@@ -169,7 +169,7 @@ extension SequentialWriter {
             produced += try stream.deflate(
                 into: buffer.bytes.baseAddress! + produced,
                 count: capacity - produced,
-                finishing: true
+                ending: .finish
             )
         }
 

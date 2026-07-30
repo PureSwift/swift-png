@@ -42,6 +42,12 @@ extension SequentialWriter {
             }
         }
 
+        // The colour profile, which is compressed and can be large — the one chunk before the palette
+        // that is not a handful of numbers.
+        if info.isValid(InfoStore.Valid.iccp) {
+            try self.writeProfile(info, context: context)
+        }
+
         if info.isValid(InfoStore.Valid.sbit), let header = context.header {
             // One byte per channel the image actually has, which is what makes this chunk's length
             // depend on the colour type rather than being fixed.
@@ -160,6 +166,37 @@ extension SequentialWriter {
                     }
                 }
             }
+        }
+    }
+
+    /// The colour profile: a name, a compression method, and the profile itself deflated.
+    private func writeProfile(_ info: InfoStore, context: PngContext) throws {
+        let name = info.profileName.bytes
+        let profile = info.profile.elements
+
+        guard name.count >= 1, name.count <= 79, profile.count > 0 else { return }
+
+        let compressed = try self.compressed(
+            UnsafeBufferPointer(start: profile.baseAddress, count: profile.count),
+            context: context
+        )
+
+        defer { compressed.buffer.deallocate(host: context.host) }
+
+        let body = UnsafeBufferPointer(
+            start: compressed.buffer.bytes.baseAddress,
+            count: compressed.count
+        )
+
+        try self.write(
+            .iccp,
+            context: context,
+            count: name.count + 2 + compressed.count
+        ) { bytes in
+            Self.copy(name, into: bytes, at: 0)
+            bytes[name.count] = 0
+            bytes[name.count + 1] = info.profileCompression
+            Self.copy(body, into: bytes, at: name.count + 2)
         }
     }
 
