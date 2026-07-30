@@ -33,7 +33,42 @@ public struct RgbToGrayState: Sendable {
         case error = 3
     }
 
-    public var errorAction: ErrorAction = .none
+    /// What the client has asked for, kept as two bits rather than one choice.
+    ///
+    /// This is the reference's arrangement and it is worth spelling out, because it makes repeated
+    /// requests behave in a way nobody would design.  Asking to warn sets one bit, asking to fail sets
+    /// the other, and asking for neither sets *both*; what happens at a row is decided by which bits
+    /// are set, with one bit meaning that thing and two bits meaning silence.
+    ///
+    /// So a client that asks to warn and then to fail gets neither, and one that asks for silence
+    /// first can never be told anything afterwards.  The requests accumulate; they do not replace.
+    public struct ErrorActions: OptionSet, Sendable {
+        public let rawValue: Int32
+        public init(rawValue: Int32) { self.rawValue = rawValue }
+
+        public static let warn = Self(rawValue: 1 << 0)
+        public static let error = Self(rawValue: 1 << 1)
+    }
+
+    public var errorActions: ErrorActions = []
+
+    /// Records a request, which never takes back an earlier one.
+    public mutating func request(_ action: ErrorAction) {
+        switch action {
+        case .none: self.errorActions.formUnion([.warn, .error])
+        case .warn: self.errorActions.insert(.warn)
+        case .error: self.errorActions.insert(.error)
+        }
+    }
+
+    /// What a row with colour in it should produce, once every request is in.
+    public var errorAction: ErrorAction {
+        switch self.errorActions {
+        case [.warn]: return .warn
+        case [.error]: return .error
+        default: return .none
+        }
+    }
 
     /// Whether a pixel with colour has been seen.
     ///
