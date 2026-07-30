@@ -145,6 +145,50 @@ public func png_get_valid(
     query(info_ptr, 0) { $0.validChunks & flag }
 }
 
+/// Describes an image a client is about to write, or corrects one it has read.
+///
+/// The combination is checked here rather than accepted and rejected later, because every
+/// size the rest of the library works from is derived from these fields, and deriving them
+/// from an impossible combination would produce buffer sizes nothing could satisfy.
+@c @implementation
+public func png_set_IHDR(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ width: png_uint_32,
+    _ height: png_uint_32,
+    _ bit_depth: Int32,
+    _ color_type: Int32,
+    _ interlace_type: Int32,
+    _ compression_type: Int32,
+    _ filter_type: Int32
+) {
+    guard let info_ptr, let info = InfoStore.from(info_ptr) else { return }
+
+    let fields = Header.Fields(
+        width: width,
+        height: height,
+        bitDepth: UInt8(truncatingIfNeeded: bit_depth),
+        colorType: UInt8(truncatingIfNeeded: color_type),
+        compressionMethod: UInt8(truncatingIfNeeded: compression_type),
+        filterMethod: UInt8(truncatingIfNeeded: filter_type),
+        interlaceMethod: UInt8(truncatingIfNeeded: interlace_type)
+    )
+
+    let problems = fields.problems
+
+    if !problems.isEmpty {
+        guard let png_ptr else { return }
+
+        // Reported the way a bad header in a file is: one warning per fault, then a single
+        // failure. The info structure's own host is used, since it is the one whose
+        // allocator and callbacks belong to this client.
+        problems.report(to: info.host)
+        spng_c_error(png_structp(mutating: png_ptr), "Invalid IHDR data")
+    }
+
+    info.header = Header(fields)
+}
+
 /// The row the decoder will produce next.
 @c @implementation
 public func png_get_current_row_number(_ png_ptr: png_const_structrp?) -> png_uint_32 {
