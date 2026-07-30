@@ -413,36 +413,6 @@ png_set_sRGB_gAMA_and_cHRM(png_const_structrp png_ptr, png_inforp info_ptr, int 
 }
 
 void PNGAPI
-png_set_text_compression_level(png_structrp png_ptr, int level)
-{
-   png_error(png_ptr, "png_set_text_compression_level is not implemented");
-}
-
-void PNGAPI
-png_set_text_compression_mem_level(png_structrp png_ptr, int mem_level)
-{
-   png_error(png_ptr, "png_set_text_compression_mem_level is not implemented");
-}
-
-void PNGAPI
-png_set_text_compression_method(png_structrp png_ptr, int method)
-{
-   png_error(png_ptr, "png_set_text_compression_method is not implemented");
-}
-
-void PNGAPI
-png_set_text_compression_strategy(png_structrp png_ptr, int strategy)
-{
-   png_error(png_ptr, "png_set_text_compression_strategy is not implemented");
-}
-
-void PNGAPI
-png_set_text_compression_window_bits(png_structrp png_ptr, int window_bits)
-{
-   png_error(png_ptr, "png_set_text_compression_window_bits is not implemented");
-}
-
-void PNGAPI
 png_set_unknown_chunk_location(png_const_structrp png_ptr, png_inforp info_ptr, int chunk, int location)
 {
    png_error(png_ptr, "png_set_unknown_chunk_location is not implemented");

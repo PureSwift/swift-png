@@ -90,7 +90,9 @@ public func png_write_image(_ png_ptr: png_structrp?, _ image: png_bytepp?) {
 @c @implementation
 public func png_write_end(_ png_ptr: png_structrp?, _ info_ptr: png_inforp?) {
     attempt(png_ptr) { context in
-        try context.writeEnd()
+        // The info structure is optional here, and what it carries is the text a client added after
+        // writing its rows.  Without one there is nothing left to say.
+        try context.writeEnd(info_ptr.flatMap { InfoStore.from($0) })
     }
 }
 
@@ -190,4 +192,62 @@ public func png_get_compression_buffer_size(_ png_ptr: png_const_structrp?) -> s
     }
 
     return size_t(context.compression.bufferSize)
+}
+
+
+// -- how text is compressed --------------------------------------------------
+//
+// Separate from the image data's settings because the two are compressing different things: image
+// data is large and wants a large window, while a text chunk is usually a line or two, where the
+// window is memory nothing will use.
+
+@c @implementation
+public func png_set_text_compression_level(_ png_ptr: png_structrp?, _ level: Int32) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    context.textCompression.level = level
+}
+
+@c @implementation
+public func png_set_text_compression_mem_level(_ png_ptr: png_structrp?, _ mem_level: Int32) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    context.textCompression.memoryLevel = mem_level
+}
+
+@c @implementation
+public func png_set_text_compression_strategy(_ png_ptr: png_structrp?, _ strategy: Int32) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    context.textCompression.strategy = strategy
+}
+
+@c @implementation
+public func png_set_text_compression_window_bits(_ png_ptr: png_structrp?, _ window_bits: Int32) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    var bits = window_bits
+
+    if bits > 15 {
+        spng_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
+        bits = 15
+    }
+
+    if bits < 8 {
+        spng_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
+        bits = 8
+    }
+
+    context.textCompression.windowBits = bits
+}
+
+@c @implementation
+public func png_set_text_compression_method(_ png_ptr: png_structrp?, _ method: Int32) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    if method != 8 {
+        spng_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
+    }
+
+    context.textCompression.method = 8
 }
