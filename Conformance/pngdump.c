@@ -360,28 +360,28 @@ enum read_mode { READ_ROWS, READ_IMAGE };
 struct transform_entry
 {
    const char *name;
-   void (*apply)(png_structp png_ptr);
+   void (*apply)(png_structp png_ptr, png_infop info_ptr);
 };
 
-static void apply_expand(png_structp p) { png_set_expand(p); }
-static void apply_palette_to_rgb(png_structp p) { png_set_palette_to_rgb(p); }
-static void apply_gray_1_2_4_to_8(png_structp p) { png_set_expand_gray_1_2_4_to_8(p); }
-static void apply_trns_to_alpha(png_structp p) { png_set_tRNS_to_alpha(p); }
-static void apply_expand_16(png_structp p) { png_set_expand_16(p); }
-static void apply_strip_16(png_structp p) { png_set_strip_16(p); }
-static void apply_scale_16(png_structp p) { png_set_scale_16(p); }
-static void apply_strip_alpha(png_structp p) { png_set_strip_alpha(p); }
-static void apply_gray_to_rgb(png_structp p) { png_set_gray_to_rgb(p); }
-static void apply_packing(png_structp p) { png_set_packing(p); }
-static void apply_packswap(png_structp p) { png_set_packswap(p); }
-static void apply_bgr(png_structp p) { png_set_bgr(p); }
-static void apply_swap(png_structp p) { png_set_swap(p); }
-static void apply_swap_alpha(png_structp p) { png_set_swap_alpha(p); }
-static void apply_invert_alpha(png_structp p) { png_set_invert_alpha(p); }
-static void apply_invert_mono(png_structp p) { png_set_invert_mono(p); }
-static void apply_filler(png_structp p) { png_set_filler(p, 0x3C3C, PNG_FILLER_AFTER); }
-static void apply_filler_before(png_structp p) { png_set_filler(p, 0x3C3C, PNG_FILLER_BEFORE); }
-static void apply_add_alpha(png_structp p) { png_set_add_alpha(p, 0x8080, PNG_FILLER_AFTER); }
+static void apply_expand(png_structp p, png_infop i) { (void)i; png_set_expand(p); }
+static void apply_palette_to_rgb(png_structp p, png_infop i) { (void)i; png_set_palette_to_rgb(p); }
+static void apply_gray_1_2_4_to_8(png_structp p, png_infop i) { (void)i; png_set_expand_gray_1_2_4_to_8(p); }
+static void apply_trns_to_alpha(png_structp p, png_infop i) { (void)i; png_set_tRNS_to_alpha(p); }
+static void apply_expand_16(png_structp p, png_infop i) { (void)i; png_set_expand_16(p); }
+static void apply_strip_16(png_structp p, png_infop i) { (void)i; png_set_strip_16(p); }
+static void apply_scale_16(png_structp p, png_infop i) { (void)i; png_set_scale_16(p); }
+static void apply_strip_alpha(png_structp p, png_infop i) { (void)i; png_set_strip_alpha(p); }
+static void apply_gray_to_rgb(png_structp p, png_infop i) { (void)i; png_set_gray_to_rgb(p); }
+static void apply_packing(png_structp p, png_infop i) { (void)i; png_set_packing(p); }
+static void apply_packswap(png_structp p, png_infop i) { (void)i; png_set_packswap(p); }
+static void apply_bgr(png_structp p, png_infop i) { (void)i; png_set_bgr(p); }
+static void apply_swap(png_structp p, png_infop i) { (void)i; png_set_swap(p); }
+static void apply_swap_alpha(png_structp p, png_infop i) { (void)i; png_set_swap_alpha(p); }
+static void apply_invert_alpha(png_structp p, png_infop i) { (void)i; png_set_invert_alpha(p); }
+static void apply_invert_mono(png_structp p, png_infop i) { (void)i; png_set_invert_mono(p); }
+static void apply_filler(png_structp p, png_infop i) { (void)i; png_set_filler(p, 0x3C3C, PNG_FILLER_AFTER); }
+static void apply_filler_before(png_structp p, png_infop i) { (void)i; png_set_filler(p, 0x3C3C, PNG_FILLER_BEFORE); }
+static void apply_add_alpha(png_structp p, png_infop i) { (void)i; png_set_add_alpha(p, 0x8080, PNG_FILLER_AFTER); }
 
 /* A spread of exponents rather than one.
  *
@@ -389,32 +389,76 @@ static void apply_add_alpha(png_structp p) { png_set_add_alpha(p, 0x8080, PNG_FI
  * by the same amount the reference moves them — including the pair just inside the threshold below
  * which the reference declines to bother at all.
  */
-static void apply_gamma_none(png_structp p) { png_set_gamma(p, 2.2, 1.0 / 2.2); }
-static void apply_gamma_bright(png_structp p) { png_set_gamma(p, 2.2, 1.0); }
-static void apply_gamma_dark(png_structp p) { png_set_gamma(p, 1.0, 1.0 / 2.2); }
-static void apply_gamma_slight(png_structp p) { png_set_gamma(p, 1.0, 1.0 / 1.02); }
-static void apply_gamma_steep(png_structp p) { png_set_gamma(p, 4.0, 1.0 / 1.1); }
-static void apply_gamma_shallow(png_structp p) { png_set_gamma(p, 1.1, 1.0 / 4.0); }
+static void apply_gamma_none(png_structp p, png_infop i) { (void)i; png_set_gamma(p, 2.2, 1.0 / 2.2); }
+static void apply_gamma_bright(png_structp p, png_infop i) { (void)i; png_set_gamma(p, 2.2, 1.0); }
+static void apply_gamma_dark(png_structp p, png_infop i) { (void)i; png_set_gamma(p, 1.0, 1.0 / 2.2); }
+static void apply_gamma_slight(png_structp p, png_infop i) { (void)i; png_set_gamma(p, 1.0, 1.0 / 1.02); }
+static void apply_gamma_steep(png_structp p, png_infop i) { (void)i; png_set_gamma(p, 4.0, 1.0 / 1.1); }
+static void apply_gamma_shallow(png_structp p, png_infop i) { (void)i; png_set_gamma(p, 1.1, 1.0 / 4.0); }
 
-static void apply_rgb_to_gray(png_structp p)
+static void apply_rgb_to_gray(png_structp p, png_infop i)
 {
+   (void)i;
+
    png_set_rgb_to_gray(p, PNG_ERROR_ACTION_NONE, -1, -1);
 }
 
-static void apply_rgb_to_gray_warn(png_structp p)
+static void apply_rgb_to_gray_warn(png_structp p, png_infop i)
 {
+   (void)i;
+
    png_set_rgb_to_gray(p, PNG_ERROR_ACTION_WARN, -1, -1);
 }
 
-static void apply_rgb_to_gray_weighted(png_structp p)
+static void apply_rgb_to_gray_weighted(png_structp p, png_infop i)
 {
+   (void)i;
+
    /* Weights of the client's own rather than the defaults, so that the two paths are both driven. */
    png_set_rgb_to_gray(p, PNG_ERROR_ACTION_NONE, 0.4, 0.4);
 }
 
+/* Compositing against a background.
+ *
+ * The colour is given at the image's own depth, which is not a detail: a value scaled for sixteen bits
+ * handed to an eight bit image is out of range, and the reference reads it as such and produces
+ * something that is not a blend at all.  So the depth is asked for first and the values scaled to it.
+ */
 static void
-apply_shift(png_structp p)
+compose_against(png_structp p, png_infop i, unsigned r, unsigned g, unsigned b, int code)
 {
+   png_color_16 background;
+
+   /* Scaled to the image's own depth, which is not a detail worth glossing over: a value scaled for
+    * sixteen bits handed to an eight bit image is out of range, and the reference reads it as such and
+    * produces something that is not a blend at all.  A real client reads the depth and fills the
+    * structure accordingly, so this does the same.
+    */
+   unsigned scale = png_get_bit_depth(p, i) == 16 ? 257 : 1;
+
+   memset(&background, 0, sizeof background);
+   background.red = (png_uint_16)(r * scale);
+   background.green = (png_uint_16)(g * scale);
+   background.blue = (png_uint_16)(b * scale);
+   background.gray = (png_uint_16)(r * scale);
+
+   png_set_background(p, &background, code, 0, 1.0);
+}
+
+static void apply_background(png_structp p, png_infop i)
+{ compose_against(p, i, 128, 64, 192, PNG_BACKGROUND_GAMMA_SCREEN); }
+static void apply_background_black(png_structp p, png_infop i)
+{ compose_against(p, i, 0, 0, 0, PNG_BACKGROUND_GAMMA_SCREEN); }
+static void apply_background_white(png_structp p, png_infop i)
+{ compose_against(p, i, 255, 255, 255, PNG_BACKGROUND_GAMMA_SCREEN); }
+static void apply_background_file(png_structp p, png_infop i)
+{ compose_against(p, i, 128, 64, 192, PNG_BACKGROUND_GAMMA_FILE); }
+
+static void
+apply_shift(png_structp p, png_infop i)
+{
+   (void)i;
+
    png_color_8 bits;
 
    /* Deliberately not the image's own depth, so that the transform has something to do whatever
@@ -459,6 +503,10 @@ static const struct transform_entry transforms[] = {
    { "rgb_to_gray", apply_rgb_to_gray },
    { "rgb_to_gray_warn", apply_rgb_to_gray_warn },
    { "rgb_to_gray_weighted", apply_rgb_to_gray_weighted },
+   { "background", apply_background },
+   { "background_black", apply_background_black },
+   { "background_white", apply_background_white },
+   { "background_file", apply_background_file },
 };
 
 #define TRANSFORM_COUNT ((int)(sizeof transforms / sizeof transforms[0]))
@@ -469,7 +517,7 @@ static const struct transform_entry transforms[] = {
  * what makes it worth varying.
  */
 static int
-apply_transforms(png_structp png_ptr, const char *names)
+apply_transforms(png_structp png_ptr, png_infop info_ptr, const char *names)
 {
    char buffer[512];
    char *cursor;
@@ -495,7 +543,7 @@ apply_transforms(png_structp png_ptr, const char *names)
       {
          if (strcmp(token, transforms[index].name) == 0)
          {
-            transforms[index].apply(png_ptr);
+            transforms[index].apply(png_ptr, info_ptr);
             found = 1;
             break;
          }
@@ -579,7 +627,7 @@ dump_file(const char *path, enum read_mode mode, const char *transform_names)
    dump_header(png_ptr, info_ptr);
    dump_metadata(png_ptr, info_ptr);
 
-   if (!apply_transforms(png_ptr, transform_names))
+   if (!apply_transforms(png_ptr, info_ptr, transform_names))
    {
       png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
       fclose(file);
