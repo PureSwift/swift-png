@@ -34,6 +34,20 @@ struct TransformInputs {
     /// The weights the colour conversion uses.
     var rgbToGray = RgbToGrayState()
 
+    /// The pair that map to linear light and back, when a correction is in force.
+    ///
+    /// Present together or not at all: converting one way without the other would leave the samples in
+    /// the wrong space. Absent when the client set no gamma, in which case a weighted sum is taken on
+    /// the samples as they are — which is what the reference does too, since without a curve to undo
+    /// there is nothing to undo.
+    var toLinear: GammaTable?
+    var fromLinear: GammaTable?
+
+    /// The same three curves as exponents, for sixteen bit samples.
+    ///
+    /// Computed rather than tabulated: a table over sixteen bits would be 65536 entries an image.
+    var linearExponents: (toLinear: Double, fromLinear: Double, corrected: Double)?
+
 
     init() {}
 
