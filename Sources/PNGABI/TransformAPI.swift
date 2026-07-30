@@ -340,3 +340,55 @@ public func png_set_background(
         png_fixed_point((background_gamma * 100_000).rounded())
     )
 }
+
+// -- the alpha arrangement ---------------------------------------------------
+
+/// Says how the client wants colour and coverage arranged, and what its display expects.
+///
+/// The format keeps the two independent: a pixel's colour is what it would be if opaque. Compositing
+/// wants them already multiplied and as light, so a client about to draw asks for that instead.
+///
+/// This also settles the gamma when the file did not. A file with no gamma chunk is taken to have been
+/// encoded for the display the client just named, which is what makes the default arrangement a no-op
+/// rather than a guess — and it is the easier way to default the file's gamma that the API intends.
+@c @implementation
+public func png_set_alpha_mode_fixed(
+    _ png_ptr: png_structrp?,
+    _ mode: Int32,
+    _ output_gamma: png_fixed_point
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    let alphaMode = AlphaMode(rawValue: mode) ?? .png
+    context.alphaMode = alphaMode
+
+    // Taken from what the client said, before the arrangement gets to override it below: the default is
+    // that the file was encoded for the display the client just named, whatever the library then does
+    // with the samples on the way there.
+    //
+    // Only a default — a file that said what it was encoded with is believed.
+    if context.gamma.fileGamma == 0, output_gamma > 0 {
+        context.gamma.fileGamma = png_fixed_point((1e10 / Double(output_gamma)).rounded())
+    }
+
+    // The premultiplied arrangement is defined in light, so its output is linear by definition and what
+    // the client asked for is overridden.  The others keep the client's encoding: the optimized
+    // arrangement needs it for the opaque pixels it leaves alone, and the broken one for the coverage
+    // it puts through the curve.
+    context.gamma.screenGamma = alphaMode == .premultiplied ? 100_000 : output_gamma
+
+    context.transformFlags.insert([.alphaMode, .gamma])
+}
+
+@c @implementation
+public func png_set_alpha_mode(
+    _ png_ptr: png_structrp?,
+    _ mode: Int32,
+    _ output_gamma: Double
+) {
+    png_set_alpha_mode_fixed(
+        png_ptr,
+        mode,
+        png_fixed_point((output_gamma * 100_000).rounded())
+    )
+}
