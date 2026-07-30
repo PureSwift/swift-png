@@ -31,6 +31,10 @@ struct TransformInputs {
     /// correction cheap enough to be a lookup at all.
     var gammaTable = GammaTable(exponent: GammaState.one)
 
+    /// The weights the colour conversion uses.
+    var rgbToGray = RgbToGrayState()
+
+
     init() {}
 
     init(_ info: InfoStore) {
