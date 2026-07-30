@@ -293,18 +293,6 @@ png_reset_zstream(png_structrp png_ptr)
 }
 
 void PNGAPI
-png_set_alpha_mode(png_structrp png_ptr, int mode, double output_gamma)
-{
-   png_error(png_ptr, "png_set_alpha_mode is not implemented");
-}
-
-void PNGAPI
-png_set_alpha_mode_fixed(png_structrp png_ptr, int mode, png_fixed_point output_gamma)
-{
-   png_error(png_ptr, "png_set_alpha_mode_fixed is not implemented");
-}
-
-void PNGAPI
 png_set_cHRM_XYZ(png_const_structrp png_ptr, png_inforp info_ptr, double red_X, double red_Y, double red_Z, double green_X, double green_Y, double green_Z, double blue_X, double blue_Y, double blue_Z)
 {
    png_error(png_ptr, "png_set_cHRM_XYZ is not implemented");
