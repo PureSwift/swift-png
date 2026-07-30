@@ -192,3 +192,20 @@ png_set_strip_alpha
 png_set_swap
 png_set_swap_alpha
 png_set_tRNS_to_alpha
+
+# Sources/PNGABI/WriteAPI.swift
+png_write_sig
+png_write_info_before_PLTE
+png_write_info
+png_write_row
+png_write_rows
+png_write_image
+png_write_end
+png_set_filter
+png_set_compression_level
+png_set_compression_mem_level
+png_set_compression_strategy
+png_set_compression_window_bits
+png_set_compression_method
+png_set_compression_buffer_size
+png_get_compression_buffer_size

@@ -87,12 +87,6 @@ png_get_chunk_malloc_max(png_const_structrp png_ptr)
    png_error(png_ptr, "png_get_chunk_malloc_max is not implemented");
 }
 
-size_t PNGAPI
-png_get_compression_buffer_size(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_compression_buffer_size is not implemented");
-}
-
 png_uint_32 PNGAPI
 png_get_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *exif)
 {
@@ -317,42 +311,6 @@ png_set_chunk_malloc_max(png_structrp png_ptr, png_alloc_size_t user_chunk_cache
 }
 
 void PNGAPI
-png_set_compression_buffer_size(png_structrp png_ptr, size_t size)
-{
-   png_error(png_ptr, "png_set_compression_buffer_size is not implemented");
-}
-
-void PNGAPI
-png_set_compression_level(png_structrp png_ptr, int level)
-{
-   png_error(png_ptr, "png_set_compression_level is not implemented");
-}
-
-void PNGAPI
-png_set_compression_mem_level(png_structrp png_ptr, int mem_level)
-{
-   png_error(png_ptr, "png_set_compression_mem_level is not implemented");
-}
-
-void PNGAPI
-png_set_compression_method(png_structrp png_ptr, int method)
-{
-   png_error(png_ptr, "png_set_compression_method is not implemented");
-}
-
-void PNGAPI
-png_set_compression_strategy(png_structrp png_ptr, int strategy)
-{
-   png_error(png_ptr, "png_set_compression_strategy is not implemented");
-}
-
-void PNGAPI
-png_set_compression_window_bits(png_structrp png_ptr, int window_bits)
-{
-   png_error(png_ptr, "png_set_compression_window_bits is not implemented");
-}
-
-void PNGAPI
 png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
 {
    png_error(png_ptr, "png_set_crc_action is not implemented");
@@ -362,12 +320,6 @@ void PNGAPI
 png_set_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep exif)
 {
    png_error(png_ptr, "png_set_eXIf is not implemented");
-}
-
-void PNGAPI
-png_set_filter(png_structrp png_ptr, int method, int filters)
-{
-   png_error(png_ptr, "png_set_filter is not implemented");
 }
 
 void PNGAPI
@@ -539,55 +491,13 @@ png_write_chunk_start(png_structrp png_ptr, png_const_bytep chunk_name, png_uint
 }
 
 void PNGAPI
-png_write_end(png_structrp png_ptr, png_inforp info_ptr)
-{
-   png_error(png_ptr, "png_write_end is not implemented");
-}
-
-void PNGAPI
 png_write_flush(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_write_flush is not implemented");
 }
 
 void PNGAPI
-png_write_image(png_structrp png_ptr, png_bytepp image)
-{
-   png_error(png_ptr, "png_write_image is not implemented");
-}
-
-void PNGAPI
-png_write_info(png_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_write_info is not implemented");
-}
-
-void PNGAPI
-png_write_info_before_PLTE(png_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_write_info_before_PLTE is not implemented");
-}
-
-void PNGAPI
 png_write_png(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)
 {
    png_error(png_ptr, "png_write_png is not implemented");
-}
-
-void PNGAPI
-png_write_row(png_structrp png_ptr, png_const_bytep row)
-{
-   png_error(png_ptr, "png_write_row is not implemented");
-}
-
-void PNGAPI
-png_write_rows(png_structrp png_ptr, png_bytepp row, png_uint_32 num_rows)
-{
-   png_error(png_ptr, "png_write_rows is not implemented");
-}
-
-void PNGAPI
-png_write_sig(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_write_sig is not implemented");
 }
