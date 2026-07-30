@@ -43,6 +43,13 @@ struct TransformInputs {
     var toLinear: GammaTable?
     var fromLinear: GammaTable?
 
+    /// The two composed, for the pixels a blend leaves alone.
+    ///
+    /// Distinct from the ordinary correction table, which is absent when the correction does nothing.
+    /// A blend needs this one present even then, so that a pixel it does not blend comes out in the same
+    /// space as the pixels it does.
+    var blendCorrected: GammaTable?
+
     /// The same three curves as exponents, for sixteen bit samples.
     ///
     /// Computed rather than tabulated: a table over sixteen bits would be 65536 entries an image.
