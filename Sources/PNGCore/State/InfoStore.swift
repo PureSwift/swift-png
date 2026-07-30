@@ -54,6 +54,7 @@ public final class InfoStore {
     /// How the profile was compressed. Only one method is defined.
     public var profileCompression: UInt8 = 0
 
+
     // -- payloads -------------------------------------------------------------
 
     public var palette = EscapingBuffer<Rgb8>()
@@ -128,6 +129,7 @@ public final class InfoStore {
         self.release()
 
         self.header = nil
+        self.transformedShape = nil
         self.validChunks = 0
         self.gamma = 0
         self.chromaticity = Chromaticity()
@@ -141,6 +143,7 @@ public final class InfoStore {
         self.masteringDisplay = MasteringDisplayColorVolume()
         self.background = Rgb16()
         self.transparentCount = 0
+        self.transparencyConsumed = false
         self.transparentColor = Rgb16()
         self.profileCompression = 0
     }
@@ -196,6 +199,32 @@ public final class InfoStore {
         self.validChunks &= ~flag
     }
 
+    /// The shape the accessors report, once the transforms have been resolved.
+    ///
+    /// Until then they report what the file stores. After `png_read_update_info` they report what
+    /// the client will actually receive, which is what it allocates from.
+    public private(set) var transformedShape: RowInfo?
+
+    /// Records the shape rows will have after the transforms.
+    public func applyTransformedShape(_ shape: RowInfo) {
+        self.transformedShape = shape
+    }
+
+    /// Whether the transparency has been turned into an alpha channel.
+    ///
+    /// Recorded rather than inferred from the count, which is zero for a non-indexed image whether
+    /// anything has happened to it or not.
+    public private(set) var transparencyConsumed = false
+
+    /// Notes that the transparency has been folded into an alpha channel.
+    ///
+    /// The chunk stays marked present and the transparent colour is still reported: what changes is
+    /// the count, which is how a client tells there is nothing left to apply.
+    public func consumeTransparency() {
+        self.transparencyConsumed = true
+        self.transparentCount = 0
+    }
+
     // -- derived geometry -----------------------------------------------------
     //
     // These report zero rather than failing when the header has not been read,
@@ -203,18 +232,28 @@ public final class InfoStore {
 
     public var width: UInt32 { UInt32(self.header?.width ?? 0) }
     public var height: UInt32 { UInt32(self.header?.height ?? 0) }
-    public var bitDepth: UInt8 { UInt8(self.header?.bitDepth ?? 0) }
-    public var colorType: UInt8 { self.header?.colorType.rawValue ?? 0 }
-    public var channels: UInt8 { UInt8(self.header?.channels ?? 0) }
+    public var bitDepth: UInt8 {
+        UInt8(self.transformedShape?.bitDepth ?? self.header?.bitDepth ?? 0)
+    }
+    public var colorType: UInt8 {
+        self.transformedShape?.colorType.rawValue ?? self.header?.colorType.rawValue ?? 0
+    }
+    public var channels: UInt8 {
+        UInt8(self.transformedShape?.channels ?? self.header?.channels ?? 0)
+    }
     public var interlaceType: UInt8 { (self.header?.isInterlaced ?? false) ? 1 : 0 }
 
     /// Bytes in a row as the client will receive it.
     ///
     /// Equal to the stored row size until transforms are configured, at which point
     /// `png_read_update_info` recomputes it.
-    public var rowBytes: Int { self.header?.rowBytes ?? 0 }
+    public var rowBytes: Int {
+        self.transformedShape?.rowBytes ?? self.header?.rowBytes ?? 0
+    }
 
-    public var pixelDepth: UInt8 { UInt8(self.header?.pixelDepth ?? 0) }
+    public var pixelDepth: UInt8 {
+        UInt8(self.transformedShape?.pixelDepth ?? self.header?.pixelDepth ?? 0)
+    }
 }
 
 /// A palette entry: three eight bit channels, laid out to match the published
