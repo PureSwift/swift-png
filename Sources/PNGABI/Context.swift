@@ -32,6 +32,14 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
                 UnsafeRawPointer(message)?.assumingMemoryBound(to: CChar.self),
                 size_t(length)
             )
+        },
+        warnChunk: { owner, message, length, packed in
+            spng_c_warning_chunk_bytes(
+                owner?.pngStruct,
+                UnsafeRawPointer(message)?.assumingMemoryBound(to: CChar.self),
+                size_t(length),
+                packed
+            )
         }
     )
 }
@@ -77,9 +85,13 @@ public func spng_swift_info_create(
     _ info_ptr: png_inforp?,
     _ png_ptr: png_const_structrp?
 ) -> Int32 {
-    guard let info_ptr else { return 0 }
+    guard let info_ptr, let png_ptr else { return 0 }
 
-    info_ptr.pointee.swift_ctx = Unmanaged.passRetained(InfoStore()).toOpaque()
+    // The store keeps the host so that the payloads it reports to the client come from
+    // the client's own allocator, which lives on the control structure.
+    let store = InfoStore(host: makeHost(png_structp(mutating: png_ptr)))
+
+    info_ptr.pointee.swift_ctx = Unmanaged.passRetained(store).toOpaque()
 
     return 1
 }
@@ -92,7 +104,13 @@ public func spng_swift_info_destroy(
     guard let info_ptr, let opaque = info_ptr.pointee.swift_ctx else { return }
 
     info_ptr.pointee.swift_ctx = nil
-    Unmanaged<InfoStore>.fromOpaque(opaque).release()
+
+    let store = Unmanaged<InfoStore>.fromOpaque(opaque)
+
+    // Released before the reference is dropped, because the payloads were allocated
+    // through the allocator in the control structure the caller is about to free.
+    store.takeUnretainedValue().release()
+    store.release()
 }
 
 @c
