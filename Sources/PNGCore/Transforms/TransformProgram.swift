@@ -32,6 +32,7 @@ struct TransformProgram {
         case invertMono
         case invertAlpha
         case shift
+        case gamma(exponent: FixedPoint)
         case packing
         case bgr
         case packSwap
@@ -61,7 +62,8 @@ struct TransformProgram {
         header: Header,
         info: InfoStore,
         fillerValue: UInt32,
-        fillerAfterColor: Bool
+        fillerAfterColor: Bool,
+        gamma: GammaState = GammaState()
     ) {
         let hasTransparency = info.isValid(InfoStore.Valid.trns)
         let flags = requested.resolved(for: header, hasTransparency: hasTransparency)
@@ -97,6 +99,18 @@ struct TransformProgram {
 
         if flags.contains(.grayToRgb) {
             self.steps.append(.grayToRgb)
+        }
+
+        // After the channel arrangement is settled and before the depth changes: the correction is
+        // defined on the samples as the file encoded them, so narrowing them first would correct
+        // values that had already lost precision.
+        //
+        // Not for an indexed image, and this is the one place the distinction bites.  Such an image is
+        // corrected in its palette, once, and the rows are then expanded from the corrected entries —
+        // so a row step here would correct the same samples a second time.
+        if flags.contains(.gamma), !header.colorType.isIndexed,
+           let exponent = gamma.correctionExponent, GammaState.isSignificant(exponent) {
+            self.steps.append(.gamma(exponent: exponent))
         }
 
         // Narrowing before widening, and the two narrowings are mutually exclusive by the time the
@@ -243,6 +257,9 @@ struct TransformProgram {
             case .shift:
                 Transform.shift(row, &info, significant: inputs.significantBits)
 
+            case let .gamma(exponent):
+                Transform.gamma(row, info, table: inputs.gammaTable, exponent: exponent)
+
             case .packing:
                 Transform.packing(row, &info)
 
@@ -370,7 +387,7 @@ struct TransformProgram {
             }
             info.resize()
 
-        case .invertMono, .invertAlpha, .shift, .bgr, .packSwap, .swapAlpha, .swapBytes:
+        case .invertMono, .invertAlpha, .shift, .gamma, .bgr, .packSwap, .swapAlpha, .swapBytes:
             // These rearrange bytes without changing the shape.
             return
         }
