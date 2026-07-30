@@ -151,37 +151,7 @@ meta-rgb16-sbit-bkgd.png gamma_dark,strip_16 As above.
 meta-rgb16-sbit-bkgd.png strip_16,gamma_dark As above.
 meta-rgb16-sbit-bkgd.png gamma_steep,packing As above.
 meta-rgb16-sbit-bkgd.png gamma_bright,bgr,add_alpha As above.
-
-# Discarding colour while a gamma correction is in force.
-#
-# A weighted sum of colour channels is only meaningful on light levels, and the samples in a file are
-# not light levels — they are encoded with the file's curve.  So the reference decodes them to linear,
-# takes the sum there, and re-encodes the result; this library takes the sum on the encoded values.  The
-# two agree when no correction is in force, which is why only the combination differs and neither
-# transform does on its own.
-#
-# Closing it means the pair of tables that map to and from linear, which is also what compositing
-# against a background needs, so the two are one piece of work rather than two.
-
-gray16-filter2.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-gray2-w13.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-gray4-w13.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-gray8-filter0.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-graya8-filter0.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-interlaced-gray2-9x9.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-interlaced-palette8-10x10.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-interlaced-rgb8-9x9.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-interlaced-rgba8-16x16.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-meta-gray-sbit-trns.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-meta-palette-trns-hist-bkgd.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-meta-rgb-trns-bkgd.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-meta-rgb16-sbit-bkgd.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-palette1.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-palette2.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-palette4.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-palette8.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-rgb8-filter0.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
-rgba8-filter0.png rgb_to_gray,gamma_bright Not implemented here: the weighted sum is taken on the encoded samples rather than on linear light.
+meta-rgb16-sbit-bkgd.png rgb_to_gray,gamma_bright As above, reached through the colour conversion rather than the gamma step: averaging goes through linear, and the trip uses the same coarse table.
 
 # Reversing sub-byte samples within a byte, for an interlaced image.
 #
