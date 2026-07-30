@@ -193,3 +193,39 @@ public func png_read_update_info(_ png_ptr: png_structrp?, _ info_ptr: png_infor
         try context.updateInfoForClient(info)
     }
 }
+
+// -- gamma -------------------------------------------------------------------
+
+/// Says what exponent the client's display expects, and what the file's samples were encoded with.
+///
+/// The file's exponent is overridden unconditionally, even when the file said otherwise. That is
+/// deliberate on the API's part: a client calling this has a reason to distrust or replace what the
+/// file claimed, and a call that silently deferred to the file would be unpredictable.
+///
+/// A file encoded at 1/2.2 shown on a display expecting 2.2 needs no correction, and nothing is
+/// applied in that case — the two exponents multiply to one.
+@c @implementation
+public func png_set_gamma_fixed(
+    _ png_ptr: png_structrp?,
+    _ scrn_gamma: png_fixed_point,
+    _ file_gamma: png_fixed_point
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    context.gamma.screenGamma = scrn_gamma
+    context.gamma.fileGamma = file_gamma
+    context.transformFlags.insert(.gamma)
+}
+
+@c @implementation
+public func png_set_gamma(
+    _ png_ptr: png_structrp?,
+    _ scrn_gamma: Double,
+    _ file_gamma: Double
+) {
+    png_set_gamma_fixed(
+        png_ptr,
+        png_fixed_point((scrn_gamma * 100_000).rounded()),
+        png_fixed_point((file_gamma * 100_000).rounded())
+    )
+}
