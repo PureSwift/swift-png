@@ -77,6 +77,17 @@ public final class PngContext {
     /// unconditionally — that is what makes a client's request deterministic whatever the file said.
     public var gamma = GammaState()
 
+    /// How the colour conversion is weighted, and what to say about a pixel that had colour.
+    public var rgbToGray = RgbToGrayState()
+
+    /// Records that a pixel with colour reached the conversion.
+    ///
+    /// The running record, which `png_get_rgb_to_gray_status` reports.  Telling the client is separate
+    /// and happens per row, from the reader.
+    func noteColorDuringConversion() {
+        self.rgbToGray.sawColor = true
+    }
+
     /// The pipeline the requests resolve to, built once the header is known.
     var transforms: TransformProgram?
 
@@ -247,6 +258,8 @@ public final class PngContext {
         if let gammaTable {
             self.transformInputs.gammaTable = gammaTable
         }
+
+        self.transformInputs.rgbToGray = self.rgbToGray
 
         // What the client asked for wins over what the file recorded: png_set_shift says how far to
         // move the samples, while the chunk only says what was done to them originally.
