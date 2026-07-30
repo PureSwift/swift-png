@@ -248,7 +248,9 @@ public final class PngContext {
         // its samples are.  The store's own palette is corrected, not just the copy the pipeline
         // reads: a client that asks for the palette back gets the corrected entries, which is what
         // the reference gives it and what makes the two consistent.
-        if let gammaTable, header.colorType.isIndexed {
+        // Not when the colour conversion is going to run: it corrects as it averages, so a palette
+        // corrected here would have the curve applied to it twice.
+        if let gammaTable, header.colorType.isIndexed, !program.colorConversionOwnsGamma {
             info.applyGammaToPalette(gammaTable)
         }
 
@@ -260,6 +262,24 @@ public final class PngContext {
         }
 
         self.transformInputs.rgbToGray = self.rgbToGray
+
+        // The pair that map to linear light and back, built only when something needs to average
+        // samples and there is a curve to undo first.  They are built together: converting one way
+        // without the other would leave the samples in the wrong space.
+        if self.transformFlags.contains(.rgbToGray),
+           let toLinear = gamma.toLinearExponent,
+           let fromLinear = gamma.fromLinearExponent {
+            self.transformInputs.toLinear = GammaTable(exponent: toLinear)
+            self.transformInputs.fromLinear = GammaTable(exponent: fromLinear)
+
+            if let combined = gamma.correctionExponent {
+                self.transformInputs.linearExponents = (
+                    toLinear: Double(toLinear) * 1e-5,
+                    fromLinear: Double(fromLinear) * 1e-5,
+                    corrected: Double(combined) * 1e-5
+                )
+            }
+        }
 
         // What the client asked for wins over what the file recorded: png_set_shift says how far to
         // move the samples, while the chunk only says what was done to them originally.
