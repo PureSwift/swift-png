@@ -104,6 +104,26 @@ public struct Header: Sendable {
         public let filterMethod: UInt8
         public let interlaceMethod: UInt8
 
+        /// Builds the fields directly, for a client describing an image rather than a
+        /// stream carrying one.
+        public init(
+            width: UInt32,
+            height: UInt32,
+            bitDepth: UInt8,
+            colorType: UInt8,
+            compressionMethod: UInt8,
+            filterMethod: UInt8,
+            interlaceMethod: UInt8
+        ) {
+            self.width = width
+            self.height = height
+            self.bitDepth = bitDepth
+            self.colorType = colorType
+            self.compressionMethod = compressionMethod
+            self.filterMethod = filterMethod
+            self.interlaceMethod = interlaceMethod
+        }
+
         /// Reads the thirteen byte payload.
         ///
         /// Throws only when the payload is not thirteen bytes; anything wrong with
