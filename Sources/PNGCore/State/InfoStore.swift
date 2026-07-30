@@ -219,6 +219,23 @@ public final class InfoStore {
         Transform.gammaPalette(self.palette.elements, table: table)
     }
 
+    /// Lays the palette over a background, using the transparency table for coverage.
+    public func composePalette(
+        background: ComposeBackground,
+        toLinear: GammaTable? = nil,
+        fromLinear: GammaTable? = nil,
+        corrected: GammaTable? = nil
+    ) {
+        Transform.composePalette(
+            self.palette.elements,
+            alphas: UnsafeBufferPointer(self.transparentAlpha.elements),
+            background: background,
+            toLinear: toLinear,
+            fromLinear: fromLinear,
+            corrected: corrected
+        )
+    }
+
     /// Whether the transparency has been turned into an alpha channel.
     ///
     /// Recorded rather than inferred from the count, which is zero for a non-indexed image whether
