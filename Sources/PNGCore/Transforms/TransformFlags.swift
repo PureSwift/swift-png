@@ -79,6 +79,9 @@ public struct TransformFlags: OptionSet, Sendable {
     /// The colour and the coverage are rearranged into what the client asked for.
     public static let alphaMode = Self(rawValue: 1 << 21)
 
+    /// A transform of the client's own, run after everything the library does.
+    public static let userTransform = Self(rawValue: 1 << 22)
+
     /// Resolves the requests against the image, adding what one request implies.
     ///
     /// This exists because the requests are not independent.  Asking for the transparency to
