@@ -1,0 +1,12 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@/libpng@SPNG_ABI_SONAME@
+
+Name: libpng
+Description: Loads and saves PNG files
+Version: @PROJECT_VERSION@
+Requires.private: zlib
+Libs: -L${libdir} -lpng@SPNG_ABI_SONAME@
+Libs.private: -lm
+Cflags: -I${includedir}
