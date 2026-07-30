@@ -16,8 +16,10 @@ sequentially — every colour type, every bit depth from 1 to 16, every filter �
 the control structure lifecycle, the allocator and stream callbacks, and every metadata
 chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
 embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
-range signalling, and all three text chunks. Interlaced images decode too, both ways a client
-can ask for them. The transforms and writing are still to come.
+range signalling, and all three text chunks. Interlaced images decode too, both ways a client can
+ask for them, and twenty of the read transforms work — the expansions, the depth conversions, the
+channel rearrangements, the filler and the shift. Gamma, compositing and the remaining transforms
+are still to come, as is writing.
 
 ## Building
 
@@ -79,6 +81,23 @@ rather than failing at the first. It passes the decompressor's own wording throu
 rather than summarising it. None of that is written down anywhere; all of it is what
 clients actually observe.
 
+The transforms are where the reference is least guessable, because a client asks for them in any
+order and the library applies them in a fixed order of its own. So the comparison drives
+combinations rather than one transform at a time, and drives several of them twice with the requests
+reversed — the result has to be identical, and checking that against the reference proves it for the
+reference too rather than only for us. That is 2640 decodes over 22 images in both read modes.
+
+Almost every rule it found was one that could not have been guessed. The shift moves samples *down*
+rather than up: it recovers the narrower values an image was made from rather than filling the depth,
+so five significant bits in eight means shifting right by three. Asking for colour from a greyscale
+image implies widening it first, and asking either that or for low-depth greyscale to be widened also
+expands a palette — but neither turns a transparent colour into an alpha channel, while any expansion
+at all makes the library stop reporting the transparency. Adding a filler channel happens after the
+alpha swap rather than before, so a filler alpha is never moved to the front. Palette entries a
+transparency table does not mention are opaque. And the shift amounts are checked against the image's
+own depth even for an indexed image, where the plausible reading — that the palette's eight bit
+samples are what matter — is wrong.
+
 Interlacing turned up a contract that is easy to get wrong. A client that reads an interlaced
 image row by row calls `png_set_interlace_handling`, is told there are seven passes, and then
 sweeps every row of the image seven times — so most of those calls fall on rows the current
@@ -110,10 +129,14 @@ way. That is what checks the conversions in the setters — the mastering displa
 chromaticity is stored at one scale and published at another, and only a round trip shows
 that the two halves agree.
 
-Where the reference does something this library should not copy, the case is listed in
-`Conformance/known-differences.txt` with the reason, and the comparison reports it without
-failing. There is one entry, for a chunk the reference build refuses to read wherever it
-appears in a stream.
+Where the reference does something this library should not copy, the case is listed with its reason
+and the comparison reports it without failing: `Conformance/known-differences.txt` for decoding, and
+`Conformance/known-transform-differences.txt` for the transforms. The decoding file has one entry, a
+chunk the reference build refuses to read wherever it appears. The transform file has two kinds of
+entry and keeps them apart on purpose — the reference accepting a filler it cannot honour and then
+failing mid-decode, and one gap of this library's own, where reversing sub-byte samples within a byte
+is applied to an interlaced pass row rather than to the full-width row it is spread into. Unfinished
+work is labelled as unfinished rather than filed alongside a decision.
 
 ## Licensing
 
