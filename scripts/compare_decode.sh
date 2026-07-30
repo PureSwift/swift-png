@@ -5,13 +5,20 @@
 # their output differs on any image, this library decodes it differently from the
 # reference, and the diff points at the byte.
 #
+# A handful of images are reported but not failed on, listed with their reasons in
+# known-differences.txt.  That file is for cases where the reference's behaviour is not
+# something to reproduce; work not yet done does not belong in it, since an unimplemented
+# function already reports itself unimplemented.
+#
 # usage: compare_decode.sh <pngdump-ours> <pngdump-reference> <corpus-directory>
+#                          [known-differences-file]
 
 set -e
 
 ours="$1"
 reference="$2"
 corpus="$3"
+known="$4"
 
 if [ ! -x "$ours" ] || [ ! -x "$reference" ] || [ ! -d "$corpus" ]; then
     echo "compare_decode.sh: usage: compare_decode.sh <ours> <reference> <corpus>" >&2
@@ -22,6 +29,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 failures=0
+exempt=0
 count=0
 
 for image in "$corpus"/*.png; do
@@ -36,6 +44,12 @@ for image in "$corpus"/*.png; do
     "$ours" "$image" > "$work/ours" 2>&1 || echo "exit $?" >> "$work/ours"
 
     if ! diff -q "$work/reference" "$work/ours" > /dev/null; then
+        if [ -n "$known" ] && [ -f "$known" ] && grep -q "^$name " "$known"; then
+            echo "--- $name differs, as recorded in $(basename "$known") ---"
+            exempt=$((exempt + 1))
+            continue
+        fi
+
         failures=$((failures + 1))
         echo "--- $name differs ---"
         diff "$work/reference" "$work/ours" | head -20
@@ -52,4 +66,9 @@ if [ "$failures" -ne 0 ]; then
     exit 1
 fi
 
-echo "$count images decoded identically to the reference"
+if [ "$exempt" -ne 0 ]; then
+    echo "$((count - exempt)) images decoded identically to the reference," \
+        "$exempt differ as recorded"
+else
+    echo "$count images decoded identically to the reference"
+fi
