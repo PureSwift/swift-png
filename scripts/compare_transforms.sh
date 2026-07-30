@@ -78,6 +78,19 @@ filler
 filler_before
 add_alpha
 shift
+gamma_none
+gamma_bright
+gamma_dark
+gamma_slight
+gamma_steep
+gamma_shallow
+gamma_bright,expand
+gamma_bright,gray_to_rgb
+gamma_bright,strip_alpha
+gamma_dark,expand_16
+gamma_dark,strip_16
+gamma_steep,packing
+gamma_bright,bgr,add_alpha
 expand,strip_16
 expand,expand_16
 expand,gray_to_rgb
@@ -119,6 +132,9 @@ bgr,gray_to_rgb
 add_alpha,gray_to_rgb
 packswap,packing
 invert_mono,packing
+expand,gamma_bright
+gray_to_rgb,gamma_bright
+strip_16,gamma_dark
 strip_16,gray_to_rgb,expand
 bgr,add_alpha,strip_16,expand
 invert_mono,packing,gray_1_2_4_to_8
@@ -132,6 +148,8 @@ trap 'rm -rf "$work"' EXIT
 failures=0
 exempt=0
 count=0
+
+: > "$work/used"
 
 for image in $images; do
     [ -f "$corpus/$image" ] || continue
@@ -148,6 +166,7 @@ for image in $images; do
             if ! diff -q "$work/reference" "$work/ours" > /dev/null; then
                 if [ -n "$known" ] && [ -f "$known" ] \
                     && grep -q "^$image $combination " "$known"; then
+                    echo "$image $combination" >> "$work/used"
                     exempt=$((exempt + 1))
                     continue
                 fi
@@ -172,8 +191,30 @@ if [ "$count" -eq 0 ]; then
     exit 2
 fi
 
+# An exemption that no longer applies is worse than no exemption: it sits in the file looking like a
+# considered decision while silently covering whatever regresses into its place.  So the file has to
+# earn every line it holds.
+stale=0
+
+if [ -n "$known" ] && [ -f "$known" ]; then
+    while read -r image combination rest; do
+        case "$image" in ''|\#*) continue ;; esac
+        [ -n "$combination" ] || continue
+
+        if ! grep -qx "$image $combination" "$work/used"; then
+            echo "stale exemption: $image $combination now matches the reference" >&2
+            stale=$((stale + 1))
+        fi
+    done < "$known"
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "$failures of $count transformed decodes differed" >&2
+    exit 1
+fi
+
+if [ "$stale" -ne 0 ]; then
+    echo "$stale recorded differences no longer differ; remove them from $(basename "$known")" >&2
     exit 1
 fi
 
