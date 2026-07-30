@@ -286,3 +286,57 @@ public func png_get_rgb_to_gray_status(_ png_ptr: png_const_structrp?) -> png_by
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return 0 }
     return context.rgbToGray.sawColor ? 1 : 0
 }
+
+// -- compositing -------------------------------------------------------------
+
+/// Lays the image over a background colour, so that what comes back has no alpha channel.
+///
+/// The colour is expected at the image's own depth — nought to 255 for an eight bit image, the full
+/// range for a sixteen bit one — unless `need_expand` says it is given in the file's terms, in which
+/// case it may be a palette index or a value at a depth the row will be widened out of.
+///
+/// `background_gamma_code` says what space the colour itself is in, because one already in the
+/// display's space must not be corrected along with the image.
+@c @implementation
+public func png_set_background_fixed(
+    _ png_ptr: png_structrp?,
+    _ background_color: png_const_color_16p?,
+    _ background_gamma_code: Int32,
+    _ need_expand: Int32,
+    _ background_gamma: png_fixed_point
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+    guard let background_color else { return }
+
+    var color = Rgb16()
+    color.index = background_color.pointee.index
+    color.red = background_color.pointee.red
+    color.green = background_color.pointee.green
+    color.blue = background_color.pointee.blue
+    color.gray = background_color.pointee.gray
+
+    context.compose.color = color
+    context.compose.gammaCode =
+        ComposeState.GammaCode(rawValue: background_gamma_code) ?? .unknown
+    context.compose.gamma = background_gamma
+    context.compose.needsExpanding = need_expand != 0
+
+    context.transformFlags.insert(.compose)
+}
+
+@c @implementation
+public func png_set_background(
+    _ png_ptr: png_structrp?,
+    _ background_color: png_const_color_16p?,
+    _ background_gamma_code: Int32,
+    _ need_expand: Int32,
+    _ background_gamma: Double
+) {
+    png_set_background_fixed(
+        png_ptr,
+        background_color,
+        background_gamma_code,
+        need_expand,
+        png_fixed_point((background_gamma * 100_000).rounded())
+    )
+}
