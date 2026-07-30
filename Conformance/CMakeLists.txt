@@ -25,16 +25,21 @@ add_test(NAME generated_sources
 # frameworks ship a bundled png.h that would otherwise be picked up.
 find_package(PkgConfig)
 
-if(PkgConfig_FOUND AND NOT DEFINED SPNG_REFERENCE_INCLUDE_DIR)
+# Asked on every configure, not only the first.  Gating this on whether the include
+# directory was already known would skip it as soon as that variable was cached, and the
+# comparison targets below would quietly cease to exist — leaving a suite that reports
+# success while comparing nothing.
+if(PkgConfig_FOUND)
     pkg_check_modules(SPNG_REFERENCE QUIET libpng16)
+endif()
 
-    if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_INCLUDE_DIRS)
-        list(GET SPNG_REFERENCE_INCLUDE_DIRS 0 SPNG_REFERENCE_INCLUDE_DIR)
-    endif()
+# An explicit setting wins, for a reference build that pkg-config does not know about.
+if(NOT SPNG_REFERENCE_INCLUDE_DIR AND SPNG_REFERENCE_INCLUDE_DIRS)
+    list(GET SPNG_REFERENCE_INCLUDE_DIRS 0 SPNG_REFERENCE_INCLUDE_DIR)
 endif()
 
 set(SPNG_REFERENCE_INCLUDE_DIR "${SPNG_REFERENCE_INCLUDE_DIR}" CACHE PATH
-    "Reference libpng headers, used to prove clients need no changes")
+    "Reference libpng headers, used to prove clients need no changes" FORCE)
 
 add_executable(version_probe version_probe.c)
 target_link_libraries(version_probe PRIVATE png16)
@@ -68,8 +73,9 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
 
     add_test(NAME version_probe_reference COMMAND $<TARGET_FILE:version_probe_reference>)
 else()
-    message(STATUS
-        "Reference libpng library not found; probe expectations will not be cross-checked")
+    message(WARNING
+        "Reference libpng not found: the differential comparison, which is the primary "
+        "correctness check, will not run")
 endif()
 
 # -- the differential decode ------------------------------------------------
@@ -109,5 +115,6 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
         COMMAND ${SPNG_SCRIPTS}/compare_decode.sh
                 $<TARGET_FILE:pngdump>
                 $<TARGET_FILE:pngdump_reference>
-                ${SPNG_CORPUS})
+                ${SPNG_CORPUS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-differences.txt)
 endif()
