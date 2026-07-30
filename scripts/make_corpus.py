@@ -82,6 +82,7 @@ def encode(
     rows: list[bytes],
     filter_kind: int,
     palette: bytes | None = None,
+    interlaced: bool = False,
     before: bytes = b"",
     after_palette: bytes = b"",
     after: bytes = b"",
@@ -96,18 +97,23 @@ def encode(
     row_bytes = (width * CHANNELS[color_type] * bit_depth + 7) // 8
 
     raw = bytearray()
-    previous = bytes(row_bytes)
 
-    for row in rows:
-        assert len(row) == row_bytes, (len(row), row_bytes)
-        raw.append(filter_kind)
-        raw += filter_row(filter_kind, row, previous, stride)
-        previous = row
+    if interlaced:
+        raw = interlace(rows, width, bit_depth, CHANNELS[color_type], filter_kind, stride)
+    else:
+        previous = bytes(row_bytes)
+
+        for row in rows:
+            assert len(row) == row_bytes, (len(row), row_bytes)
+            raw.append(filter_kind)
+            raw += filter_row(filter_kind, row, previous, stride)
+            previous = row
 
     body = SIGNATURE
     body += chunk(
         b"IHDR",
-        struct.pack(">IIBBBBB", width, height, bit_depth, color_type, 0, 0, 0),
+        struct.pack(">IIBBBBB", width, height, bit_depth, color_type, 0, 0,
+                    1 if interlaced else 0),
     )
 
     body += before
@@ -121,6 +127,82 @@ def encode(
     body += chunk(b"IEND", b"")
 
     path.write_bytes(body)
+
+
+# Where each of the seven passes starts, and how far apart its pixels are.
+PASS_COLUMN_START = (0, 4, 0, 2, 0, 1, 0)
+PASS_ROW_START = (0, 0, 4, 0, 2, 0, 1)
+PASS_COLUMN_STRIDE = (8, 8, 4, 4, 2, 2, 1)
+PASS_ROW_STRIDE = (8, 8, 8, 4, 4, 2, 2)
+
+
+def read_pixel(row: bytes, index: int, depth: int) -> int:
+    if depth >= 8:
+        width = depth // 8
+        return int.from_bytes(row[index * width:(index + 1) * width], "big")
+
+    per_byte = 8 // depth
+    shift = (per_byte - 1 - index % per_byte) * depth
+    return (row[index // per_byte] >> shift) & ((1 << depth) - 1)
+
+
+def write_pixel(row: bytearray, index: int, value: int, depth: int) -> None:
+    if depth >= 8:
+        width = depth // 8
+        row[index * width:(index + 1) * width] = value.to_bytes(width, "big")
+        return
+
+    per_byte = 8 // depth
+    shift = (per_byte - 1 - index % per_byte) * depth
+    mask = ((1 << depth) - 1) << shift
+    row[index // per_byte] = (row[index // per_byte] & ~mask) | ((value << shift) & mask)
+
+
+def interlace(rows, width, bit_depth, channels, filter_kind, stride) -> bytearray:
+    """Lays out an image as the seven interlaced subimages.
+
+    Each pass is its own little image with its own filter bytes, and its reconstruction
+    starts from a notional row of zeroes rather than from the pass before it. A pass the
+    image is too small to contain is absent altogether rather than present as nothing.
+    """
+    depth = channels * bit_depth
+    out = bytearray()
+
+    for pass_index in range(7):
+        column_start = PASS_COLUMN_START[pass_index]
+        row_start = PASS_ROW_START[pass_index]
+        column_stride = PASS_COLUMN_STRIDE[pass_index]
+        row_stride = PASS_ROW_STRIDE[pass_index]
+
+        pass_width = 0 if width <= column_start else (
+            (width - column_start + column_stride - 1) // column_stride
+        )
+        pass_height = 0 if len(rows) <= row_start else (
+            (len(rows) - row_start + row_stride - 1) // row_stride
+        )
+
+        if pass_width == 0 or pass_height == 0:
+            continue
+
+        pass_row_bytes = (pass_width * depth + 7) // 8
+        previous = bytes(pass_row_bytes)
+
+        for pass_row in range(pass_height):
+            source = rows[row_start + pass_row * row_stride]
+            gathered = bytearray(pass_row_bytes)
+
+            for column in range(pass_width):
+                write_pixel(
+                    gathered, column,
+                    read_pixel(source, column_start + column * column_stride, depth),
+                    depth,
+                )
+
+            out.append(filter_kind)
+            out += filter_row(filter_kind, bytes(gathered), previous, stride)
+            previous = bytes(gathered)
+
+    return out
 
 
 def sample_rows(width: int, height: int, channels: int, bit_depth: int) -> list[bytes]:
@@ -480,6 +562,41 @@ def main() -> None:
         path = CORPUS / f"rgb8-{label}.png"
         encode(path, width, height, 8, RGB, rows, 4)
         written.append(path)
+
+    # Interlaced, at sizes that exercise the pass geometry: one where every pass is present,
+    # and several small enough that whole passes are absent from the stream.
+    for width, height, label in ((16, 16, "16x16"), (9, 9, "9x9"), (1, 1, "1x1"),
+                                 (5, 3, "5x3"), (3, 5, "3x5"), (8, 1, "8x1"),
+                                 (1, 8, "1x8"), (7, 7, "7x7")):
+        for color_type, name in ((RGB, "rgb"), (RGBA, "rgba")):
+            rows = sample_rows(width, height, CHANNELS[color_type], 8)
+            path = CORPUS / f"interlaced-{name}8-{label}.png"
+            encode(path, width, height, 8, color_type, rows, 4, interlaced=True)
+            written.append(path)
+
+    # Interlaced below a byte per pixel, where a pass's rows end at a different bit from the
+    # image's and the scatter is bit work rather than a copy.
+    for bit_depth in (1, 2, 4):
+        for width, height in ((13, 11), (9, 9), (3, 3)):
+            rows = sample_rows(width, height, 1, bit_depth)
+            path = CORPUS / f"interlaced-gray{bit_depth}-{width}x{height}.png"
+            encode(path, width, height, bit_depth, GRAYSCALE, rows, 0, interlaced=True)
+            written.append(path)
+
+    # Interlaced sixteen bit, where a pixel is six bytes wide.
+    rows = sample_rows(11, 7, CHANNELS[RGB], 16)
+    path = CORPUS / "interlaced-rgb16-11x7.png"
+    encode(path, 11, 7, 16, RGB, rows, 4, interlaced=True)
+    written.append(path)
+
+    # Interlaced indexed, whose pixels are palette indices.
+    palette = b"".join(
+        bytes(((i * 7) & 0xFF, (i * 13) & 0xFF, (i * 29) & 0xFF)) for i in range(16)
+    )
+    indexed = [bytes((x * 3 + y) % 16 for x in range(10)) for y in range(10)]
+    path = CORPUS / "interlaced-palette8-10x10.png"
+    encode(path, 10, 10, 8, PALETTE, indexed, 0, palette=palette, interlaced=True)
+    written.append(path)
 
     # Sixteen bit samples, where a filter steps back two bytes per channel.
     rows = sample_rows(11, 5, CHANNELS[RGB], 16)
