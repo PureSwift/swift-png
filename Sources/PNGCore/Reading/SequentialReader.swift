@@ -300,16 +300,19 @@ final class SequentialReader {
             ? RowInfo(header, pass: self.pass)
             : RowInfo(header)
 
-        // The bits past the end of the row are cleared before the transforms run, not after.  Every
-        // transform that reads a sub-byte row reads only the samples inside the width, and the one
-        // that would otherwise disturb the spare bits — inverting greyscale — confines itself to
-        // the width for the same reason.
-        self.maskTrailingBits(of: shape, in: row)
-
         let runsPipeline = !(context.transforms?.isEmpty ?? true)
         let runsUserTransform = context.transformFlags.contains(.userTransform)
 
+        // The bits past the end of a row are cleared last of all, which is where the reference clears
+        // them and not merely a place that happens to work.  Until then they hold whatever the encoder
+        // wrote, and a client's own transform is handed them as they were — so masking earlier would
+        // show that client zeroes where the reference shows it the file.
+        //
+        // Every transform the library has reads only the samples inside the width, so none of them
+        // carries those bits into a pixel; and the ones that would otherwise disturb them are undone
+        // by this, whatever they left behind.
         guard runsPipeline || runsUserTransform else {
+            self.maskTrailingBits(of: shape, in: row)
             self.transformedShape = nil
             return stored
         }
@@ -341,13 +344,15 @@ final class SequentialReader {
         // runs the pipeline has returned and the copy is gone.
         if runsUserTransform {
             Self.applyUserTransform(to: whole, shape: &shape, host: context.host)
-
-            // Again, because the client's transform is the one thing that can disturb them.  Every
-            // transform the library has confines itself to the samples inside the width; a client's
-            // works on whatever bytes it likes, and the reference hands over a row whose spare bits
-            // are zero however they got set.
-            self.maskTrailingBits(of: shape, in: whole)
         }
+
+        // Which end the spare bits are at depends on whether the samples within a byte were reversed
+        // on the way here.
+        self.maskTrailingBits(
+            of: shape,
+            in: whole,
+            packSwapped: context.transforms?.swapsPackedSamples ?? false
+        )
 
         self.transformedShape = shape
 
@@ -422,7 +427,8 @@ final class SequentialReader {
     /// whatever the encoder wrote there.
     private func maskTrailingBits(
         of shape: RowInfo,
-        in row: UnsafeMutableBufferPointer<UInt8>
+        in row: UnsafeMutableBufferPointer<UInt8>,
+        packSwapped: Bool = false
     ) {
         guard shape.rowBytes > 0, shape.rowBytes <= row.count else { return }
 
@@ -430,7 +436,12 @@ final class SequentialReader {
 
         guard used != 0 else { return }
 
-        row[shape.rowBytes - 1] &= UInt8(truncatingIfNeeded: 0xFF << (8 - used))
+        // Which end the spare bits are at depends on which end the samples start from.  Reversing the
+        // samples within a byte moves the spare ones from the bottom of the last byte to the top, and
+        // clearing the wrong end would throw away pixels rather than padding.
+        row[shape.rowBytes - 1] &= packSwapped
+            ? UInt8(truncatingIfNeeded: 0xFF >> (8 - used))
+            : UInt8(truncatingIfNeeded: 0xFF << (8 - used))
     }
 
     /// Moves to the next pass, or finishes the image when there is none.
