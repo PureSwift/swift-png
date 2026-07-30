@@ -146,16 +146,44 @@ final class SequentialReader {
             throw Diagnostic("Missing IHDR")
         }
 
+        // A client that never called png_read_update_info still gets its transforms applied, so
+        // the pipeline is resolved here if it has not been already.
+        if context.transforms == nil {
+            try context.resolveTransforms()
+        }
+
         // Sized for the widest pass, so one allocation serves all seven.  For an image that
         // is not interlaced that is simply the image's own row.
-        let widest = header.isInterlaced
+        let widestStored = header.isInterlaced
             ? Adam7.widestRowBytes(header: header)
             : header.rowBytes
+
+        // The transforms run in the same buffer, and some of them make a row larger — a one bit
+        // indexed row expanded to colour with alpha grows thirty-twofold — so the buffer is sized
+        // for the largest shape the row passes through, not the shape it arrives in or leaves with.
+        var widest = widestStored
+
+        if let program = context.transforms {
+            let hasTransparency = context.hasTransparency
+
+            for pass in 0 ..< (header.isInterlaced ? Adam7.passCount : 1) {
+                let start = header.isInterlaced
+                    ? RowInfo(header, pass: pass)
+                    : RowInfo(header)
+
+                widest = max(
+                    widest,
+                    program.maximumRowBytes(from: start, hasTransparency: hasTransparency)
+                )
+            }
+        }
 
         // One extra byte because the reconstruction reads a filter byte ahead of
         // each scanline.
         try context.reserve(\.rowBuffer, widest + 1)
-        try context.reserve(\.previousRow, widest)
+
+        // The reference row only ever holds stored bytes, so it is sized for those alone.
+        try context.reserve(\.previousRow, widestStored)
         try context.reserve(\.inputBuffer, Self.inputBufferSize)
 
         context.inflater = try InflateStream()
@@ -255,31 +283,59 @@ final class SequentialReader {
         // discarding anything first would decode the next row wrongly.
         context.previousRow.bytes.baseAddress!.update(from: row.baseAddress!, count: stored)
 
-        // Only what the client sees is tidied.  A row narrower than a whole number of bytes
-        // leaves spare bits the format says nothing about, and clearing them means a client
-        // gets the same bytes whatever the encoder wrote there.
-        //
-        // Computed for the pass rather than the image, since a pass is narrower and its rows
-        // end at a different bit.
-        if stored > 0, let mask = self.trailingBitMask(header: header) {
-            row[stored - 1] &= mask
-        }
-
         self.rowIndex += 1
 
-        return stored
+        // Applied here rather than at each caller, so that every way of reading a row goes through
+        // the same pipeline.  The shape is that of the current pass, which for an interlaced image
+        // is narrower than the image's.
+        var shape = header.isInterlaced
+            ? RowInfo(header, pass: self.pass)
+            : RowInfo(header)
+
+        // The bits past the end of the row are cleared before the transforms run, not after.  Every
+        // transform that reads a sub-byte row reads only the samples inside the width, and the one
+        // that would otherwise disturb the spare bits — inverting greyscale — confines itself to
+        // the width for the same reason.
+        self.maskTrailingBits(of: shape, in: row)
+
+        guard let program = context.transforms, !program.isEmpty else {
+            self.transformedShape = nil
+            return stored
+        }
+
+        // The buffer is sized for the largest shape the row passes through, so the pipeline is given
+        // the whole of it rather than the part currently in use.
+        let whole = UnsafeMutableBufferPointer(
+            start: context.rowBuffer.bytes.baseAddress! + 1,
+            count: context.rowBuffer.count - 1
+        )
+
+        program.apply(to: whole, info: &shape, inputs: context.transformInputs)
+
+        self.transformedShape = shape
+
+        return shape.rowBytes
     }
 
-    /// Keeps only the bits of the current row's last byte that belong to the image.
-    private func trailingBitMask(header: Header) -> UInt8? {
-        guard header.isInterlaced else { return header.trailingBitMask }
+    /// The shape the last decoded row ended up with, when the pipeline changed it.
+    private(set) var transformedShape: RowInfo?
 
-        let width = Adam7.width(ofPass: self.pass, imageWidth: header.width)
-        let used = (width * header.pixelDepth) % 8
+    /// Clears the bits past the end of a row.
+    ///
+    /// A row narrower than a whole number of bytes leaves spare bits that the format says nothing
+    /// about, and the reference hands them over as zeroes so that a client sees the same bytes
+    /// whatever the encoder wrote there.
+    private func maskTrailingBits(
+        of shape: RowInfo,
+        in row: UnsafeMutableBufferPointer<UInt8>
+    ) {
+        guard shape.rowBytes > 0, shape.rowBytes <= row.count else { return }
 
-        guard used != 0 else { return nil }
+        let used = (shape.width * shape.pixelDepth) % 8
 
-        return UInt8(truncatingIfNeeded: 0xFF << (8 - used))
+        guard used != 0 else { return }
+
+        row[shape.rowBytes - 1] &= UInt8(truncatingIfNeeded: 0xFF << (8 - used))
     }
 
     /// Moves to the next pass, or finishes the image when there is none.
@@ -318,9 +374,17 @@ final class SequentialReader {
         _ row: UnsafeBufferPointer<UInt8>,
         ofPass pass: Int,
         into destination: UnsafeMutablePointer<UInt8>,
-        header: Header
+        header: Header,
+        context: PngContext
     ) {
-        let full = UnsafeMutableBufferPointer(start: destination, count: header.rowBytes)
+        // The pixels are placed at their transformed size, not their stored one: by this point the
+        // pipeline may have widened them, and the destination row is sized for the result.
+        let pixelDepth = self.transformedShape?.pixelDepth
+            ?? context.transformedShape?.pixelDepth
+            ?? header.pixelDepth
+        let rowBytes = context.transformedShape?.rowBytes ?? header.rowBytes
+
+        let full = UnsafeMutableBufferPointer(start: destination, count: rowBytes)
         let width = Adam7.width(ofPass: pass, imageWidth: header.width)
 
         for column in 0 ..< width {
@@ -329,7 +393,7 @@ final class SequentialReader {
                 at: column,
                 to: full,
                 at: Adam7.imageColumn(ofPass: pass, passColumn: column),
-                pixelDepth: header.pixelDepth
+                pixelDepth: pixelDepth
             )
         }
     }
@@ -419,7 +483,8 @@ final class SequentialReader {
                     self.decodedRow(count: stored, context: context),
                     ofPass: sourcePass,
                     into: destination,
-                    header: header
+                    header: header,
+                    context: context
                 )
             }
         }
@@ -455,6 +520,16 @@ final class SequentialReader {
             return
         }
 
+        // A client that resolved the pipeline before asking for the whole image was told a row shape
+        // that did not account for the passes being spread, so it has been given a slightly
+        // misleading answer.  The image still decodes — the passes are resolved here regardless —
+        // but the reference says so, and clients see it.
+        if context.clientUpdatedInfo, !context.spreadsInterlacedRows {
+            context.host.warn(
+                "Interlace handling should be turned on when using png_read_image"
+            )
+        }
+
         while self.pass < Adam7.passCount, self.phase == .rows {
             let sourcePass = self.pass
             let passRows = Adam7.height(ofPass: sourcePass, imageHeight: header.height)
@@ -469,7 +544,8 @@ final class SequentialReader {
                         self.decodedRow(count: stored, context: context),
                         ofPass: sourcePass,
                         into: destination,
-                        header: header
+                        header: header,
+                        context: context
                     )
                 }
             }
