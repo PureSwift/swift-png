@@ -33,42 +33,121 @@ struct image_case
    int filters;        /* -1 for the default */
    int level;          /* -1 for the default */
    int strategy;       /* -1 for the default */
+   int metadata;       /* whether to set every chunk this program knows */
 };
 
 static const struct image_case cases[] = {
-   { "gray8",        13,  7, 8, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 },
-   { "gray16",       11,  5, 16, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1 },
-   { "gray1",        13,  5, 1, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 },
-   { "gray2",        13,  5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 },
-   { "gray4",        13,  5, 4, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 },
-   { "rgb8",         13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 },
-   { "rgb16",        11,  5, 16, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1 },
-   { "rgba8",        13,  7, 8, PNG_COLOR_TYPE_RGB_ALPHA,  0, -1, -1, -1 },
-   { "graya8",       13,  7, 8, PNG_COLOR_TYPE_GRAY_ALPHA, 0, -1, -1, -1 },
-   { "palette8",      9,  3, 8, PNG_COLOR_TYPE_PALETTE,    0, -1, -1, -1 },
-   { "palette4",      9,  3, 4, PNG_COLOR_TYPE_PALETTE,    0, -1, -1, -1 },
-   { "wide",        256,  2, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 },
-   { "tall",          2, 64, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 },
-   { "one_pixel",     1,  1, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 },
+   { "gray8",        13,  7, 8, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 , 0 },
+   { "gray16",       11,  5, 16, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1 , 0 },
+   { "gray1",        13,  5, 1, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 , 0 },
+   { "gray2",        13,  5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 , 0 },
+   { "gray4",        13,  5, 4, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1 , 0 },
+   { "rgb8",         13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 , 0 },
+   { "rgb16",        11,  5, 16, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1 , 0 },
+   { "rgba8",        13,  7, 8, PNG_COLOR_TYPE_RGB_ALPHA,  0, -1, -1, -1 , 0 },
+   { "graya8",       13,  7, 8, PNG_COLOR_TYPE_GRAY_ALPHA, 0, -1, -1, -1 , 0 },
+   { "palette8",      9,  3, 8, PNG_COLOR_TYPE_PALETTE,    0, -1, -1, -1 , 0 },
+   { "palette4",      9,  3, 4, PNG_COLOR_TYPE_PALETTE,    0, -1, -1, -1 , 0 },
+   { "wide",        256,  2, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 , 0 },
+   { "tall",          2, 64, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 , 0 },
+   { "one_pixel",     1,  1, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1 , 0 },
 
    /* The filter choices, one at a time: each is a different scanline in the file even though every
     * one decodes to the same image.
     */
-   { "filter_none",  13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_NONE, -1, -1 },
-   { "filter_sub",   13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_SUB, -1, -1 },
-   { "filter_up",    13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_UP, -1, -1 },
-   { "filter_avg",   13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_AVG, -1, -1 },
-   { "filter_paeth", 13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_PAETH, -1, -1 },
+   { "filter_none",  13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_NONE, -1, -1 , 0 },
+   { "filter_sub",   13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_SUB, -1, -1 , 0 },
+   { "filter_up",    13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_UP, -1, -1 , 0 },
+   { "filter_avg",   13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_AVG, -1, -1 , 0 },
+   { "filter_paeth", 13,  7, 8, PNG_COLOR_TYPE_RGB, 0, PNG_FILTER_PAETH, -1, -1 , 0 },
 
    /* And the compressor's own settings, which change the bytes and not the picture. */
-   { "level_0",      13,  7, 8, PNG_COLOR_TYPE_RGB, 0, -1, 0, -1 },
-   { "level_9",      13,  7, 8, PNG_COLOR_TYPE_RGB, 0, -1, 9, -1 },
+   { "level_0",      13,  7, 8, PNG_COLOR_TYPE_RGB, 0, -1, 0, -1 , 0 },
+   { "level_9",      13,  7, 8, PNG_COLOR_TYPE_RGB, 0, -1, 9, -1 , 0 },
    /* Spelled out rather than named: zlib's header is not among the ones a libpng client is promised,
     * and the value is part of zlib's interface rather than a detail of this program.
     */
-   { "strategy_rle", 13,  7, 8, PNG_COLOR_TYPE_RGB, 0, -1, -1, 3 },
-   { "strategy_huffman", 13, 7, 8, PNG_COLOR_TYPE_RGB, 0, -1, -1, 2 },
+   { "strategy_rle", 13,  7, 8, PNG_COLOR_TYPE_RGB, 0, -1, -1, 3 , 0 },
+   { "strategy_huffman", 13, 7, 8, PNG_COLOR_TYPE_RGB, 0, -1, -1, 2 , 0 },
+
+   /* Everything the file can say about itself, over the colour types that carry those chunks
+    * differently: a background is an index for one, a grey for another and a colour for the third.
+    */
+   { "meta_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 1 },
+   { "meta_gray",    13,  7, 8, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1, 1 },
+   { "meta_palette",  9,  3, 8, PNG_COLOR_TYPE_PALETTE,   0, -1, -1, -1, 1 },
+
+   /* The histogram on its own, because it cannot be compared with anything else.  The reference's
+    * reader refuses the chunk wherever it appears, so a file carrying one reads back differently
+    * whichever library wrote it — which is recorded next door, and would otherwise mask every other
+    * chunk in the case it was bundled with.
+    */
+   { "hist_palette",  9,  3, 8, PNG_COLOR_TYPE_PALETTE,   0, -1, -1, -1, 2 },
+   { "meta_rgba",    13,  7, 8, PNG_COLOR_TYPE_RGB_ALPHA, 0, -1, -1, -1, 1 },
 };
+
+/* Sets every chunk this program knows how to set.
+ *
+ * The values are arbitrary but distinct, so that a field written into the wrong place is visible
+ * rather than plausible.
+ */
+static void set_metadata(png_structp p, png_infop i, const struct image_case *c)
+{
+   /* Two says to set the histogram as well, which is the one chunk that cannot be compared. */
+   png_color_16 background;
+   png_color_8 sig_bits;
+   png_time when;
+   png_uint_16 histogram[256];
+   png_byte alphas[256];
+   png_color_16 transparent;
+   int k;
+
+   png_set_gAMA_fixed(p, i, 45455);
+   png_set_cHRM_fixed(p, i, 31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000);
+   png_set_sRGB(p, i, PNG_sRGB_INTENT_PERCEPTUAL);
+
+   memset(&sig_bits, 0, sizeof sig_bits);
+   sig_bits.red = 5; sig_bits.green = 6; sig_bits.blue = 5; sig_bits.gray = 7; sig_bits.alpha = 4;
+   png_set_sBIT(p, i, &sig_bits);
+
+   memset(&background, 0, sizeof background);
+   background.index = 3;
+   background.red = 100; background.green = 200; background.blue = 30; background.gray = 128;
+   png_set_bKGD(p, i, &background);
+
+   png_set_pHYs(p, i, 2835, 2835, PNG_RESOLUTION_METER);
+   png_set_oFFs(p, i, -12, 34, PNG_OFFSET_PIXEL);
+
+   memset(&when, 0, sizeof when);
+   when.year = 2026; when.month = 7; when.day = 30;
+   when.hour = 12; when.minute = 34; when.second = 56;
+   png_set_tIME(p, i, &when);
+
+   if (c->color_type == PNG_COLOR_TYPE_PALETTE)
+   {
+      for (k = 0; k < 256; k++)
+      {
+         histogram[k] = (png_uint_16)(k * 3 + 1);
+         alphas[k] = (png_byte)(k * 5);
+      }
+
+      if (c->metadata == 2) png_set_hIST(p, i, histogram);
+
+      png_set_tRNS(p, i, alphas, 6, NULL);
+   }
+   else if (c->color_type == PNG_COLOR_TYPE_RGB)
+   {
+      memset(&transparent, 0, sizeof transparent);
+      transparent.red = 12; transparent.green = 34; transparent.blue = 56;
+      png_set_tRNS(p, i, NULL, 0, &transparent);
+   }
+   else if (c->color_type == PNG_COLOR_TYPE_GRAY)
+   {
+      memset(&transparent, 0, sizeof transparent);
+      transparent.gray = 77;
+      png_set_tRNS(p, i, NULL, 0, &transparent);
+   }
+}
 
 static int channels_of(int color_type)
 {
@@ -141,6 +220,8 @@ static int write_file(const char *path, const struct image_case *c)
       png_set_PLTE(p, i, palette, entries);
    }
 
+   if (c->metadata) set_metadata(p, i, c);
+
    if (c->filters >= 0) png_set_filter(p, PNG_FILTER_TYPE_BASE, c->filters);
    if (c->level >= 0) png_set_compression_level(p, c->level);
    if (c->strategy >= 0) png_set_compression_strategy(p, c->strategy);
@@ -161,6 +242,85 @@ static int write_file(const char *path, const struct image_case *c)
    fclose(fp);
 
    return 0;
+}
+
+/* What the file says about itself, in the order this program set it. */
+static void dump_metadata(png_structp p, png_infop i)
+{
+   png_fixed_point gamma;
+   png_fixed_point wx, wy, rx, ry, gx, gy, bx, by;
+   int intent;
+   png_color_8p sig_bits;
+   png_color_16p background;
+   png_uint_32 res_x, res_y;
+   int unit_type;
+   png_int_32 off_x, off_y;
+   png_timep when;
+   png_uint_16p histogram;
+   png_bytep alphas;
+   int num_alphas;
+   png_color_16p transparent;
+
+   if (png_get_gAMA_fixed(p, i, &gamma))
+      printf("gama %d\n", (int)gamma);
+
+   if (png_get_cHRM_fixed(p, i, &wx, &wy, &rx, &ry, &gx, &gy, &bx, &by))
+      printf("chrm %d %d %d %d %d %d %d %d\n", (int)wx, (int)wy, (int)rx, (int)ry,
+             (int)gx, (int)gy, (int)bx, (int)by);
+
+   if (png_get_sRGB(p, i, &intent))
+      printf("srgb %d\n", intent);
+
+   if (png_get_sBIT(p, i, &sig_bits))
+      printf("sbit r=%d g=%d b=%d gray=%d alpha=%d\n", sig_bits->red, sig_bits->green,
+             sig_bits->blue, sig_bits->gray, sig_bits->alpha);
+
+   if (png_get_bKGD(p, i, &background))
+      printf("bkgd index=%d red=%d green=%d blue=%d gray=%d\n", background->index,
+             background->red, background->green, background->blue, background->gray);
+
+   if (png_get_pHYs(p, i, &res_x, &res_y, &unit_type))
+      printf("phys x=%u y=%u unit=%d\n", (unsigned)res_x, (unsigned)res_y, unit_type);
+
+   if (png_get_oFFs(p, i, &off_x, &off_y, &unit_type))
+      printf("offs x=%d y=%d unit=%d\n", (int)off_x, (int)off_y, unit_type);
+
+   if (png_get_tIME(p, i, &when))
+      printf("time %d-%d-%d %d:%d:%d\n", when->year, when->month, when->day,
+             when->hour, when->minute, when->second);
+
+   if (png_get_hIST(p, i, &histogram))
+   {
+      int k;
+      int entries = 0;
+      png_colorp palette;
+
+      png_get_PLTE(p, i, &palette, &entries);
+      printf("hist");
+
+      for (k = 0; k < entries; k++) printf(" %d", histogram[k]);
+
+      printf("\n");
+   }
+
+   if (png_get_tRNS(p, i, &alphas, &num_alphas, &transparent))
+   {
+      int k;
+
+      printf("trns count=%d:", num_alphas);
+
+      /* The count is reported for a transparent colour too, where there is no table to go with it —
+       * so the table is what says whether there is anything to print, not the count.
+       */
+      if (alphas != NULL)
+         for (k = 0; k < num_alphas; k++) printf(" %02x", alphas[k]);
+
+      if (transparent != NULL)
+         printf(" color=%d,%d,%d,%d", transparent->red, transparent->green,
+                transparent->blue, transparent->gray);
+
+      printf("\n");
+   }
 }
 
 /* Reads a file back and prints what it holds, which is the only thing worth comparing. */
@@ -206,6 +366,8 @@ static int dump_file(const char *path)
 
       printf("\n");
    }
+
+   dump_metadata(p, i);
 
    row = malloc(png_get_rowbytes(p, i) + 8);
 
