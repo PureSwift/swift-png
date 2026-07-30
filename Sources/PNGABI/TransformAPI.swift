@@ -229,3 +229,60 @@ public func png_set_gamma(
         png_fixed_point((file_gamma * 100_000).rounded())
     )
 }
+
+// -- discarding colour -------------------------------------------------------
+
+/// Collapses the three colour channels into one, with the given weights.
+///
+/// The weights are how much each channel contributes to the brightness a viewer perceives, and the
+/// defaults are not an even split: green carries most of it and blue very little. A negative weight
+/// asks for the defaults.
+///
+/// `error_action` decides what a pixel that was not already grey means. A client converting an image
+/// it believes is greyscale already can ask to be told, which turns the conversion into a check.
+@c @implementation
+public func png_set_rgb_to_gray_fixed(
+    _ png_ptr: png_structrp?,
+    _ error_action: Int32,
+    _ red: png_fixed_point,
+    _ green: png_fixed_point
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    context.rgbToGray.errorAction =
+        RgbToGrayState.ErrorAction(rawValue: error_action) ?? .none
+
+    // Supplied as fractions scaled by 100000 and held as weights out of 32768, which is what lets the
+    // sum be integer arithmetic.
+    if red >= 0, green >= 0 {
+        context.rgbToGray.red = Int32((Double(red) * 32768 / 100_000).rounded())
+        context.rgbToGray.green = Int32((Double(green) * 32768 / 100_000).rounded())
+    }
+
+    context.transformFlags.insert(.rgbToGray)
+}
+
+@c @implementation
+public func png_set_rgb_to_gray(
+    _ png_ptr: png_structrp?,
+    _ error_action: Int32,
+    _ red: Double,
+    _ green: Double
+) {
+    // A negative weight means "use the defaults", and has to survive the conversion as one.
+    png_set_rgb_to_gray_fixed(
+        png_ptr,
+        error_action,
+        red < 0 ? -1 : png_fixed_point((red * 100_000).rounded()),
+        green < 0 ? -1 : png_fixed_point((green * 100_000).rounded())
+    )
+}
+
+/// Whether the conversion met a pixel that was not already grey.
+///
+/// Non-zero once any has been seen, which is how a client tells whether the conversion lost anything.
+@c @implementation
+public func png_get_rgb_to_gray_status(_ png_ptr: png_const_structrp?) -> png_byte {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return 0 }
+    return context.rgbToGray.sawColor ? 1 : 0
+}
