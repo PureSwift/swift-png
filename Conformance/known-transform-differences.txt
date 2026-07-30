@@ -106,6 +106,21 @@ rgb8-filter0.png rgb_to_gray,gray_to_rgb The reference reports a one channel row
 rgba8-filter0.png gray_to_rgb,rgb_to_gray The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
 rgba8-filter0.png rgb_to_gray,gray_to_rgb The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
 
+# A greyscale transparent colour compared against a row that has become colour.
+#
+# The transparency chunk of a greyscale image says only which grey is transparent; the red, green and
+# blue fields of the structure it is reported in are never set and stay zero.  When the row has been
+# turned into colour before the comparison happens, the reference compares against those three fields
+# rather than against the grey — so a black pixel matches a transparency that names mid grey, and comes
+# out as the background.
+#
+# This library compares the grey the chunk actually names, so a black pixel stays black.  Reproducing
+# the other reading would mean treating fields the format never filled in as though they meant
+# something.
+
+meta-gray-sbit-trns.png background,gray_to_rgb The reference compares the transparent colour against colour fields a greyscale transparency never sets, so a black pixel matches a transparency naming mid grey.
+meta-gray-sbit-trns.png gray_to_rgb,background As above.
+
 # -- this library's own gaps, still to be closed ------------------------------------------------
 #
 # These are defects here, not there.  They are listed so the suite stays honest about what it is and
@@ -151,6 +166,8 @@ meta-rgb16-sbit-bkgd.png gamma_dark,strip_16 As above.
 meta-rgb16-sbit-bkgd.png strip_16,gamma_dark As above.
 meta-rgb16-sbit-bkgd.png gamma_steep,packing As above.
 meta-rgb16-sbit-bkgd.png gamma_bright,bgr,add_alpha As above.
+meta-rgb16-sbit-bkgd.png background,gamma_bright As above, reached through compositing: the blend goes through linear and the trip uses the same coarse table.
+meta-rgb16-sbit-bkgd.png gamma_bright,background As above.
 meta-rgb16-sbit-bkgd.png rgb_to_gray,gamma_bright As above, reached through the colour conversion rather than the gamma step: averaging goes through linear, and the trip uses the same coarse table.
 
 # Reversing sub-byte samples within a byte, for an interlaced image.
