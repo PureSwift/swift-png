@@ -1,0 +1,61 @@
+# Transformed decodes the comparison reports but does not fail on.
+#
+# Two kinds of entry, and the distinction matters more than the list.  They are kept apart because
+# one kind is finished work and the other is not, and a single list would let the second quietly
+# look like the first.
+#
+# Format: <image> <transform,list> <reason>
+
+# -- the reference's behaviour, which this library does not reproduce on purpose ---------------
+#
+# A filler channel cannot be added to samples narrower than a byte: there is no room for one, and
+# the result would not be a shape the format defines.  The reference accepts the request anyway.
+# Its png_read_update_info then reports a shape that cannot exist — two channels at one, two or
+# four bits — and the decode fails afterwards, with "internal row size calculation error" or with
+# "Invalid color type/bit depth combination in IHDR" depending on which check notices first.
+#
+# So the client is told a row size, allocates for it, and then gets an error.  That is an internal
+# inconsistency rather than defined behaviour, and reproducing it would mean reporting a row shape
+# this library knows it cannot produce.  Here the request is declined and the image decodes.
+
+gray1-w13.png filler The reference cannot add a filler channel to samples narrower than a byte, but accepts the request and fails during the decode.
+gray1-w13.png filler_before As above.
+gray1-w13.png filler,bgr As above.
+gray1-w13.png add_alpha As above.
+gray1-w13.png add_alpha,swap_alpha As above.
+gray1-w13.png add_alpha,invert_alpha As above.
+gray2-w13.png filler As above.
+gray2-w13.png filler_before As above.
+gray2-w13.png filler,bgr As above.
+gray2-w13.png add_alpha As above.
+gray2-w13.png add_alpha,swap_alpha As above.
+gray2-w13.png add_alpha,invert_alpha As above.
+gray4-w13.png filler As above.
+gray4-w13.png filler_before As above.
+gray4-w13.png filler,bgr As above.
+gray4-w13.png add_alpha As above.
+gray4-w13.png add_alpha,swap_alpha As above.
+gray4-w13.png add_alpha,invert_alpha As above.
+interlaced-gray2-9x9.png filler As above.
+interlaced-gray2-9x9.png filler_before As above.
+interlaced-gray2-9x9.png filler,bgr As above.
+interlaced-gray2-9x9.png add_alpha As above.
+interlaced-gray2-9x9.png add_alpha,swap_alpha As above.
+interlaced-gray2-9x9.png add_alpha,invert_alpha As above.
+
+# -- this library's own gaps, still to be closed ------------------------------------------------
+#
+# These are defects here, not there.  They are listed so the suite stays honest about what it is
+# and is not checking, and each one is a piece of work rather than a decision.
+#
+# Reversing the sample order within a byte is the one transform whose result depends on where a
+# pixel sits inside a byte rather than only on the pixel.  For an interlaced image that matters:
+# the reference spreads a pass across a full-width row *before* transforming it and then merges the
+# result with a bit mask, so the reversal happens at the pixel's final position.  This library
+# transforms the narrow pass row and spreads afterwards, so the reversal happens at its position
+# within the pass.  Every other transform is per-pixel and agrees either way; this one does not.
+#
+# Closing it means adopting the reference's arrangement: expand the pass to full width, transform,
+# then merge under a mask that accounts for the reversal.
+
+interlaced-gray2-9x9.png packswap Not implemented here: the sample reversal is applied to the narrow pass row rather than to the full-width row it is spread into, so sub-byte interlaced images disagree.
