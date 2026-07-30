@@ -1,0 +1,4 @@
+module CPNG {
+    header "spng_internal.h"
+    export *
+}
