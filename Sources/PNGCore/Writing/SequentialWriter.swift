@@ -34,10 +34,24 @@ final class SequentialWriter {
     private(set) var rowIndex = 0
     private(set) var pass = 0
 
-    /// Which of the seven passes are being written, for an interlaced image.
-    private(set) var writesInterlaced = false
+    /// Whether the file is interlaced at all.
+    private(set) var isInterlaced = false
+
+    /// Whether the client is handing over full-width rows and leaving the passes to the library.
+    ///
+    /// Set by `png_set_interlace_handling`.  Without it a client writing an interlaced image is
+    /// promising to hand over the narrow rows of each pass itself, already reduced — which is a
+    /// different contract, and the one the format's own geometry is expressed in.
+    var spreadsPasses = false
 
     var deflater: DeflateStream?
+
+    /// How many text entries have already been written.
+    ///
+    /// Kept because the same list is written twice, once before the image data and once after: a
+    /// client that adds text between the two means the second lot to appear after the rows, and one
+    /// that does not must not have its text written twice.
+    var textWritten = 0
 
     /// Whether anything has been handed to the compressor yet.
     ///
@@ -76,7 +90,7 @@ final class SequentialWriter {
         var writer = context.chunkWriter
         writer.write(.ihdr, UnsafeBufferPointer(start: bytes.baseAddress, count: 13))
 
-        self.writesInterlaced = header.isInterlaced
+        self.isInterlaced = header.isInterlaced
     }
 
     /// Writes the palette, which for an indexed image the file is unreadable without.
@@ -119,12 +133,52 @@ final class SequentialWriter {
             try self.startImageData(context: context)
         }
 
+        // An interlaced image the library is placing rows into: the client hands over every row of
+        // the image once per pass, and the ones this pass does not contain are counted and dropped.
+        // That is the reference's arrangement, and it is what lets a client write the seven passes
+        // without knowing the geometry of any of them.
+        if self.isInterlaced, self.spreadsPasses {
+            guard self.pass < Adam7.passCount else { return }
+
+            // The row is written before the counters move, and that is not a matter of taste: the row
+            // that ends a pass is itself a row that pass may want, and starting the next pass first
+            // would both test it against the wrong pass and hand it the next pass's blank slate to
+            // difference against.
+            let imageRow = self.rowIndex
+
+            if Self.pass(self.pass, contains: imageRow) {
+                try self.writePassRow(row, pass: self.pass, header: header, context: context)
+            }
+
+            self.rowIndex += 1
+
+            if self.rowIndex >= header.height {
+                self.rowIndex = 0
+                self.pass += 1
+                self.startPass(header: header, context: context)
+            }
+
+            return
+        }
+
         let stored = RowInfo(header).rowBytes
 
         guard stored > 0 else { return }
 
+        try self.encodeAndCompress(row, stored: stored, header: header, context: context)
+
+        self.rowIndex += 1
+    }
+
+    /// Filters one scanline and hands it to the compressor.
+    private func encodeAndCompress(
+        _ row: UnsafeBufferPointer<UInt8>,
+        stored: Int,
+        header: Header,
+        context: PngContext
+    ) throws {
         try context.reserve(\.rowBuffer, stored + 1)
-        try context.reserve(\.filterScratch, stored)
+        try context.reserve(\.filterScratch, stored * 2)
 
         // The row the client handed over is theirs, so the encoding is done into ours.
         let encoded = UnsafeMutableBufferPointer(
@@ -147,23 +201,93 @@ final class SequentialWriter {
             )
         )
 
-        // The row as the client gave it, which is what the next row is differenced against.
+        // The row as it was before filtering, which is what the next row is differenced against.
         context.previousRow.bytes.baseAddress!.update(from: row.baseAddress!, count: stored)
 
         try self.compress(
             UnsafeBufferPointer(start: encoded.baseAddress, count: stored + 1),
             context: context
         )
+    }
 
-        self.rowIndex += 1
+    /// Whether a pass takes rows from this row of the image.
+    static func pass(_ pass: Int, contains imageRow: Int) -> Bool {
+        guard pass < Adam7.passCount else { return false }
+
+        return imageRow % Adam7.rowStride[pass] == Adam7.rowStart[pass]
+    }
+
+    /// Reduces one full-width row to the pixels this pass keeps, and encodes that.
+    ///
+    /// The reduction is a gather, and the mirror of what the reader scatters: the pass takes every
+    /// nth pixel starting from an offset, so its row is shorter than the image's and its pixels are
+    /// not adjacent in the row they came from.
+    private func writePassRow(
+        _ row: UnsafeBufferPointer<UInt8>,
+        pass: Int,
+        header: Header,
+        context: PngContext
+    ) throws {
+        let width = Adam7.width(ofPass: pass, imageWidth: header.width)
+
+        guard width > 0 else { return }
+
+        let stored = Adam7.rowBytes(ofPass: pass, header: header)
+
+        try context.reserve(\.rowBuffer, stored + 1)
+        try context.reserve(\.filterScratch, stored * 2)
+
+        // Gathered into the second half of the filter scratch, which is sized for two rows: the first
+        // half is what the filters try their candidates in, and both are wanted at once.
+        let gathered = UnsafeMutableBufferPointer(
+            start: context.filterScratch.bytes.baseAddress! + stored,
+            count: stored
+        )
+
+        gathered.baseAddress!.update(repeating: 0, count: stored)
+
+        for column in 0 ..< width {
+            PixelCopy.copy(
+                from: row,
+                at: Adam7.imageColumn(ofPass: pass, passColumn: column),
+                to: gathered,
+                at: column,
+                pixelDepth: header.pixelDepth
+            )
+        }
+
+        try self.encodeAndCompress(
+            UnsafeBufferPointer(gathered),
+            stored: stored,
+            header: header,
+            context: context
+        )
+    }
+
+    /// Starts a pass, whose rows are differenced against each other and not against the pass before.
+    private func startPass(header: Header, context: PngContext) {
+        guard self.pass < Adam7.passCount else { return }
+
+        let stored = Adam7.rowBytes(ofPass: self.pass, header: header)
+
+        if stored > 0, context.previousRow.count >= stored {
+            context.previousRow.bytes.baseAddress!.update(repeating: 0, count: stored)
+        }
     }
 
     /// Finishes the compressed stream and writes the chunk that ends the file.
-    func writeEnd(context: PngContext) throws {
+    func writeEnd(_ info: InfoStore?, context: PngContext) throws {
         guard self.stage < .ended else { return }
 
         if self.startedImageData {
             try self.finishImageData(context: context)
+        }
+
+        // After the image data and not before it, which is the whole reason this is here rather than
+        // at the call site: a chunk written between two pieces of the image data ends the image as far
+        // as a decoder is concerned, and everything after it is lost.
+        if let info {
+            try self.writeTextAfterRows(info, context: context)
         }
 
         var writer = context.chunkWriter
@@ -183,6 +307,7 @@ final class SequentialWriter {
             : header.rowBytes
 
         try context.reserve(\.previousRow, widest)
+        try context.reserve(\.filterScratch, widest * 2)
         context.previousRow.bytes.baseAddress!.update(repeating: 0, count: widest)
 
         try context.reserve(\.inputBuffer, max(context.compression.bufferSize, 1024))
