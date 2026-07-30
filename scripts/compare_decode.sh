@@ -38,10 +38,22 @@ for image in "$corpus"/*.png; do
     name=$(basename "$image")
     count=$((count + 1))
 
-    # Exit statuses are compared too: agreeing on the pixels but disagreeing on
-    # whether the decode succeeded is still a difference.
-    "$reference" "$image" > "$work/reference" 2>&1 || echo "exit $?" >> "$work/reference"
-    "$ours" "$image" > "$work/ours" 2>&1 || echo "exit $?" >> "$work/ours"
+    # Both ways a client can ask for the rows.  They run through different code, and for an
+    # interlaced image they are quite different, so a difference in either is a difference.
+    #
+    # Exit statuses are compared too: agreeing on the pixels but disagreeing on whether the
+    # decode succeeded is still a difference.
+    : > "$work/reference"
+    : > "$work/ours"
+
+    for mode in rows image; do
+        echo "mode $mode" >> "$work/reference"
+        echo "mode $mode" >> "$work/ours"
+
+        "$reference" "$image" "$mode" >> "$work/reference" 2>&1 \
+            || echo "exit $?" >> "$work/reference"
+        "$ours" "$image" "$mode" >> "$work/ours" 2>&1 || echo "exit $?" >> "$work/ours"
+    done
 
     if ! diff -q "$work/reference" "$work/ours" > /dev/null; then
         if [ -n "$known" ] && [ -f "$known" ] && grep -q "^$name " "$known"; then
