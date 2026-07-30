@@ -39,6 +39,7 @@ gray8-filter0.png
 gray16-filter2.png
 rgb8-filter0.png
 rgb16-filter4.png
+rgba16-filter1.png
 rgba8-filter0.png
 graya8-filter0.png
 palette1.png
@@ -103,6 +104,17 @@ background,gray_to_rgb
 background,bgr
 background,gamma_bright
 background,rgb_to_gray
+alpha_png
+alpha_png_linear
+alpha_premultiplied
+alpha_premultiplied_linear
+alpha_optimized
+alpha_broken
+alpha_premultiplied,expand
+alpha_premultiplied,gray_to_rgb
+alpha_premultiplied,strip_16
+alpha_broken,bgr
+alpha_optimized,expand
 gamma_bright,expand
 gamma_bright,gray_to_rgb
 gamma_bright,strip_alpha
@@ -161,6 +173,8 @@ gray_to_rgb,rgb_to_gray
 expand,background
 gray_to_rgb,background
 gamma_bright,background
+expand,alpha_premultiplied
+gray_to_rgb,alpha_premultiplied
 expand,gamma_bright
 gray_to_rgb,gamma_bright
 strip_16,gamma_dark
