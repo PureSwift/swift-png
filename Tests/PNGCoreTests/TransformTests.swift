@@ -369,3 +369,113 @@ struct TransformTests {
         #expect(shape.colorType == .rgba)
     }
 }
+
+/// Gamma is the one place where agreeing with the reference to the last bit is both the point and
+/// achievable: the correction is a power function over 256 possible inputs, so the table can be
+/// checked exhaustively rather than sampled.
+@Suite("Gamma correction")
+struct GammaTests {
+    private func state(screen: Double, file: Double) -> GammaState {
+        var state = GammaState()
+        state.screenGamma = FixedPoint((screen * 100_000).rounded())
+        state.fileGamma = FixedPoint((file * 100_000).rounded())
+        return state
+    }
+
+    /// A file encoded for the display it is shown on needs no correction, and this is the case that
+    /// has to come out as nothing rather than as nearly nothing.
+    @Test("Leaves matched exponents alone")
+    func matchedExponentsDoNothing() {
+        let matched = self.state(screen: 2.2, file: 1.0 / 2.2)
+
+        #expect(!matched.isWorthApplying, "1/2.2 shown at 2.2 is already correct")
+
+        // And the exponent it computes is one, to within the rounding of the fixed-point scale.
+        let exponent = matched.correctionExponent
+        #expect(exponent != nil)
+        #expect(abs((exponent ?? 0) - GammaState.one) <= 2)
+    }
+
+    /// A correction small enough that the reference declines to apply it has to be declined here too:
+    /// applying it would move samples the reference leaves alone.
+    @Test("Declines a correction below the threshold")
+    func declinesSmallCorrections() {
+        // Just inside the threshold: 1/1.02 is about 0.98, and the threshold is 0.05.
+        #expect(!self.state(screen: 1.0, file: 1.0 / 1.02).isWorthApplying)
+
+        // Just outside it.
+        #expect(self.state(screen: 1.0, file: 1.0 / 1.2).isWorthApplying)
+
+        // The threshold is on the composed exponent, not on either one alone: two large gammas that
+        // cancel are not worth applying.
+        #expect(!self.state(screen: 4.0, file: 1.0 / 4.0).isWorthApplying)
+    }
+
+    @Test("Reports nothing to do when the client has not said what its display expects")
+    func needsAScreenGamma() {
+        var state = GammaState()
+        state.fileGamma = 45455
+
+        #expect(state.correctionExponent == nil)
+        #expect(!state.isWorthApplying)
+    }
+
+    /// The ends of the range are fixed points of the curve, and a correction that moved them would be
+    /// visible as a shift in the black or white level.
+    @Test("Keeps black black and white white")
+    func preservesTheEnds() {
+        for exponent in [45455, 220000, 100000, 400000, 25000] as [FixedPoint] {
+            let table = GammaTable(exponent: exponent)
+
+            #expect(table.values[0] == 0, "black at \(exponent)")
+            #expect(table.values[255] == 255, "white at \(exponent)")
+        }
+    }
+
+    /// The curve is monotonic, so the table has to be too: a client using it as a lookup would
+    /// otherwise see brighter inputs come out darker.
+    @Test("Produces a table that never goes backwards")
+    func tableIsMonotonic() {
+        for exponent in [45455, 220000, 400000, 25000, 90000, 110000] as [FixedPoint] {
+            let table = GammaTable(exponent: exponent)
+
+            for value in 1 ..< 256 {
+                #expect(
+                    table.values[value] >= table.values[value - 1],
+                    "entry \(value) at exponent \(exponent)"
+                )
+            }
+        }
+    }
+
+    /// The rounding is stated rather than left to a cast, and this is what that means: a value whose
+    /// exact answer ends in a half goes up, not down.
+    @Test("Rounds rather than truncates")
+    func roundsHalvesUp() {
+        // An exponent of one is the identity, so every entry has to come back unchanged — which only
+        // holds if the rounding is right, since pow() will not return exact integers throughout.
+        let identity = GammaTable(exponent: GammaState.one)
+
+        for value in 0 ..< 256 {
+            #expect(identity.values[value] == UInt8(value), "identity at \(value)")
+        }
+    }
+
+    /// Widening a sub-byte sample for correction repeats its bits rather than shifting them, so the
+    /// top of the narrow range lands on the top of the wide one.
+    @Test("Corrects sub-byte samples through the full range")
+    func correctsSubByteThroughFullRange() {
+        // Brightening: a two bit 3 is white and stays white; a two bit 1 moves up.
+        let table = GammaTable(exponent: 45455)
+
+        // 3 repeated across a byte is 255, which the table leaves alone, so it comes back as 3.
+        #expect(table.values[Int(UInt8(3) &* 0x55)] >> 6 == 3)
+
+        // 0 stays 0.
+        #expect(table.values[0] >> 6 == 0)
+
+        // 1 repeated is 0x55, which brightening moves up, so it comes back as 1 or 2 rather than
+        // lower.
+        #expect(table.values[0x55] >> 6 >= 1)
+    }
+}
