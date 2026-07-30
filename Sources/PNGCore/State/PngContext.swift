@@ -56,6 +56,13 @@ public final class PngContext {
     /// How the image data is to be compressed.
     public var compression = CompressionSettings()
 
+    /// How text is to be compressed, which a client sets separately.
+    ///
+    /// Separately because the two are compressing different things: the image data is large and
+    /// benefits from a large window, while a text chunk is usually a line or two, where the window
+    /// costs memory it will never use.
+    public var textCompression = CompressionSettings()
+
     /// A chunk writer over this context's host and staging buffer.
     ///
     /// Handed out as a value each time rather than kept, so the running check value lives on the
@@ -685,6 +692,7 @@ public final class PngContext {
         }
 
         try self.writer.writeAfterPalette(info, context: self)
+        try self.writer.writeTextBeforeRows(info, context: self)
     }
 
     public func writeRow(_ row: UnsafePointer<UInt8>?) throws {
@@ -707,8 +715,8 @@ public final class PngContext {
         }
     }
 
-    public func writeEnd() throws {
-        try self.writer.writeEnd(context: self)
+    public func writeEnd(_ info: InfoStore?) throws {
+        try self.writer.writeEnd(info, context: self)
     }
 
     public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
@@ -730,7 +738,15 @@ public final class PngContext {
     public func enableInterlaceHandling() -> Int {
         guard let header = self.header, header.isInterlaced else { return 1 }
 
-        self.spreadsInterlacedRows = true
+        // The same call means two things, one per direction, and they are nearly opposites.  A reader
+        // asking for this wants the narrow rows of each pass placed into full-width rows for it; a
+        // writer asking for it is offering full-width rows and leaving the reduction to the library.
+        // What they have in common is the count: seven calls per row either way.
+        if self.isReading {
+            self.spreadsInterlacedRows = true
+        } else {
+            self.writer.spreadsPasses = true
+        }
 
         return Adam7.passCount
     }
