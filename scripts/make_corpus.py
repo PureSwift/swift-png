@@ -246,6 +246,26 @@ def write_metadata() -> list[pathlib.Path]:
     emit("iccp", before=profile)
 
     # Metadata after the image data as well as before it.
+    # The three text chunks: plain, compressed, and the international form both ways.
+    plain = chunk(b"tEXt", b"Title" + b"\x00" + b"a plain comment")
+    empty = chunk(b"tEXt", b"Empty" + b"\x00")
+    compressed = chunk(b"zTXt", b"Comment" + b"\x00" + b"\x00"
+                       + zlib.compress(b"a compressed comment " * 4, 6))
+    international = chunk(b"iTXt", b"Author" + b"\x00" + b"\x00" + b"\x00"
+                          + b"en-GB" + b"\x00" + b"Author" + b"\x00"
+                          + "a translated comment".encode())
+    international_z = chunk(b"iTXt", b"Notes" + b"\x00" + b"\x01" + b"\x00"
+                            + b"fr" + b"\x00" + b"Notes" + b"\x00"
+                            + zlib.compress("une remarque ".encode() * 4, 6))
+
+    emit("text-plain", before=plain)
+    emit("text-empty", before=empty)
+    emit("text-compressed", before=compressed)
+    emit("text-international", before=international)
+    emit("text-international-compressed", before=international_z)
+    emit("text-all", before=plain + compressed + international,
+         after=empty + international_z)
+
     emit("trailing", after=time_ + exif)
     emit("both-sides", before=gama + chrm, after=time_)
 
