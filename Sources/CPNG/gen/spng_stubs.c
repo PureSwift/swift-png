@@ -425,18 +425,6 @@ png_set_flush(png_structrp png_ptr, int nrows)
 }
 
 void PNGAPI
-png_set_gamma(png_structrp png_ptr, double screen_gamma, double override_file_gamma)
-{
-   png_error(png_ptr, "png_set_gamma is not implemented");
-}
-
-void PNGAPI
-png_set_gamma_fixed(png_structrp png_ptr, png_fixed_point screen_gamma, png_fixed_point override_file_gamma)
-{
-   png_error(png_ptr, "png_set_gamma_fixed is not implemented");
-}
-
-void PNGAPI
 png_set_invalid(png_const_structrp png_ptr, png_inforp info_ptr, int mask)
 {
    png_error(png_ptr, "png_set_invalid is not implemented");
