@@ -38,6 +38,7 @@ public func png_read_row(
 ) {
     attempt(png_ptr) { context in
         try context.readRow(into: row)
+
     }
 }
 
@@ -54,6 +55,7 @@ public func png_read_rows(
             // decode a row without keeping it.
             try context.readRow(into: row?[index])
         }
+
     }
 }
 
@@ -69,6 +71,7 @@ public func png_read_image(_ png_ptr: png_structrp?, _ image: png_bytepp?) {
         }
 
         try context.readImage(rows: image)
+
     }
 }
 
