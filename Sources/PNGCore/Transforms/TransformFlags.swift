@@ -70,6 +70,9 @@ public struct TransformFlags: OptionSet, Sendable {
     /// Samples are corrected between the file's encoding curve and the display's.
     public static let gamma = Self(rawValue: 1 << 18)
 
+    /// Three colour channels are collapsed into one.
+    public static let rgbToGray = Self(rawValue: 1 << 19)
+
     /// Resolves the requests against the image, adding what one request implies.
     ///
     /// This exists because the requests are not independent.  Asking for the transparency to
@@ -107,6 +110,14 @@ public struct TransformFlags: OptionSet, Sendable {
         // set would add an opaque channel the client did not ask for.
         if !hasTransparency, !header.colorType.isIndexed {
             flags.remove(.expandTransparency)
+        }
+
+        // Discarding colour from an indexed image means expanding the palette first: the colour is in
+        // the palette, and an index is not something to take a weighted sum of.  Only for an indexed
+        // image, though — a low-depth greyscale one has no colour to discard, so it is left alone
+        // rather than widened.
+        if flags.contains(.rgbToGray), header.colorType.isIndexed {
+            flags.insert(.expand)
         }
 
         // Asking for colour from a low-depth greyscale image implies widening it first: the
