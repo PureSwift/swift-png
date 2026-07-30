@@ -38,9 +38,38 @@ public final class PngContext {
     /// Working space for reading a metadata chunk whole, or skipping past one.
     var scratch = RawBuffer.empty
 
+    /// Eight bytes for staging a chunk's framing, and one row of working space for the filters.
+    ///
+    /// Buffers rather than locals for the reason every buffer here is one: the client's write callback
+    /// may be jumped out of, and nothing owned by a frame would survive it.
+    var writeStaging = RawBuffer.empty
+    var filterScratch = RawBuffer.empty
+
     var inflater: InflateStream?
 
     let reader = SequentialReader()
+    let writer = SequentialWriter()
+
+    /// Which filters the client will allow the encoder to choose between.
+    public var filters: FilterMask = .all
+
+    /// How the image data is to be compressed.
+    public var compression = CompressionSettings()
+
+    /// A chunk writer over this context's host and staging buffer.
+    ///
+    /// Handed out as a value each time rather than kept, so the running check value lives on the
+    /// caller's frame: a client jumping out of its own write callback abandons a frame, and a checksum
+    /// is the one kind of state that costs nothing to abandon.
+    var chunkWriter: ChunkWriter {
+        ChunkWriter(
+            host: self.host,
+            staging: UnsafeMutableBufferPointer(
+                start: self.writeStaging.bytes.baseAddress,
+                count: self.writeStaging.count
+            )
+        )
+    }
 
     /// What the client declared through `png_set_sig_bytes`.
     public var signatureBytesConsumed = 0
@@ -173,7 +202,11 @@ public final class PngContext {
         self.inflater?.release()
         self.inflater = nil
 
-        for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch] {
+        self.writer.deflater?.release()
+        self.writer.deflater = nil
+
+        for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch,
+                       self.writeStaging, self.filterScratch] {
             buffer.deallocate(host: self.host)
         }
 
@@ -181,6 +214,8 @@ public final class PngContext {
         self.previousRow = .empty
         self.inputBuffer = .empty
         self.scratch = .empty
+        self.writeStaging = .empty
+        self.filterScratch = .empty
     }
 
     /// Ensures `buffer` holds at least `count` bytes, replacing it if not.
@@ -610,6 +645,62 @@ public final class PngContext {
         guard let header = self.header else { return }
 
         try TransformProgram.validateShift(bits, header: header)
+    }
+
+    // -- writing --------------------------------------------------------------
+
+    /// Records the image the client is about to write, and emits the header for it.
+    ///
+    /// The fields are checked here rather than taken on trust, and the check is the reader's: an
+    /// encoder that will not read back its own output is worse than one that refuses to write.
+    public func writeHeader(_ fields: Header.Fields) throws {
+        guard fields.problems.isEmpty else {
+            throw Diagnostic("Invalid IHDR data")
+        }
+
+        let header = Header(fields)
+
+        self.header = header
+        try self.writer.writeHeader(fields, header, context: self)
+    }
+
+    /// Writes the eight bytes that begin a file, if they have not been written.
+    public func writeSignature() throws {
+        try self.writer.beginFile(context: self)
+    }
+
+    /// Writes the palette an indexed image cannot be read without.
+    ///
+    /// Only for an indexed image: a palette is meaningful for others as a suggestion, and this library
+    /// does not invent one the client did not ask for.
+    public func writePalette(_ info: InfoStore) throws {
+        guard let header = self.header, header.colorType.isIndexed else { return }
+
+        try self.writer.writePalette(info, context: self)
+    }
+
+    public func writeRow(_ row: UnsafePointer<UInt8>?) throws {
+        guard let row else { throw Diagnostic("png_write_row given no row") }
+
+        try self.writer.writeRow(
+            UnsafeBufferPointer(start: row, count: self.header?.rowBytes ?? 0),
+            context: self
+        )
+    }
+
+    /// Writes every row of an image the client holds whole.
+    public func writeImage(rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>) throws {
+        guard let header = self.header else {
+            throw Diagnostic("png_write_image called before png_write_info")
+        }
+
+        for index in 0 ..< header.height {
+            try self.writeRow(rows[index])
+        }
+    }
+
+    public func writeEnd() throws {
+        try self.writer.writeEnd(context: self)
     }
 
     public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
