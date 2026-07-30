@@ -80,6 +80,9 @@ public final class PngContext {
     /// How the colour conversion is weighted, and what to say about a pixel that had colour.
     public var rgbToGray = RgbToGrayState()
 
+    /// The background to lay the image over, and how to read its samples.
+    public var compose = ComposeState()
+
     /// Records that a pixel with colour reached the conversion.
     ///
     /// The running record, which `png_get_rgb_to_gray_status` reports.  Telling the client is separate
@@ -199,6 +202,117 @@ public final class PngContext {
     ///
     /// Separate from starting the decode because a client calls this to find out how much to
     /// allocate, which it has to know before any row is read.
+    /// The background colour in the terms the row will be blended in.
+    ///
+    /// A client may give it in the file's terms — a palette index, or a value at a bit depth the row
+    /// will be widened out of — or in the display's.  This settles which, because the blend itself has
+    /// neither the palette nor the file's depth to hand.
+    ///
+    /// What it does not do is rescale a background the client said was already in the display's terms.
+    /// A value out of range for the image's depth is the client's mistake, and guessing which scale it
+    /// meant would turn a detectable error into a silent one.
+    private func resolvedBackground(
+        header: Header,
+        info: InfoStore,
+        gamma: GammaState
+    ) -> ComposeBackground {
+        var background = self.compose.color
+
+        guard !self.compose.needsExpanding else {
+            return self.corrected(self.expanded(background, header: header, info: info),
+                                  gamma: gamma)
+        }
+
+        return self.corrected(background, gamma: gamma)
+    }
+
+    /// Takes the background into the two spaces a blend needs it in.
+    ///
+    /// Which exponent reaches each depends on the space the client said the colour was in.  A colour
+    /// already in the display's terms needs the display's own exponent to become light, and needs no
+    /// correction at all to be shown; one given in the file's terms is corrected exactly as the image
+    /// is.  Using the image's exponent for a colour that was never in the file's space is the mistake
+    /// this exists to avoid.
+    private func corrected(_ color: Rgb16, gamma: GammaState) -> ComposeBackground {
+        // Without a correction in force there is one space, and the colour is already in it.
+        guard gamma.screenGamma > 0, gamma.fileGamma > 0 else {
+            return ComposeBackground(screen: color, linear: color)
+        }
+
+        let toLight: FixedPoint?
+        let toScreen: FixedPoint?
+
+        switch self.compose.gammaCode {
+        case .file:
+            toLight = gamma.toLinearExponent
+            toScreen = gamma.correctionExponent
+
+        case .unique:
+            var own = gamma
+            own.fileGamma = self.compose.gamma
+            toLight = own.toLinearExponent
+            toScreen = own.correctionExponent
+
+        case .screen, .unknown:
+            // Already what the display should see, so nothing takes it there, and the display's own
+            // exponent is what takes it to light.
+            toLight = gamma.screenGamma
+            toScreen = GammaState.one
+        }
+
+        func apply(_ exponent: FixedPoint?, to color: Rgb16) -> Rgb16 {
+            guard let exponent, GammaState.isSignificant(exponent) else { return color }
+
+            let table = GammaTable(exponent: exponent)
+            var result = color
+
+            result.red = UInt16(table.values[Int(color.red & 0xFF)])
+            result.green = UInt16(table.values[Int(color.green & 0xFF)])
+            result.blue = UInt16(table.values[Int(color.blue & 0xFF)])
+            result.gray = UInt16(table.values[Int(color.gray & 0xFF)])
+
+            return result
+        }
+
+        return ComposeBackground(
+            screen: apply(toScreen, to: color),
+            linear: apply(toLight, to: color)
+        )
+    }
+
+    /// A background given in the file's terms, brought into the row's.
+    private func expanded(_ color: Rgb16, header: Header, info: InfoStore) -> Rgb16 {
+        var background = color
+
+        if header.colorType.isIndexed {
+            // An index rather than a colour, so the palette says what it means.
+            let index = Int(background.index)
+
+            guard index < info.palette.count else { return background }
+
+            let entry = info.palette.elements[index]
+
+            background.red = UInt16(entry.red)
+            background.green = UInt16(entry.green)
+            background.blue = UInt16(entry.blue)
+            background.gray = UInt16(entry.red)
+        } else if header.bitDepth < 8 {
+            // Given at the file's depth, which the row will have been widened out of, so the value is
+            // scaled into the range the row now uses rather than left where it was.
+            let maximum = (1 << header.bitDepth) - 1
+            let scaled = maximum > 0
+                ? UInt16(Int(background.gray) * 255 / maximum)
+                : background.gray
+
+            background.gray = scaled
+            background.red = scaled
+            background.green = scaled
+            background.blue = scaled
+        }
+
+        return background
+    }
+
     /// Resolves the pipeline without the client having asked, for a client that set transforms and
     /// went straight to reading rows.
     func resolveTransforms() throws {
@@ -227,13 +341,18 @@ public final class PngContext {
             gamma.fileGamma = info.gamma
         }
 
+        // The background is resolved into the row's own terms before the pipeline is built, because
+        // working that out needs the palette and the file's depth — which are here and not there.
+        let background = self.resolvedBackground(header: header, info: info, gamma: gamma)
+
         let program = TransformProgram(
             flags: self.transformFlags,
             header: header,
             info: info,
             fillerValue: self.fillerValue,
             fillerAfterColor: self.fillerAfterColor,
-            gamma: gamma
+            gamma: gamma,
+            background: background
         )
 
         // The correction table is built before the snapshot, because for an indexed image it changes
@@ -254,8 +373,24 @@ public final class PngContext {
             info.applyGammaToPalette(gammaTable)
         }
 
+        // An indexed image is composited in its palette, once, and its rows left as indices.  This has
+        // to happen before the snapshot below, which is what the row expansion reads from: a palette
+        // changed afterwards would reach a client asking for the palette but not the rows built from it.
+        // Read before anything below consumes it, since the pipeline was built against this answer.
+        let hadTransparency = info.isValid(InfoStore.Valid.trns)
+
+        if program.composes, header.colorType.isIndexed, hadTransparency {
+            info.composePalette(
+                background: background,
+                toLinear: gammaTable == nil ? nil : GammaTable(exponent: gamma.toLinearExponent ?? 0),
+                fromLinear: gammaTable == nil ? nil : GammaTable(exponent: gamma.fromLinearExponent ?? 0),
+                corrected: gammaTable
+            )
+            info.consumeTransparency()
+        }
+
         self.transformInputs = TransformInputs(info)
-        self.hasTransparency = info.isValid(InfoStore.Valid.trns)
+        self.hasTransparency = hadTransparency
 
         if let gammaTable {
             self.transformInputs.gammaTable = gammaTable
@@ -266,7 +401,7 @@ public final class PngContext {
         // The pair that map to linear light and back, built only when something needs to average
         // samples and there is a curve to undo first.  They are built together: converting one way
         // without the other would leave the samples in the wrong space.
-        if self.transformFlags.contains(.rgbToGray),
+        if self.transformFlags.contains(.rgbToGray) || self.transformFlags.contains(.compose),
            let toLinear = gamma.toLinearExponent,
            let fromLinear = gamma.fromLinearExponent {
             self.transformInputs.toLinear = GammaTable(exponent: toLinear)
@@ -300,6 +435,19 @@ public final class PngContext {
         // the file holds, which is the whole point of the call: png_get_rowbytes and its
         // neighbours have to answer for what is about to be handed over.
         info.applyTransformedShape(shape)
+
+        // The background a client supplied becomes the one the image describes.  Its validity is not
+        // touched: an image that carried no background chunk still reports none, so this replaces an
+        // answer rather than inventing one.
+        if program.composes {
+            // Not for an indexed image, which keeps whatever background chunk it carried.  Its own is
+            // expressed as a palette index, and replacing that with a colour the client named in
+            // another form would leave the two describing different things.
+            if !header.colorType.isIndexed {
+                info.background = self.compose.color
+            }
+
+        }
 
         // The transparency has become a channel, so there is no longer a table to report.  A client
         // that read one now would apply the transparency a second time.
