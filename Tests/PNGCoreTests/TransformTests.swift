@@ -690,3 +690,166 @@ struct LinearLightTests {
         #expect(bytes[0] == corrected.values[40], "the direct correction, not the round trip")
     }
 }
+
+/// Compositing has three arithmetic details worth pinning down: the divisor, the two spaces the
+/// background lives in, and the shortcuts at the ends of the coverage range.
+@Suite("Compositing")
+struct ComposeTests {
+    private func background(_ r: Int, _ g: Int, _ b: Int) -> ComposeBackground {
+        var color = Rgb16()
+        color.red = UInt16(r)
+        color.green = UInt16(g)
+        color.blue = UInt16(b)
+        color.gray = UInt16(r)
+
+        // Without a correction in force the two spaces are the same.
+        return ComposeBackground(screen: color, linear: color)
+    }
+
+    private func compose(
+        _ pixels: [UInt8],
+        width: Int,
+        colorType: ColorType,
+        channels: Int,
+        background: ComposeBackground
+    ) -> (bytes: [UInt8], shape: RowInfo) {
+        var bytes = pixels + [UInt8](repeating: 0, count: 8)
+        var shape = RowInfo(width: width, bitDepth: 8, colorType: colorType, channels: channels)
+
+        bytes.withUnsafeMutableBufferPointer { row in
+            Transform.compose(row, &shape, background: background)
+        }
+
+        return (bytes, shape)
+    }
+
+    /// The divisor is 255 rather than 256, because coverage runs from nothing to fully opaque
+    /// inclusive.  Dividing by 256 would leave a fully opaque pixel a shade short of itself, which is
+    /// what this checks.
+    @Test("Leaves a fully opaque pixel exactly as it was")
+    func opaqueIsExact() {
+        for value in [0, 1, 127, 128, 254, 255] as [UInt8] {
+            let result = self.compose(
+                [value, value, value, 255],
+                width: 1,
+                colorType: .rgba,
+                channels: 4,
+                background: self.background(200, 100, 50)
+            )
+
+            #expect(result.bytes[0] == value, "opaque \(value)")
+        }
+    }
+
+    @Test("Replaces a fully transparent pixel with the background")
+    func transparentIsBackground() {
+        let result = self.compose(
+            [10, 20, 30, 0],
+            width: 1,
+            colorType: .rgba,
+            channels: 4,
+            background: self.background(200, 100, 50)
+        )
+
+        #expect(Array(result.bytes[0 ..< 3]) == [200, 100, 50])
+    }
+
+    @Test("Drops the alpha channel")
+    func dropsAlpha() {
+        let rgba = self.compose(
+            [10, 20, 30, 128],
+            width: 1,
+            colorType: .rgba,
+            channels: 4,
+            background: self.background(0, 0, 0)
+        )
+
+        #expect(rgba.shape.colorType == .rgb)
+        #expect(rgba.shape.channels == 3)
+
+        let gray = self.compose(
+            [10, 128],
+            width: 1,
+            colorType: .grayscaleAlpha,
+            channels: 2,
+            background: self.background(0, 0, 0)
+        )
+
+        #expect(gray.shape.colorType == .grayscale)
+        #expect(gray.shape.channels == 1)
+    }
+
+    /// Half coverage of black over white should land in the middle, and the two ends must not drift:
+    /// this is the check that catches an off-by-one divisor.
+    @Test("Blends the middle of the range")
+    func blendsTheMiddle() {
+        let result = self.compose(
+            [0, 0, 0, 128],
+            width: 1,
+            colorType: .rgba,
+            channels: 4,
+            background: self.background(255, 255, 255)
+        )
+
+        // 255 * 127 / 255 = 127.
+        #expect(result.bytes[0] == 127)
+    }
+
+    /// Coverage is monotonic: more of the foreground can never move the result away from it.
+    @Test("Moves steadily from the background to the foreground")
+    func isMonotonic() {
+        var previous = 256
+
+        for alpha in stride(from: 0, through: 255, by: 5) {
+            let result = self.compose(
+                [0, 0, 0, UInt8(alpha)],
+                width: 1,
+                colorType: .rgba,
+                channels: 4,
+                background: self.background(255, 255, 255)
+            )
+
+            let value = Int(result.bytes[0])
+            #expect(value <= previous, "coverage \(alpha) gave \(value) after \(previous)")
+            previous = value
+        }
+
+        #expect(previous == 0, "full coverage of black is black")
+    }
+
+    /// A palette is composited in place, and entries the transparency table does not reach keep their
+    /// colour.
+    @Test("Composites a palette and leaves unmentioned entries alone")
+    func compositesPalette() {
+        var palette = [
+            Rgb8(red: 0, green: 0, blue: 0),
+            Rgb8(red: 17, green: 31, blue: 7),
+            Rgb8(red: 90, green: 90, blue: 90),
+        ]
+        let alphas: [UInt8] = [0, 64]
+
+        palette.withUnsafeMutableBufferPointer { entries in
+            alphas.withUnsafeBufferPointer { table in
+                Transform.composePalette(
+                    entries,
+                    alphas: table,
+                    background: self.background(128, 64, 192)
+                )
+            }
+        }
+
+        // Fully transparent, so it becomes the background.
+        #expect(palette[0].red == 128)
+        #expect(palette[0].green == 64)
+        #expect(palette[0].blue == 192)
+
+        // Quarter coverage: 17*64 + 128*191, over 255.
+        #expect(palette[1].red == 100)
+        #expect(palette[1].green == 56)
+        #expect(palette[1].blue == 146)
+
+        // Past the table, so opaque and unchanged.
+        #expect(palette[2].red == 90)
+        #expect(palette[2].blue == 90)
+    }
+}
