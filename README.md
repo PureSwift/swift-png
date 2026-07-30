@@ -10,13 +10,13 @@ That includes the details substitution actually depends on: the complete exporte
 symbol set and nothing beyond it, the versioned library name, and the Mach-O
 compatibility version or ELF symbol version that the dynamic loader checks.
 
-Status: 126 of the 256 published functions are implemented, and the rest report that they
+Status: 129 of the 256 published functions are implemented, and the rest report that they
 are not rather than answering wrongly. What works today is reading a non-interlaced image
 sequentially — every colour type, every bit depth from 1 to 16, every filter — along with
-the control structure lifecycle, the allocator and stream callbacks, and the metadata
-chunks with their accessors: the palette and transparency, the colour and gamma chunks, the
-embedded profile, the physical layout, the timestamp, the camera metadata and the high
-dynamic range signalling. Interlaced images, the text chunks, the transforms, and writing
+the control structure lifecycle, the allocator and stream callbacks, and every metadata
+chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
+embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
+range signalling, and all three text chunks. Interlaced images, the transforms, and writing
 are still to come.
 
 ## Building
@@ -94,6 +94,13 @@ access open, so the next call trapped. Reading a byte through a `mutating` metho
 struct held in a class property takes an exclusive access for the whole call, including the
 part that runs the client's callback — so the engine's mutable state is held by reference,
 and buffers are replaced rather than mutated in place.
+
+The comparison runs in both directions. Decoding a file exercises the getters but never the
+setters, since a decoded file reaches the info structure through the parsers; so a second
+program sets every field and reads it back, and is compiled against each library the same
+way. That is what checks the conversions in the setters — the mastering display's
+chromaticity is stored at one scale and published at another, and only a round trip shows
+that the two halves agree.
 
 Where the reference does something this library should not copy, the case is listed in
 `Conformance/known-differences.txt` with the reason, and the comparison reports it without
