@@ -160,6 +160,8 @@ png_get_text
 png_set_text
 
 # Sources/PNGABI/TransformAPI.swift
+png_set_gamma
+png_set_gamma_fixed
 png_read_update_info
 png_set_add_alpha
 png_set_bgr
