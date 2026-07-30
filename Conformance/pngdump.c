@@ -383,6 +383,19 @@ static void apply_filler(png_structp p) { png_set_filler(p, 0x3C3C, PNG_FILLER_A
 static void apply_filler_before(png_structp p) { png_set_filler(p, 0x3C3C, PNG_FILLER_BEFORE); }
 static void apply_add_alpha(png_structp p) { png_set_add_alpha(p, 0x8080, PNG_FILLER_AFTER); }
 
+/* A spread of exponents rather than one.
+ *
+ * The pair that multiplies to one has to leave the samples alone, and the others have to move them
+ * by the same amount the reference moves them — including the pair just inside the threshold below
+ * which the reference declines to bother at all.
+ */
+static void apply_gamma_none(png_structp p) { png_set_gamma(p, 2.2, 1.0 / 2.2); }
+static void apply_gamma_bright(png_structp p) { png_set_gamma(p, 2.2, 1.0); }
+static void apply_gamma_dark(png_structp p) { png_set_gamma(p, 1.0, 1.0 / 2.2); }
+static void apply_gamma_slight(png_structp p) { png_set_gamma(p, 1.0, 1.0 / 1.02); }
+static void apply_gamma_steep(png_structp p) { png_set_gamma(p, 4.0, 1.0 / 1.1); }
+static void apply_gamma_shallow(png_structp p) { png_set_gamma(p, 1.1, 1.0 / 4.0); }
+
 static void
 apply_shift(png_structp p)
 {
@@ -421,6 +434,12 @@ static const struct transform_entry transforms[] = {
    { "filler_before", apply_filler_before },
    { "add_alpha", apply_add_alpha },
    { "shift", apply_shift },
+   { "gamma_none", apply_gamma_none },
+   { "gamma_bright", apply_gamma_bright },
+   { "gamma_dark", apply_gamma_dark },
+   { "gamma_slight", apply_gamma_slight },
+   { "gamma_steep", apply_gamma_steep },
+   { "gamma_shallow", apply_gamma_shallow },
 };
 
 #define TRANSFORM_COUNT ((int)(sizeof transforms / sizeof transforms[0]))
