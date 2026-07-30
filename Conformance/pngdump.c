@@ -289,6 +289,34 @@ dump_metadata(png_structp png_ptr, png_infop info_ptr)
       printf("clli max_cll=%lu max_fall=%lu\n", (unsigned long)max_cll,
           (unsigned long)max_fall);
 
+   {
+      png_textp text = NULL;
+      int num_text = 0;
+
+      if (png_get_text(png_ptr, info_ptr, &text, &num_text) > 0)
+      {
+         int entry;
+
+         printf("text count=%d\n", num_text);
+
+         for (entry = 0; entry < num_text; ++entry)
+         {
+            /* The language fields are absent for the older two chunks, and printed as a
+             * dash so that absent and empty are distinguishable in the diff.
+             */
+            printf("text %d compression=%d key=%s text=%s lang=%s lang_key=%s"
+                " text_length=%lu itxt_length=%lu\n",
+                entry, text[entry].compression,
+                text[entry].key != NULL ? text[entry].key : "-",
+                text[entry].text != NULL ? text[entry].text : "-",
+                text[entry].lang != NULL ? text[entry].lang : "-",
+                text[entry].lang_key != NULL ? text[entry].lang_key : "-",
+                (unsigned long)text[entry].text_length,
+                (unsigned long)text[entry].itxt_length);
+         }
+      }
+   }
+
    if (png_get_mDCV_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3],
        &chrm[4], &chrm[5], &chrm[6], &chrm[7], &max_lum, &min_lum) != 0)
    {
