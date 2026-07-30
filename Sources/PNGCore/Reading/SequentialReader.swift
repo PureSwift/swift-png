@@ -310,7 +310,30 @@ final class SequentialReader {
             count: context.rowBuffer.count - 1
         )
 
-        program.apply(to: whole, info: &shape, inputs: context.transformInputs)
+        let observations = program.apply(
+            to: whole,
+            info: &shape,
+            inputs: context.transformInputs
+        )
+
+        // Reported per row, which is what the reference does: a client watching its handler learns how
+        // much of the image had colour rather than merely that some of it did.
+        //
+        // Safe from here.  A warning goes out through the host's trampoline, which is one of the
+        // designated points a client may jump out of, and this frame owns nothing by then — every
+        // buffer belongs to the context.  The failing form throws instead, and unwinds normally.
+        if observations.sawColor {
+            context.noteColorDuringConversion()
+
+            switch context.rgbToGray.errorAction {
+            case .none:
+                break
+            case .warn:
+                context.host.warn("png_do_rgb_to_gray found nongray pixel")
+            case .error:
+                throw Diagnostic("png_do_rgb_to_gray found nongray pixel")
+            }
+        }
 
         self.transformedShape = shape
 
