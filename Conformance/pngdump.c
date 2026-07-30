@@ -351,8 +351,130 @@ dump_row(png_uint_32 index, png_const_bytep row, size_t length)
  */
 enum read_mode { READ_ROWS, READ_IMAGE };
 
+/* The transforms, named so a failing case can be reproduced from the command line.
+ *
+ * A client asks for these in any order and the library applies them in an order of its own, so the
+ * comparison drives combinations rather than one at a time: the interesting defects are in the
+ * interactions, not in a single transform.
+ */
+struct transform_entry
+{
+   const char *name;
+   void (*apply)(png_structp png_ptr);
+};
+
+static void apply_expand(png_structp p) { png_set_expand(p); }
+static void apply_palette_to_rgb(png_structp p) { png_set_palette_to_rgb(p); }
+static void apply_gray_1_2_4_to_8(png_structp p) { png_set_expand_gray_1_2_4_to_8(p); }
+static void apply_trns_to_alpha(png_structp p) { png_set_tRNS_to_alpha(p); }
+static void apply_expand_16(png_structp p) { png_set_expand_16(p); }
+static void apply_strip_16(png_structp p) { png_set_strip_16(p); }
+static void apply_scale_16(png_structp p) { png_set_scale_16(p); }
+static void apply_strip_alpha(png_structp p) { png_set_strip_alpha(p); }
+static void apply_gray_to_rgb(png_structp p) { png_set_gray_to_rgb(p); }
+static void apply_packing(png_structp p) { png_set_packing(p); }
+static void apply_packswap(png_structp p) { png_set_packswap(p); }
+static void apply_bgr(png_structp p) { png_set_bgr(p); }
+static void apply_swap(png_structp p) { png_set_swap(p); }
+static void apply_swap_alpha(png_structp p) { png_set_swap_alpha(p); }
+static void apply_invert_alpha(png_structp p) { png_set_invert_alpha(p); }
+static void apply_invert_mono(png_structp p) { png_set_invert_mono(p); }
+static void apply_filler(png_structp p) { png_set_filler(p, 0x3C3C, PNG_FILLER_AFTER); }
+static void apply_filler_before(png_structp p) { png_set_filler(p, 0x3C3C, PNG_FILLER_BEFORE); }
+static void apply_add_alpha(png_structp p) { png_set_add_alpha(p, 0x8080, PNG_FILLER_AFTER); }
+
+static void
+apply_shift(png_structp p)
+{
+   png_color_8 bits;
+
+   /* Deliberately not the image's own depth, so that the transform has something to do whatever
+    * the file said.
+    */
+   bits.red = 5;
+   bits.green = 6;
+   bits.blue = 5;
+   bits.gray = 4;
+   bits.alpha = 7;
+
+   png_set_shift(p, &bits);
+}
+
+static const struct transform_entry transforms[] = {
+   { "expand", apply_expand },
+   { "palette_to_rgb", apply_palette_to_rgb },
+   { "gray_1_2_4_to_8", apply_gray_1_2_4_to_8 },
+   { "trns_to_alpha", apply_trns_to_alpha },
+   { "expand_16", apply_expand_16 },
+   { "strip_16", apply_strip_16 },
+   { "scale_16", apply_scale_16 },
+   { "strip_alpha", apply_strip_alpha },
+   { "gray_to_rgb", apply_gray_to_rgb },
+   { "packing", apply_packing },
+   { "packswap", apply_packswap },
+   { "bgr", apply_bgr },
+   { "swap", apply_swap },
+   { "swap_alpha", apply_swap_alpha },
+   { "invert_alpha", apply_invert_alpha },
+   { "invert_mono", apply_invert_mono },
+   { "filler", apply_filler },
+   { "filler_before", apply_filler_before },
+   { "add_alpha", apply_add_alpha },
+   { "shift", apply_shift },
+};
+
+#define TRANSFORM_COUNT ((int)(sizeof transforms / sizeof transforms[0]))
+
+/* Applies the transforms named in a comma-separated list, in the order given.
+ *
+ * The order is honoured on the way in even though it must not affect the result — that is exactly
+ * what makes it worth varying.
+ */
 static int
-dump_file(const char *path, enum read_mode mode)
+apply_transforms(png_structp png_ptr, const char *names)
+{
+   char buffer[512];
+   char *cursor;
+   char *token;
+
+   if (names == NULL || names[0] == '\0')
+      return 1;
+
+   strncpy(buffer, names, sizeof buffer - 1);
+   buffer[sizeof buffer - 1] = '\0';
+
+   cursor = buffer;
+
+   while ((token = strsep(&cursor, ",")) != NULL)
+   {
+      int index;
+      int found = 0;
+
+      if (token[0] == '\0')
+         continue;
+
+      for (index = 0; index < TRANSFORM_COUNT; ++index)
+      {
+         if (strcmp(token, transforms[index].name) == 0)
+         {
+            transforms[index].apply(png_ptr);
+            found = 1;
+            break;
+         }
+      }
+
+      if (!found)
+      {
+         fprintf(stderr, "pngdump: unknown transform %s\n", token);
+         return 0;
+      }
+   }
+
+   return 1;
+}
+
+static int
+dump_file(const char *path, enum read_mode mode, const char *transform_names)
 {
    FILE *file;
    png_structp png_ptr;
@@ -361,6 +483,7 @@ dump_file(const char *path, enum read_mode mode)
    png_uint_32 height = 0;
    png_uint_32 index;
    size_t rowbytes;
+   int passes = 1;
 
    file = fopen(path, "rb");
 
@@ -418,6 +541,28 @@ dump_file(const char *path, enum read_mode mode)
    dump_header(png_ptr, info_ptr);
    dump_metadata(png_ptr, info_ptr);
 
+   if (!apply_transforms(png_ptr, transform_names))
+   {
+      png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+      fclose(file);
+      return 2;
+   }
+
+   /* Interlace handling is asked for before the transforms are resolved, not after.  It is itself a
+    * transform — it changes what a row means — so requesting it once the row layout has been settled
+    * is too late, and the reference does not recover from it.
+    */
+   if (mode == READ_ROWS)
+      passes = png_set_interlace_handling(png_ptr);
+
+   /* Resolved before anything is allocated, because this is what says how much to allocate: after
+    * it, the accessors describe the rows about to be handed over rather than the ones in the file.
+    */
+   png_read_update_info(png_ptr, info_ptr);
+
+   printf("updated");
+   dump_header(png_ptr, info_ptr);
+
    height = png_get_image_height(png_ptr, info_ptr);
    rowbytes = png_get_rowbytes(png_ptr, info_ptr);
 
@@ -456,11 +601,9 @@ dump_file(const char *path, enum read_mode mode)
 
    else
    {
-      /* The passes have to be read even when the client only wants the finished image, and
-       * this is how a client that reads row by row does it: ask how many sweeps are needed
-       * and make that many.
+      /* Every row, once per pass.  How many sweeps that is was settled above, before the layout
+       * was.
        */
-      int passes = png_set_interlace_handling(png_ptr);
       int pass;
 
       for (pass = 0; pass < passes; ++pass)
@@ -503,14 +646,15 @@ int
 main(int argc, char **argv)
 {
    enum read_mode mode = READ_ROWS;
+   const char *transform_names = NULL;
 
-   if (argc < 2 || argc > 3)
+   if (argc < 2 || argc > 4)
    {
-      fprintf(stderr, "usage: pngdump <file.png> [rows|image]\n");
+      fprintf(stderr, "usage: pngdump <file.png> [rows|image] [transform,...]\n");
       return 2;
    }
 
-   if (argc == 3)
+   if (argc >= 3)
    {
       if (strcmp(argv[2], "image") == 0)
          mode = READ_IMAGE;
@@ -522,5 +666,8 @@ main(int argc, char **argv)
       }
    }
 
-   return dump_file(argv[1], mode);
+   if (argc == 4)
+      transform_names = argv[3];
+
+   return dump_file(argv[1], mode, transform_names);
 }
