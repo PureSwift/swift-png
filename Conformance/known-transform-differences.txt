@@ -105,6 +105,8 @@ rgb8-filter0.png gray_to_rgb,rgb_to_gray The reference reports a one channel row
 rgb8-filter0.png rgb_to_gray,gray_to_rgb The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
 rgba8-filter0.png gray_to_rgb,rgb_to_gray The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
 rgba8-filter0.png rgb_to_gray,gray_to_rgb The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
+rgba16-filter1.png gray_to_rgb,rgb_to_gray The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
+rgba16-filter1.png rgb_to_gray,gray_to_rgb The reference reports a one channel row from png_read_update_info, then produces a three channel one and fails its own size check.
 
 # A greyscale transparent colour compared against a row that has become colour.
 #
@@ -146,6 +148,13 @@ meta-gray-sbit-trns.png gray_to_rgb,background As above.
 # built is not something to reconstruct from memory, and it can be recovered by probing the reference
 # with chosen sample values.
 
+rgba16-filter1.png gamma_dark,strip_16 Not implemented here: sixteen bit gamma is computed exactly, while the reference uses a coarser table when the samples are about to be narrowed to eight bits.
+rgba16-filter1.png strip_16,gamma_dark As above.
+rgba16-filter1.png background,strip_16 As above, reached through compositing.
+rgba16-filter1.png alpha_premultiplied,strip_16 As above, reached through the alpha arrangement.
+gray16-filter2.png alpha_premultiplied,strip_16 As above.
+rgb16-filter4.png alpha_premultiplied,strip_16 As above.
+interlaced-rgb16-11x7.png alpha_premultiplied,strip_16 As above.
 gray16-filter2.png gamma_dark,strip_16 Not implemented here: sixteen bit gamma is computed exactly, while the reference uses a coarser table when the samples are about to be narrowed to eight bits.
 gray16-filter2.png strip_16,gamma_dark As above.
 rgb16-filter4.png gamma_dark,strip_16 As above.
@@ -169,6 +178,12 @@ meta-rgb16-sbit-bkgd.png gamma_bright,bgr,add_alpha As above.
 meta-rgb16-sbit-bkgd.png background,gamma_bright As above, reached through compositing: the blend goes through linear and the trip uses the same coarse table.
 meta-rgb16-sbit-bkgd.png gamma_bright,background As above.
 meta-rgb16-sbit-bkgd.png rgb_to_gray,gamma_bright As above, reached through the colour conversion rather than the gamma step: averaging goes through linear, and the trip uses the same coarse table.
+meta-rgb16-sbit-bkgd.png alpha_premultiplied As above, reached through the alpha arrangement: multiplying colour by coverage goes through linear as compositing does.
+meta-rgb16-sbit-bkgd.png alpha_premultiplied,expand As above.
+meta-rgb16-sbit-bkgd.png expand,alpha_premultiplied As above.
+meta-rgb16-sbit-bkgd.png alpha_premultiplied,gray_to_rgb As above.
+meta-rgb16-sbit-bkgd.png gray_to_rgb,alpha_premultiplied As above.
+meta-rgb16-sbit-bkgd.png alpha_premultiplied,strip_16 As above.
 
 # Reversing sub-byte samples within a byte, for an interlaced image.
 #
