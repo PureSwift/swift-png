@@ -86,12 +86,17 @@ def encode(
     before: bytes = b"",
     after_palette: bytes = b"",
     after: bytes = b"",
+    idat_pieces: int = 1,
 ) -> None:
     """Writes one image, forcing every scanline to use `filter_kind`.
 
     `before` and `after` carry metadata chunks placed either side of the image data, since
     the format allows both and a decoder has to report either.  `after_palette` is for the
     chunks that refer into the palette and are only valid once it has been given.
+
+    `idat_pieces` cuts the compressed stream into that many chunks.  Where the cuts fall is a
+    free choice of the encoder's and a decoder has to be indifferent to it — including to a
+    piece with nothing in it, and to a cut that lands in the middle of a scanline.
     """
     stride = max(1, (CHANNELS[color_type] * bit_depth) // 8)
     row_bytes = (width * CHANNELS[color_type] * bit_depth + 7) // 8
@@ -122,7 +127,19 @@ def encode(
         body += chunk(b"PLTE", palette)
 
     body += after_palette
-    body += chunk(b"IDAT", zlib.compress(bytes(raw), 6))
+    compressed = zlib.compress(bytes(raw), 6)
+
+    if idat_pieces <= 1:
+        body += chunk(b"IDAT", compressed)
+    else:
+        # The first piece is deliberately empty: a chunk with no bytes in it is legal, says
+        # nothing, and is exactly the sort of thing a decoder skips over wrongly.
+        body += chunk(b"IDAT", b"")
+
+        step = max(1, (len(compressed) + idat_pieces - 2) // (idat_pieces - 1))
+
+        for start in range(0, len(compressed), step):
+            body += chunk(b"IDAT", compressed[start:start + step])
     body += after
     body += chunk(b"IEND", b"")
 
@@ -608,6 +625,15 @@ def main() -> None:
     path = CORPUS / "gray16-filter2.png"
     encode(path, 11, 5, 16, GRAYSCALE, rows, 2)
     written.append(path)
+
+    # The image data cut into several chunks, one of them empty.  Where the cuts fall is the
+    # encoder's choice and a decoder must not be able to tell — including when a cut lands in
+    # the middle of a scanline, which is what the small pieces here guarantee.
+    for pieces, label in ((2, "2"), (5, "5"), (40, "40")):
+        rows = sample_rows(13, 7, CHANNELS[RGB], 8)
+        path = CORPUS / f"split-idat{label}-rgb8.png"
+        encode(path, 13, 7, 8, RGB, rows, 4, idat_pieces=pieces)
+        written.append(path)
 
     # Sixteen bit with coverage, which is the only shape where a transform has to multiply
     # two sixteen bit numbers together.
