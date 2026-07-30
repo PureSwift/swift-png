@@ -44,24 +44,34 @@ public struct Host {
     public typealias Warn =
         @convention(c) (Owner?, UnsafePointer<UInt8>?, UInt) -> Void
 
+    /// Reports a condition against the chunk it was found in.
+    ///
+    /// The chunk type arrives as its four bytes packed big-endian, which is how the engine
+    /// holds it.
+    public typealias WarnChunk =
+        @convention(c) (Owner?, UnsafePointer<UInt8>?, UInt, UInt32) -> Void
+
     public let owner: Owner
     public let allocate: Allocate
     public let deallocate: Deallocate
     public let read: Read
     public let warn: Warn
+    public let warnChunk: WarnChunk
 
     public init(
         owner: Owner,
         allocate: Allocate,
         deallocate: Deallocate,
         read: Read,
-        warn: Warn
+        warn: Warn,
+        warnChunk: WarnChunk
     ) {
         self.owner = owner
         self.allocate = allocate
         self.deallocate = deallocate
         self.read = read
         self.warn = warn
+        self.warnChunk = warnChunk
     }
 }
 
@@ -95,5 +105,20 @@ extension Host {
         // the lifetime of the process, so there is nothing to keep alive here.
         guard message.hasPointerRepresentation else { return }
         self.warn(self.owner, message.utf8Start, UInt(message.utf8CodeUnitCount))
+    }
+
+    /// Reports a diagnostic as a warning, keeping whatever chunk it was attributed to.
+    func warn(_ diagnostic: Diagnostic) {
+        guard diagnostic.message.hasPointerRepresentation else { return }
+
+        let text = diagnostic.message.utf8Start
+        let length = UInt(diagnostic.message.utf8CodeUnitCount)
+
+        guard let chunk = diagnostic.chunk else {
+            self.warn(self.owner, text, length)
+            return
+        }
+
+        self.warnChunk(self.owner, text, length, chunk.packed)
     }
 }
