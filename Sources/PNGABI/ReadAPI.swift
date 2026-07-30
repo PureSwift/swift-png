@@ -79,9 +79,9 @@ public func png_read_image(_ png_ptr: png_structrp?, _ image: png_bytepp?) {
 @c @implementation
 public func png_read_end(_ png_ptr: png_structrp?, _ info_ptr: png_inforp?) {
     attempt(png_ptr) { context in
-        // The info structure is optional: a client that does not want the trailing
-        // metadata passes null.
-        try context.readEnd()
+        // The info structure is optional: a client that does not want the metadata after
+        // the image data passes null, and the stream is still walked to the end marker.
+        try context.readEnd(into: info_ptr.flatMap { InfoStore.from($0) })
     }
 }
 
