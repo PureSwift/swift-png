@@ -29,6 +29,8 @@ struct TransformProgram {
         case grayToRgb
         case compose(background: ComposeBackground)
         case alphaMode(AlphaMode)
+        case composeTransparentColor
+        case encodeAlpha
         case scale16
         case strip16
         case expand16
@@ -76,6 +78,12 @@ struct TransformProgram {
     /// still a chunk has nothing in its rows to multiply yet.  In both cases the image is now
     /// described as laid over black, which is what the client is told when it asks for the background.
     private(set) var arrangesAlpha = false
+
+    /// Whether the samples within a byte have been reversed.
+    ///
+    /// Which matters to one thing outside the pipeline: the bits past the end of a row are at the top
+    /// of the last byte rather than the bottom once this has run.
+    private(set) var swapsPackedSamples = false
 
     /// Whether the file's transparency has been dealt with, so that nothing is left to report.
     ///
@@ -127,12 +135,6 @@ struct TransformProgram {
         }
 
 
-        // Before the grey channel is tripled, so that only one channel has to be moved.
-        if flags.contains(.stripAlpha) {
-            self.steps.append(.stripAlpha)
-
-        }
-
         // Before the reverse conversion, so that a client asking for both ends up with colour: the
         // two are not opposites that cancel, they are stages that compose.
         if flags.contains(.rgbToGray) {
@@ -177,6 +179,34 @@ struct TransformProgram {
                 self.steps.append(.alphaMode(alphaMode))
                 self.rearrangesAlpha = true
             }
+
+            // A row that still holds a transparent colour rather than a channel.  Nothing here is
+            // partial, so there is nothing to multiply — but the blend still stands, which means it
+            // rather than the gamma step is what corrects the samples that survive.
+            if !header.colorType.isIndexed, !header.colorType.hasAlpha,
+               hasTransparency, !flags.contains(.expandTransparency), header.bitDepth >= 8 {
+                self.steps.append(.composeTransparentColor)
+                self.rearrangesAlpha = true
+            }
+
+            // The one part of the arrangement an indexed image cannot do in its palette.  Multiplying
+            // colour by coverage belongs there, since that is where the colour is; putting the coverage
+            // itself through the display's curve belongs to the row, because that is where the coverage
+            // ends up once the palette has been expanded.
+            if header.colorType.isIndexed, alphaMode == .broken,
+               flags.contains(.expand), hasTransparency {
+                self.steps.append(.encodeAlpha)
+            }
+        }
+
+        // After everything that reads the coverage, and that is the whole reason it is here rather than
+        // near the top where it would save work.  A client that asks for premultiplied colour and then
+        // for the alpha to be dropped wants colour that has been multiplied by a coverage it will never
+        // see — so the coverage has to survive until it has been used.
+        //
+        // Compositing has already consumed it, so this finds nothing left to strip in that case.
+        if flags.contains(.stripAlpha) {
+            self.steps.append(.stripAlpha)
         }
 
         // After the channel arrangement is settled and before the depth changes: the correction is
@@ -248,6 +278,7 @@ struct TransformProgram {
         // bytes left to reorder within.
         if flags.contains(.packSwap) {
             self.steps.append(.packSwap)
+            self.swapsPackedSamples = true
         }
 
         // Before the filler, not after, and this is observable: a client that asks for both gets an
@@ -356,6 +387,18 @@ struct TransformProgram {
 
             case .grayToRgb:
                 Transform.grayToRgb(row, &info)
+
+            case .composeTransparentColor:
+                Transform.composeTransparentColor(
+                    row,
+                    info,
+                    transparent: inputs.transparentColor,
+                    background: ComposeBackground(),
+                    corrected: inputs.blendCorrected
+                )
+
+            case .encodeAlpha:
+                Transform.encodeAlpha(row, info, table: inputs.fromLinear)
 
             case let .alphaMode(mode):
                 Transform.alphaMode(
@@ -544,7 +587,9 @@ struct TransformProgram {
             }
             info.resize()
 
-        case .alphaMode, .invertMono, .invertAlpha, .shift, .gamma, .bgr, .packSwap, .swapAlpha,
+        case .composeTransparentColor,
+             .encodeAlpha,
+             .alphaMode, .invertMono, .invertAlpha, .shift, .gamma, .bgr, .packSwap, .swapAlpha,
              .swapBytes:
             // These rearrange bytes without changing the shape.
             return
