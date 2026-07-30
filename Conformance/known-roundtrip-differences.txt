@@ -1,0 +1,9 @@
+# Round-tripped images the comparison reports but does not fail on.
+#
+# Same shape as the files next door, and the same reason for existing: a difference that has been
+# examined is worth recording, and a list that mixed those with work not yet done would let the
+# second look like the first.
+#
+# Format: <image> <reason>
+
+meta-palette-hist.png The reference's reader refuses hIST wherever it appears, so a file carrying one reads back differently whichever library wrote it. The reasoning is set out in known-differences.txt, where the same image is recorded for decoding.

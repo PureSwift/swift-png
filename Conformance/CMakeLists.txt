@@ -147,6 +147,29 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
         target_include_directories(pngwrite BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
     endif()
 
+    add_executable(pngroundtrip pngroundtrip.c)
+    target_link_libraries(pngroundtrip PRIVATE png16)
+
+    add_executable(pngroundtrip_reference pngroundtrip.c)
+    target_include_directories(pngroundtrip_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngroundtrip_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngroundtrip BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(pngroundtrip spng_corpus)
+
+    # Every corpus image read, written back and read again: the widest check on the writer, since
+    # these files have geometry and metadata no hand-written list would think to include.
+    add_test(NAME differential_roundtrip
+        COMMAND ${SPNG_SCRIPTS}/compare_roundtrip.sh
+                $<TARGET_FILE:pngroundtrip>
+                $<TARGET_FILE:pngroundtrip_reference>
+                ${SPNG_CORPUS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-roundtrip-differences.txt)
+
     add_test(NAME differential_write
         COMMAND ${SPNG_SCRIPTS}/compare_write.sh
                 $<TARGET_FILE:pngwrite>
