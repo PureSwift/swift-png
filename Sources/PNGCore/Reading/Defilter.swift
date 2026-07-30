@@ -9,7 +9,7 @@
 // `stride` is the distance to the byte representing the same channel of the
 // previous pixel: one pixel in bytes, or one byte when a pixel is narrower.
 
-enum Filter: UInt8 {
+enum Filter: UInt8, CaseIterable {
     case none = 0
     case sub = 1
     case up = 2
