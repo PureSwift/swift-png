@@ -10,12 +10,14 @@ That includes the details substitution actually depends on: the complete exporte
 symbol set and nothing beyond it, the versioned library name, and the Mach-O
 compatibility version or ELF symbol version that the dynamic loader checks.
 
-Status: 67 of the 256 published functions are implemented, and the rest report that
-they are not rather than answering wrongly. What works today is reading a
-non-interlaced image sequentially — every colour type, every bit depth from 1 to 16,
-every filter — along with the control structure lifecycle, the allocator and stream
-callbacks, and the header accessors. Interlaced images, the metadata chunks, the
-transforms, and writing are still to come.
+Status: 126 of the 256 published functions are implemented, and the rest report that they
+are not rather than answering wrongly. What works today is reading a non-interlaced image
+sequentially — every colour type, every bit depth from 1 to 16, every filter — along with
+the control structure lifecycle, the allocator and stream callbacks, and the metadata
+chunks with their accessors: the palette and transparency, the colour and gamma chunks, the
+embedded profile, the physical layout, the timestamp, the camera metadata and the high
+dynamic range signalling. Interlaced images, the text chunks, the transforms, and writing
+are still to come.
 
 ## Building
 
@@ -77,13 +79,26 @@ rather than failing at the first. It passes the decompressor's own wording throu
 rather than summarising it. None of that is written down anywhere; all of it is what
 clients actually observe.
 
-The damaged-file half of the corpus is also what verifies the jump discipline, and it
-found a real defect: a client jumping out of its error handler used to leave a Swift
-exclusivity access open, so the next call trapped. Reading a byte through a
-`mutating` method on a struct held in a class property takes an exclusive access for
-the whole call, including the part that runs the client's callback — so the engine's
-mutable state is held by reference, and buffers are replaced rather than mutated in
-place.
+The metadata chunks turned up more of the same. The significant-bits chunk does not report
+zero for the channels it does not carry: a greyscale value is mirrored into the colour
+channels, and an image without an alpha channel reports its own bit depth as its alpha
+precision. A palette longer than the bit depth can address is truncated silently rather
+than refused. A background value the image's depth could not express is rejected outright
+rather than clamped, and an indexed one is resolved through the palette before being
+reported. An embedded colour profile is refused unless it describes at least two tags —
+which is a count, not a size, as a thousand-byte profile with one tag is still refused.
+
+The damaged-file half of the corpus is also what verifies the jump discipline, and it found
+a real defect: a client jumping out of its error handler used to leave a Swift exclusivity
+access open, so the next call trapped. Reading a byte through a `mutating` method on a
+struct held in a class property takes an exclusive access for the whole call, including the
+part that runs the client's callback — so the engine's mutable state is held by reference,
+and buffers are replaced rather than mutated in place.
+
+Where the reference does something this library should not copy, the case is listed in
+`Conformance/known-differences.txt` with the reason, and the comparison reports it without
+failing. There is one entry, for a chunk the reference build refuses to read wherever it
+appears in a stream.
 
 ## Licensing
 
