@@ -609,6 +609,13 @@ def main() -> None:
     encode(path, 11, 5, 16, GRAYSCALE, rows, 2)
     written.append(path)
 
+    # Sixteen bit with coverage, which is the only shape where a transform has to multiply
+    # two sixteen bit numbers together.
+    rows = sample_rows(11, 5, CHANNELS[RGBA], 16)
+    path = CORPUS / "rgba16-filter1.png"
+    encode(path, 11, 5, 16, RGBA, rows, 1)
+    written.append(path)
+
     # Depths below a byte, where a row ends part way through its last byte.  The
     # sample values deliberately set bits beyond the image width, so that whatever
     # the decoder does with them is visible.
