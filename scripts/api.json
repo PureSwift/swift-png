@@ -1,0 +1,1538 @@
+[
+  {
+    "ordinal": 1,
+    "name": "png_access_version_number",
+    "return": "png_uint_32",
+    "args": "(void)"
+  },
+  {
+    "ordinal": 107,
+    "name": "png_benign_error",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_const_charp warning_message)"
+  },
+  {
+    "ordinal": 35,
+    "name": "png_build_grayscale_palette",
+    "return": "void",
+    "args": "(int bit_depth, png_colorp palette)"
+  },
+  {
+    "ordinal": 95,
+    "name": "png_calloc",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr, png_alloc_size_t size)"
+  },
+  {
+    "ordinal": 108,
+    "name": "png_chunk_benign_error",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_const_charp warning_message)"
+  },
+  {
+    "ordinal": 103,
+    "name": "png_chunk_error",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_const_charp error_message)"
+  },
+  {
+    "ordinal": 106,
+    "name": "png_chunk_warning",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_const_charp warning_message)"
+  },
+  {
+    "ordinal": 24,
+    "name": "png_convert_from_struct_tm",
+    "return": "void",
+    "args": "(png_timep ptime, const struct tm * ttime)"
+  },
+  {
+    "ordinal": 25,
+    "name": "png_convert_from_time_t",
+    "return": "void",
+    "args": "(png_timep ptime, time_t ttime)"
+  },
+  {
+    "ordinal": 23,
+    "name": "png_convert_to_rfc1123",
+    "return": "png_const_charp",
+    "args": "(png_structrp png_ptr, png_const_timep ptime)"
+  },
+  {
+    "ordinal": 241,
+    "name": "png_convert_to_rfc1123_buffer",
+    "return": "int",
+    "args": "(char out[29], png_const_timep ptime)"
+  },
+  {
+    "ordinal": 18,
+    "name": "png_create_info_struct",
+    "return": "png_infop",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 4,
+    "name": "png_create_read_struct",
+    "return": "png_structp",
+    "args": "(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn)"
+  },
+  {
+    "ordinal": 11,
+    "name": "png_create_read_struct_2",
+    "return": "png_structp",
+    "args": "(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr, png_malloc_ptr malloc_fn, png_free_ptr free_fn)"
+  },
+  {
+    "ordinal": 5,
+    "name": "png_create_write_struct",
+    "return": "png_structp",
+    "args": "(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn)"
+  },
+  {
+    "ordinal": 12,
+    "name": "png_create_write_struct_2",
+    "return": "png_structp",
+    "args": "(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr, png_malloc_ptr malloc_fn, png_free_ptr free_fn)"
+  },
+  {
+    "ordinal": 99,
+    "name": "png_data_freer",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int freer, png_uint_32 mask)"
+  },
+  {
+    "ordinal": 63,
+    "name": "png_destroy_info_struct",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_infopp info_ptr_ptr)"
+  },
+  {
+    "ordinal": 64,
+    "name": "png_destroy_read_struct",
+    "return": "void",
+    "args": "(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr, png_infopp end_info_ptr_ptr)"
+  },
+  {
+    "ordinal": 65,
+    "name": "png_destroy_write_struct",
+    "return": "void",
+    "args": "(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr)"
+  },
+  {
+    "ordinal": 102,
+    "name": "png_error",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_const_charp error_message)"
+  },
+  {
+    "ordinal": 97,
+    "name": "png_free",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_voidp ptr)"
+  },
+  {
+    "ordinal": 98,
+    "name": "png_free_data",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_me, int num)"
+  },
+  {
+    "ordinal": 101,
+    "name": "png_free_default",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_voidp ptr)"
+  },
+  {
+    "ordinal": 143,
+    "name": "png_get_IHDR",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *width, png_uint_32 *height, int *bit_depth, int *color_type, int *interlace_method, int *compression_method, int *filter_method)"
+  },
+  {
+    "ordinal": 151,
+    "name": "png_get_PLTE",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_colorp *palette, int *num_palette)"
+  },
+  {
+    "ordinal": 131,
+    "name": "png_get_bKGD",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_color_16p *background)"
+  },
+  {
+    "ordinal": 117,
+    "name": "png_get_bit_depth",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 133,
+    "name": "png_get_cHRM",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, double *white_x, double *white_y, double *red_x, double *red_y, double *green_x, double *green_y, double *blue_x, double *blue_y)"
+  },
+  {
+    "ordinal": 230,
+    "name": "png_get_cHRM_XYZ",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, double *red_X, double *red_Y, double *red_Z, double *green_X, double *green_Y, double *green_Z, double *blue_X, double *blue_Y, double *blue_Z)"
+  },
+  {
+    "ordinal": 231,
+    "name": "png_get_cHRM_XYZ_fixed",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_red_X, png_fixed_point *int_red_Y, png_fixed_point *int_red_Z, png_fixed_point *int_green_X, png_fixed_point *int_green_Y, png_fixed_point *int_green_Z, png_fixed_point *int_blue_X, png_fixed_point *int_blue_Y, png_fixed_point *int_blue_Z)"
+  },
+  {
+    "ordinal": 134,
+    "name": "png_get_cHRM_fixed",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_white_x, png_fixed_point *int_white_y, png_fixed_point *int_red_x, png_fixed_point *int_red_y, png_fixed_point *int_green_x, png_fixed_point *int_green_y, png_fixed_point *int_blue_x, png_fixed_point *int_blue_y)"
+  },
+  {
+    "ordinal": 250,
+    "name": "png_get_cICP",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_bytep colour_primaries, png_bytep transfer_function, png_bytep matrix_coefficients, png_bytep video_full_range_flag)"
+  },
+  {
+    "ordinal": 252,
+    "name": "png_get_cLLI",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, double *maximum_content_light_level, double *maximum_frame_average_light_level)"
+  },
+  {
+    "ordinal": 253,
+    "name": "png_get_cLLI_fixed",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32p maximum_content_light_level_scaled_by_10000, png_uint_32p maximum_frame_average_light_level_scaled_by_10000)"
+  },
+  {
+    "ordinal": 114,
+    "name": "png_get_channels",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 190,
+    "name": "png_get_chunk_cache_max",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 192,
+    "name": "png_get_chunk_malloc_max",
+    "return": "png_alloc_size_t",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 118,
+    "name": "png_get_color_type",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 6,
+    "name": "png_get_compression_buffer_size",
+    "return": "size_t",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 121,
+    "name": "png_get_compression_type",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 180,
+    "name": "png_get_copyright",
+    "return": "png_const_charp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 218,
+    "name": "png_get_current_pass_number",
+    "return": "png_byte",
+    "args": "(png_const_structrp)"
+  },
+  {
+    "ordinal": 217,
+    "name": "png_get_current_row_number",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp)"
+  },
+  {
+    "ordinal": 246,
+    "name": "png_get_eXIf",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *exif)"
+  },
+  {
+    "ordinal": 248,
+    "name": "png_get_eXIf_1",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *num_exif, png_bytep *exif)"
+  },
+  {
+    "ordinal": 76,
+    "name": "png_get_error_ptr",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 119,
+    "name": "png_get_filter_type",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 137,
+    "name": "png_get_gAMA",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, double *file_gamma)"
+  },
+  {
+    "ordinal": 138,
+    "name": "png_get_gAMA_fixed",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_file_gamma)"
+  },
+  {
+    "ordinal": 141,
+    "name": "png_get_hIST",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_16p *hist)"
+  },
+  {
+    "ordinal": 181,
+    "name": "png_get_header_ver",
+    "return": "png_const_charp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 182,
+    "name": "png_get_header_version",
+    "return": "png_const_charp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 158,
+    "name": "png_get_iCCP",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_charpp name, int *compression_type, png_bytepp profile, png_uint_32 *proflen)"
+  },
+  {
+    "ordinal": 116,
+    "name": "png_get_image_height",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 115,
+    "name": "png_get_image_width",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 203,
+    "name": "png_get_int_32",
+    "return": "png_int_32",
+    "args": "(png_const_bytep buf)"
+  },
+  {
+    "ordinal": 120,
+    "name": "png_get_interlace_type",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 216,
+    "name": "png_get_io_chunk_type",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 79,
+    "name": "png_get_io_ptr",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 199,
+    "name": "png_get_io_state",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 183,
+    "name": "png_get_libpng_ver",
+    "return": "png_const_charp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 256,
+    "name": "png_get_mDCV",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, double *white_x, double *white_y, double *red_x, double *red_y, double *green_x, double *green_y, double *blue_x, double *blue_y, double *mastering_display_maximum_luminance, double *mastering_display_minimum_luminance)"
+  },
+  {
+    "ordinal": 257,
+    "name": "png_get_mDCV_fixed",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_white_x, png_fixed_point *int_white_y, png_fixed_point *int_red_x, png_fixed_point *int_red_y, png_fixed_point *int_green_x, png_fixed_point *int_green_y, png_fixed_point *int_blue_x, png_fixed_point *int_blue_y, png_uint_32p mastering_display_maximum_luminance_scaled_by_10000, png_uint_32p mastering_display_minimum_luminance_scaled_by_10000)"
+  },
+  {
+    "ordinal": 83,
+    "name": "png_get_mem_ptr",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 145,
+    "name": "png_get_oFFs",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_int_32 *offset_x, png_int_32 *offset_y, int *unit_type)"
+  },
+  {
+    "ordinal": 147,
+    "name": "png_get_pCAL",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_charp *purpose, png_int_32 *X0, png_int_32 *X1, int *type, int *nparams, png_charp *units, png_charpp *params)"
+  },
+  {
+    "ordinal": 149,
+    "name": "png_get_pHYs",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *res_x, png_uint_32 *res_y, int *unit_type)"
+  },
+  {
+    "ordinal": 198,
+    "name": "png_get_pHYs_dpi",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *res_x, png_uint_32 *res_y, int *unit_type)"
+  },
+  {
+    "ordinal": 243,
+    "name": "png_get_palette_max",
+    "return": "int",
+    "args": "(png_const_structp png_ptr, png_const_infop info_ptr)"
+  },
+  {
+    "ordinal": 125,
+    "name": "png_get_pixel_aspect_ratio",
+    "return": "float",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 210,
+    "name": "png_get_pixel_aspect_ratio_fixed",
+    "return": "png_fixed_point",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 193,
+    "name": "png_get_pixels_per_inch",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 122,
+    "name": "png_get_pixels_per_meter",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 91,
+    "name": "png_get_progressive_ptr",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 34,
+    "name": "png_get_rgb_to_gray_status",
+    "return": "png_byte",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 111,
+    "name": "png_get_rowbytes",
+    "return": "size_t",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 112,
+    "name": "png_get_rows",
+    "return": "png_bytepp",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 153,
+    "name": "png_get_sBIT",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_color_8p *sig_bit)"
+  },
+  {
+    "ordinal": 168,
+    "name": "png_get_sCAL",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, double *width, double *height)"
+  },
+  {
+    "ordinal": 214,
+    "name": "png_get_sCAL_fixed",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, png_fixed_point *width, png_fixed_point *height)"
+  },
+  {
+    "ordinal": 169,
+    "name": "png_get_sCAL_s",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, png_charpp swidth, png_charpp sheight)"
+  },
+  {
+    "ordinal": 160,
+    "name": "png_get_sPLT",
+    "return": "int",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_sPLT_tpp entries)"
+  },
+  {
+    "ordinal": 155,
+    "name": "png_get_sRGB",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, int *file_srgb_intent)"
+  },
+  {
+    "ordinal": 130,
+    "name": "png_get_signature",
+    "return": "png_const_bytep",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 164,
+    "name": "png_get_tIME",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_timep *mod_time)"
+  },
+  {
+    "ordinal": 166,
+    "name": "png_get_tRNS",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *trans_alpha, int *num_trans, png_color_16p *trans_color)"
+  },
+  {
+    "ordinal": 162,
+    "name": "png_get_text",
+    "return": "int",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_textp *text_ptr, int *num_text)"
+  },
+  {
+    "ordinal": 202,
+    "name": "png_get_uint_16",
+    "return": "png_uint_16",
+    "args": "(png_const_bytep buf)"
+  },
+  {
+    "ordinal": 204,
+    "name": "png_get_uint_31",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_bytep buf)"
+  },
+  {
+    "ordinal": 201,
+    "name": "png_get_uint_32",
+    "return": "png_uint_32",
+    "args": "(png_const_bytep buf)"
+  },
+  {
+    "ordinal": 176,
+    "name": "png_get_unknown_chunks",
+    "return": "int",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_unknown_chunkpp entries)"
+  },
+  {
+    "ordinal": 89,
+    "name": "png_get_user_chunk_ptr",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 188,
+    "name": "png_get_user_height_max",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 87,
+    "name": "png_get_user_transform_ptr",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 187,
+    "name": "png_get_user_width_max",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr)"
+  },
+  {
+    "ordinal": 110,
+    "name": "png_get_valid",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 flag)"
+  },
+  {
+    "ordinal": 196,
+    "name": "png_get_x_offset_inches",
+    "return": "float",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 211,
+    "name": "png_get_x_offset_inches_fixed",
+    "return": "png_fixed_point",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 128,
+    "name": "png_get_x_offset_microns",
+    "return": "png_int_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 126,
+    "name": "png_get_x_offset_pixels",
+    "return": "png_int_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 194,
+    "name": "png_get_x_pixels_per_inch",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 123,
+    "name": "png_get_x_pixels_per_meter",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 197,
+    "name": "png_get_y_offset_inches",
+    "return": "float",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 212,
+    "name": "png_get_y_offset_inches_fixed",
+    "return": "png_fixed_point",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 129,
+    "name": "png_get_y_offset_microns",
+    "return": "png_int_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 127,
+    "name": "png_get_y_offset_pixels",
+    "return": "png_int_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 195,
+    "name": "png_get_y_pixels_per_inch",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 124,
+    "name": "png_get_y_pixels_per_meter",
+    "return": "png_uint_32",
+    "args": "(png_const_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 173,
+    "name": "png_handle_as_unknown",
+    "return": "int",
+    "args": "(png_const_structrp png_ptr, png_const_bytep chunk_name)"
+  },
+  {
+    "ordinal": 234,
+    "name": "png_image_begin_read_from_file",
+    "return": "int",
+    "args": "(png_imagep image, const char *file_name)"
+  },
+  {
+    "ordinal": 236,
+    "name": "png_image_begin_read_from_memory",
+    "return": "int",
+    "args": "(png_imagep image, png_const_voidp memory, size_t size)"
+  },
+  {
+    "ordinal": 235,
+    "name": "png_image_begin_read_from_stdio",
+    "return": "int",
+    "args": "(png_imagep image, FILE *file)"
+  },
+  {
+    "ordinal": 237,
+    "name": "png_image_finish_read",
+    "return": "int",
+    "args": "(png_imagep image, png_const_colorp background, void *buffer, png_int_32 row_stride, void *colormap)"
+  },
+  {
+    "ordinal": 238,
+    "name": "png_image_free",
+    "return": "void",
+    "args": "(png_imagep image)"
+  },
+  {
+    "ordinal": 239,
+    "name": "png_image_write_to_file",
+    "return": "int",
+    "args": "(png_imagep image, const char *file, int convert_to_8bit, const void *buffer, png_int_32 row_stride, const void *colormap)"
+  },
+  {
+    "ordinal": 245,
+    "name": "png_image_write_to_memory",
+    "return": "int",
+    "args": "(png_imagep image, void *memory, png_alloc_size_t * restrict memory_bytes, int convert_to_8_bit, const void *buffer, png_int_32 row_stride, const void *colormap)"
+  },
+  {
+    "ordinal": 240,
+    "name": "png_image_write_to_stdio",
+    "return": "int",
+    "args": "(png_imagep image, FILE *file, int convert_to_8_bit, const void *buffer, png_int_32 row_stride, const void *colormap)"
+  },
+  {
+    "ordinal": 19,
+    "name": "png_info_init_3",
+    "return": "void",
+    "args": "(png_infopp info_ptr, size_t png_info_struct_size)"
+  },
+  {
+    "ordinal": 74,
+    "name": "png_init_io",
+    "return": "void",
+    "args": "(png_structrp png_ptr, FILE *fp)"
+  },
+  {
+    "ordinal": 9,
+    "name": "png_longjmp",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, int val)"
+  },
+  {
+    "ordinal": 94,
+    "name": "png_malloc",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr, png_alloc_size_t size)"
+  },
+  {
+    "ordinal": 100,
+    "name": "png_malloc_default",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr, png_alloc_size_t size)"
+  },
+  {
+    "ordinal": 96,
+    "name": "png_malloc_warn",
+    "return": "png_voidp",
+    "args": "(png_const_structrp png_ptr, png_alloc_size_t size)"
+  },
+  {
+    "ordinal": 184,
+    "name": "png_permit_mng_features",
+    "return": "png_uint_32",
+    "args": "(png_structrp png_ptr, png_uint_32 mng_features_permitted)"
+  },
+  {
+    "ordinal": 92,
+    "name": "png_process_data",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr, png_bytep buffer, size_t buffer_size)"
+  },
+  {
+    "ordinal": 219,
+    "name": "png_process_data_pause",
+    "return": "size_t",
+    "args": "(png_structrp, int save)"
+  },
+  {
+    "ordinal": 220,
+    "name": "png_process_data_skip",
+    "return": "png_uint_32",
+    "args": "(png_structrp)"
+  },
+  {
+    "ordinal": 93,
+    "name": "png_progressive_combine_row",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_bytep old_row, png_const_bytep new_row)"
+  },
+  {
+    "ordinal": 62,
+    "name": "png_read_end",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr)"
+  },
+  {
+    "ordinal": 57,
+    "name": "png_read_image",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_bytepp image)"
+  },
+  {
+    "ordinal": 22,
+    "name": "png_read_info",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr)"
+  },
+  {
+    "ordinal": 178,
+    "name": "png_read_png",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)"
+  },
+  {
+    "ordinal": 56,
+    "name": "png_read_row",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_bytep row, png_bytep display_row)"
+  },
+  {
+    "ordinal": 55,
+    "name": "png_read_rows",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_bytepp row, png_bytepp display_row, png_uint_32 num_rows)"
+  },
+  {
+    "ordinal": 54,
+    "name": "png_read_update_info",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr)"
+  },
+  {
+    "ordinal": 10,
+    "name": "png_reset_zstream",
+    "return": "int",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 206,
+    "name": "png_save_int_32",
+    "return": "void",
+    "args": "(png_bytep buf, png_int_32 i)"
+  },
+  {
+    "ordinal": 207,
+    "name": "png_save_uint_16",
+    "return": "void",
+    "args": "(png_bytep buf, unsigned int i)"
+  },
+  {
+    "ordinal": 205,
+    "name": "png_save_uint_32",
+    "return": "void",
+    "args": "(png_bytep buf, png_uint_32 i)"
+  },
+  {
+    "ordinal": 144,
+    "name": "png_set_IHDR",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 width, png_uint_32 height, int bit_depth, int color_type, int interlace_method, int compression_method, int filter_method)"
+  },
+  {
+    "ordinal": 152,
+    "name": "png_set_PLTE",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr, png_const_colorp palette, int num_palette)"
+  },
+  {
+    "ordinal": 40,
+    "name": "png_set_add_alpha",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_uint_32 filler, int flags)"
+  },
+  {
+    "ordinal": 227,
+    "name": "png_set_alpha_mode",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int mode, double output_gamma)"
+  },
+  {
+    "ordinal": 228,
+    "name": "png_set_alpha_mode_fixed",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int mode, png_fixed_point output_gamma)"
+  },
+  {
+    "ordinal": 132,
+    "name": "png_set_bKGD",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_color_16p background)"
+  },
+  {
+    "ordinal": 47,
+    "name": "png_set_background",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_color_16p background_color, int background_gamma_code, int need_expand, double background_gamma)"
+  },
+  {
+    "ordinal": 215,
+    "name": "png_set_background_fixed",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_color_16p background_color, int background_gamma_code, int need_expand, png_fixed_point background_gamma)"
+  },
+  {
+    "ordinal": 109,
+    "name": "png_set_benign_errors",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int allowed)"
+  },
+  {
+    "ordinal": 30,
+    "name": "png_set_bgr",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 135,
+    "name": "png_set_cHRM",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, double white_x, double white_y, double red_x, double red_y, double green_x, double green_y, double blue_x, double blue_y)"
+  },
+  {
+    "ordinal": 232,
+    "name": "png_set_cHRM_XYZ",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, double red_X, double red_Y, double red_Z, double green_X, double green_Y, double green_Z, double blue_X, double blue_Y, double blue_Z)"
+  },
+  {
+    "ordinal": 233,
+    "name": "png_set_cHRM_XYZ_fixed",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_red_X, png_fixed_point int_red_Y, png_fixed_point int_red_Z, png_fixed_point int_green_X, png_fixed_point int_green_Y, png_fixed_point int_green_Z, png_fixed_point int_blue_X, png_fixed_point int_blue_Y, png_fixed_point int_blue_Z)"
+  },
+  {
+    "ordinal": 136,
+    "name": "png_set_cHRM_fixed",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_white_x, png_fixed_point int_white_y, png_fixed_point int_red_x, png_fixed_point int_red_y, png_fixed_point int_green_x, png_fixed_point int_green_y, png_fixed_point int_blue_x, png_fixed_point int_blue_y)"
+  },
+  {
+    "ordinal": 251,
+    "name": "png_set_cICP",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_byte colour_primaries, png_byte transfer_function, png_byte matrix_coefficients, png_byte video_full_range_flag)"
+  },
+  {
+    "ordinal": 254,
+    "name": "png_set_cLLI",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, double maximum_content_light_level, double maximum_frame_average_light_level)"
+  },
+  {
+    "ordinal": 255,
+    "name": "png_set_cLLI_fixed",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 maximum_content_light_level_scaled_by_10000, png_uint_32 maximum_frame_average_light_level_scaled_by_10000)"
+  },
+  {
+    "ordinal": 242,
+    "name": "png_set_check_for_invalid_index",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int allowed)"
+  },
+  {
+    "ordinal": 189,
+    "name": "png_set_chunk_cache_max",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_uint_32 user_chunk_cache_max)"
+  },
+  {
+    "ordinal": 191,
+    "name": "png_set_chunk_malloc_max",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_alloc_size_t user_chunk_cache_max)"
+  },
+  {
+    "ordinal": 7,
+    "name": "png_set_compression_buffer_size",
+    "return": "void",
+    "args": "(png_structrp png_ptr, size_t size)"
+  },
+  {
+    "ordinal": 69,
+    "name": "png_set_compression_level",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int level)"
+  },
+  {
+    "ordinal": 70,
+    "name": "png_set_compression_mem_level",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int mem_level)"
+  },
+  {
+    "ordinal": 73,
+    "name": "png_set_compression_method",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int method)"
+  },
+  {
+    "ordinal": 71,
+    "name": "png_set_compression_strategy",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int strategy)"
+  },
+  {
+    "ordinal": 72,
+    "name": "png_set_compression_window_bits",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int window_bits)"
+  },
+  {
+    "ordinal": 66,
+    "name": "png_set_crc_action",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int crit_action, int ancil_action)"
+  },
+  {
+    "ordinal": 247,
+    "name": "png_set_eXIf",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep exif)"
+  },
+  {
+    "ordinal": 249,
+    "name": "png_set_eXIf_1",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 num_exif, png_bytep exif)"
+  },
+  {
+    "ordinal": 75,
+    "name": "png_set_error_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warning_fn)"
+  },
+  {
+    "ordinal": 26,
+    "name": "png_set_expand",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 221,
+    "name": "png_set_expand_16",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 27,
+    "name": "png_set_expand_gray_1_2_4_to_8",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 39,
+    "name": "png_set_filler",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_uint_32 filler, int flags)"
+  },
+  {
+    "ordinal": 67,
+    "name": "png_set_filter",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int method, int filters)"
+  },
+  {
+    "ordinal": 68,
+    "name": "png_set_filter_heuristics",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int heuristic_method, int num_weights, png_const_doublep filter_weights, png_const_doublep filter_costs)"
+  },
+  {
+    "ordinal": 209,
+    "name": "png_set_filter_heuristics_fixed",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int heuristic_method, int num_weights, png_const_fixed_point_p filter_weights, png_const_fixed_point_p filter_costs)"
+  },
+  {
+    "ordinal": 51,
+    "name": "png_set_flush",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int nrows)"
+  },
+  {
+    "ordinal": 139,
+    "name": "png_set_gAMA",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, double file_gamma)"
+  },
+  {
+    "ordinal": 140,
+    "name": "png_set_gAMA_fixed",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_file_gamma)"
+  },
+  {
+    "ordinal": 50,
+    "name": "png_set_gamma",
+    "return": "void",
+    "args": "(png_structrp png_ptr, double screen_gamma, double override_file_gamma)"
+  },
+  {
+    "ordinal": 208,
+    "name": "png_set_gamma_fixed",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_fixed_point screen_gamma, png_fixed_point override_file_gamma)"
+  },
+  {
+    "ordinal": 31,
+    "name": "png_set_gray_to_rgb",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 142,
+    "name": "png_set_hIST",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_uint_16p hist)"
+  },
+  {
+    "ordinal": 159,
+    "name": "png_set_iCCP",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp name, int compression_type, png_const_bytep profile, png_uint_32 proflen)"
+  },
+  {
+    "ordinal": 45,
+    "name": "png_set_interlace_handling",
+    "return": "int",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 177,
+    "name": "png_set_invalid",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int mask)"
+  },
+  {
+    "ordinal": 38,
+    "name": "png_set_invert_alpha",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 46,
+    "name": "png_set_invert_mono",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 172,
+    "name": "png_set_keep_unknown_chunks",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int keep, png_const_bytep chunk_list, int num_chunks)"
+  },
+  {
+    "ordinal": 8,
+    "name": "png_set_longjmp_fn",
+    "return": "jmp_buf*",
+    "args": "(png_structrp png_ptr, png_longjmp_ptr longjmp_fn, size_t jmp_buf_size)"
+  },
+  {
+    "ordinal": 258,
+    "name": "png_set_mDCV",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, double white_x, double white_y, double red_x, double red_y, double green_x, double green_y, double blue_x, double blue_y, double mastering_display_maximum_luminance, double mastering_display_minimum_luminance)"
+  },
+  {
+    "ordinal": 259,
+    "name": "png_set_mDCV_fixed",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_white_x, png_fixed_point int_white_y, png_fixed_point int_red_x, png_fixed_point int_red_y, png_fixed_point int_green_x, png_fixed_point int_green_y, png_fixed_point int_blue_x, png_fixed_point int_blue_y, png_uint_32 mastering_display_maximum_luminance_scaled_by_10000, png_uint_32 mastering_display_minimum_luminance_scaled_by_10000)"
+  },
+  {
+    "ordinal": 82,
+    "name": "png_set_mem_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp mem_ptr, png_malloc_ptr malloc_fn, png_free_ptr free_fn)"
+  },
+  {
+    "ordinal": 146,
+    "name": "png_set_oFFs",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_int_32 offset_x, png_int_32 offset_y, int unit_type)"
+  },
+  {
+    "ordinal": 244,
+    "name": "png_set_option",
+    "return": "int",
+    "args": "(png_structrp png_ptr, int option, int onoff)"
+  },
+  {
+    "ordinal": 148,
+    "name": "png_set_pCAL",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp purpose, png_int_32 X0, png_int_32 X1, int type, int nparams, png_const_charp units, png_charpp params)"
+  },
+  {
+    "ordinal": 150,
+    "name": "png_set_pHYs",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 res_x, png_uint_32 res_y, int unit_type)"
+  },
+  {
+    "ordinal": 42,
+    "name": "png_set_packing",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 43,
+    "name": "png_set_packswap",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 28,
+    "name": "png_set_palette_to_rgb",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 90,
+    "name": "png_set_progressive_read_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp progressive_ptr, png_progressive_info_ptr info_fn, png_progressive_row_ptr row_fn, png_progressive_end_ptr end_fn)"
+  },
+  {
+    "ordinal": 49,
+    "name": "png_set_quantize",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_colorp palette, int num_palette, int maximum_colors, png_const_uint_16p histogram, int full_quantize)"
+  },
+  {
+    "ordinal": 78,
+    "name": "png_set_read_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp io_ptr, png_rw_ptr read_data_fn)"
+  },
+  {
+    "ordinal": 80,
+    "name": "png_set_read_status_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_read_status_ptr read_row_fn)"
+  },
+  {
+    "ordinal": 88,
+    "name": "png_set_read_user_chunk_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp user_chunk_ptr, png_user_chunk_ptr read_user_chunk_fn)"
+  },
+  {
+    "ordinal": 84,
+    "name": "png_set_read_user_transform_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_user_transform_ptr read_user_transform_fn)"
+  },
+  {
+    "ordinal": 32,
+    "name": "png_set_rgb_to_gray",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int error_action, double red, double green)"
+  },
+  {
+    "ordinal": 33,
+    "name": "png_set_rgb_to_gray_fixed",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int error_action, png_fixed_point red, png_fixed_point green)"
+  },
+  {
+    "ordinal": 113,
+    "name": "png_set_rows",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_bytepp row_pointers)"
+  },
+  {
+    "ordinal": 154,
+    "name": "png_set_sBIT",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_color_8p sig_bit)"
+  },
+  {
+    "ordinal": 170,
+    "name": "png_set_sCAL",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int unit, double width, double height)"
+  },
+  {
+    "ordinal": 213,
+    "name": "png_set_sCAL_fixed",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int unit, png_fixed_point width, png_fixed_point height)"
+  },
+  {
+    "ordinal": 171,
+    "name": "png_set_sCAL_s",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int unit, png_const_charp swidth, png_const_charp sheight)"
+  },
+  {
+    "ordinal": 161,
+    "name": "png_set_sPLT",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_sPLT_tp entries, int nentries)"
+  },
+  {
+    "ordinal": 156,
+    "name": "png_set_sRGB",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int srgb_intent)"
+  },
+  {
+    "ordinal": 157,
+    "name": "png_set_sRGB_gAMA_and_cHRM",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int srgb_intent)"
+  },
+  {
+    "ordinal": 229,
+    "name": "png_set_scale_16",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 44,
+    "name": "png_set_shift",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_color_8p true_bits)"
+  },
+  {
+    "ordinal": 2,
+    "name": "png_set_sig_bytes",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int num_bytes)"
+  },
+  {
+    "ordinal": 48,
+    "name": "png_set_strip_16",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 36,
+    "name": "png_set_strip_alpha",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 41,
+    "name": "png_set_swap",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 37,
+    "name": "png_set_swap_alpha",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 165,
+    "name": "png_set_tIME",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_timep mod_time)"
+  },
+  {
+    "ordinal": 167,
+    "name": "png_set_tRNS",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr, png_const_bytep trans_alpha, int num_trans, png_const_color_16p trans_color)"
+  },
+  {
+    "ordinal": 29,
+    "name": "png_set_tRNS_to_alpha",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 163,
+    "name": "png_set_text",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_textp text_ptr, int num_text)"
+  },
+  {
+    "ordinal": 222,
+    "name": "png_set_text_compression_level",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int level)"
+  },
+  {
+    "ordinal": 223,
+    "name": "png_set_text_compression_mem_level",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int mem_level)"
+  },
+  {
+    "ordinal": 226,
+    "name": "png_set_text_compression_method",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int method)"
+  },
+  {
+    "ordinal": 224,
+    "name": "png_set_text_compression_strategy",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int strategy)"
+  },
+  {
+    "ordinal": 225,
+    "name": "png_set_text_compression_window_bits",
+    "return": "void",
+    "args": "(png_structrp png_ptr, int window_bits)"
+  },
+  {
+    "ordinal": 175,
+    "name": "png_set_unknown_chunk_location",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, int chunk, int location)"
+  },
+  {
+    "ordinal": 174,
+    "name": "png_set_unknown_chunks",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_inforp info_ptr, png_const_unknown_chunkp unknowns, int num_unknowns)"
+  },
+  {
+    "ordinal": 186,
+    "name": "png_set_user_limits",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_uint_32 user_width_max, png_uint_32 user_height_max)"
+  },
+  {
+    "ordinal": 86,
+    "name": "png_set_user_transform_info",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp user_transform_ptr, int user_transform_depth, int user_transform_channels)"
+  },
+  {
+    "ordinal": 77,
+    "name": "png_set_write_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_voidp io_ptr, png_rw_ptr write_data_fn, png_flush_ptr output_flush_fn)"
+  },
+  {
+    "ordinal": 81,
+    "name": "png_set_write_status_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_write_status_ptr write_row_fn)"
+  },
+  {
+    "ordinal": 85,
+    "name": "png_set_write_user_transform_fn",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_user_transform_ptr write_user_transform_fn)"
+  },
+  {
+    "ordinal": 3,
+    "name": "png_sig_cmp",
+    "return": "int",
+    "args": "(png_const_bytep sig, size_t start, size_t num_to_check)"
+  },
+  {
+    "ordinal": 53,
+    "name": "png_start_read_image",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 105,
+    "name": "png_warning",
+    "return": "void",
+    "args": "(png_const_structrp png_ptr, png_const_charp warning_message)"
+  },
+  {
+    "ordinal": 14,
+    "name": "png_write_chunk",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_bytep chunk_name, png_const_bytep data, size_t length)"
+  },
+  {
+    "ordinal": 16,
+    "name": "png_write_chunk_data",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_bytep data, size_t length)"
+  },
+  {
+    "ordinal": 17,
+    "name": "png_write_chunk_end",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 15,
+    "name": "png_write_chunk_start",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_bytep chunk_name, png_uint_32 length)"
+  },
+  {
+    "ordinal": 61,
+    "name": "png_write_end",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr)"
+  },
+  {
+    "ordinal": 52,
+    "name": "png_write_flush",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  },
+  {
+    "ordinal": 60,
+    "name": "png_write_image",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_bytepp image)"
+  },
+  {
+    "ordinal": 21,
+    "name": "png_write_info",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 20,
+    "name": "png_write_info_before_PLTE",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_inforp info_ptr)"
+  },
+  {
+    "ordinal": 179,
+    "name": "png_write_png",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)"
+  },
+  {
+    "ordinal": 58,
+    "name": "png_write_row",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_const_bytep row)"
+  },
+  {
+    "ordinal": 59,
+    "name": "png_write_rows",
+    "return": "void",
+    "args": "(png_structrp png_ptr, png_bytepp row, png_uint_32 num_rows)"
+  },
+  {
+    "ordinal": 13,
+    "name": "png_write_sig",
+    "return": "void",
+    "args": "(png_structrp png_ptr)"
+  }
+]
