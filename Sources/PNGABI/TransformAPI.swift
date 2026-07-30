@@ -392,3 +392,56 @@ public func png_set_alpha_mode(
         png_fixed_point((output_gamma * 100_000).rounded())
     )
 }
+
+
+// -- a transform of the client's own -----------------------------------------
+
+/// Installs a transform the client runs itself, after everything the library does.
+///
+/// The row it is handed is the library's own buffer, so a client may change the samples in place;
+/// what it must not do is write past what it declared, which is what the declaration below is for.
+@c @implementation
+public func png_set_read_user_transform_fn(
+    _ png_ptr: png_structrp?,
+    _ read_user_transform_fn: png_user_transform_ptr?
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    png_ptr.pointee.read_user_transform_fn = read_user_transform_fn
+
+    // Passing nothing takes the request away again, which matters because the request is what makes
+    // the row buffer large enough for a shape the client declared.
+    if read_user_transform_fn == nil {
+        context.transformFlags.remove(.userTransform)
+    } else {
+        context.transformFlags.insert(.userTransform)
+    }
+}
+
+/// Says what the client's own transform will leave a row looking like, and gives it a pointer of its
+/// own to find its way back to whatever it needs.
+///
+/// The library cannot work the shape out for itself, since the transform is the client's code, so
+/// this is taken at its word: it settles the row size reported by `png_read_update_info` and the
+/// buffer the row is decoded into.  Zero for either means the client is not changing that one.
+@c @implementation
+public func png_set_user_transform_info(
+    _ png_ptr: png_structrp?,
+    _ user_transform_ptr: png_voidp?,
+    _ user_transform_depth: Int32,
+    _ user_transform_channels: Int32
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    png_ptr.pointee.user_transform_ptr = user_transform_ptr
+    png_ptr.pointee.user_transform_depth = png_byte(truncatingIfNeeded: user_transform_depth)
+    png_ptr.pointee.user_transform_channels = png_byte(truncatingIfNeeded: user_transform_channels)
+
+    context.userTransformDepth = Int(user_transform_depth)
+    context.userTransformChannels = Int(user_transform_channels)
+}
+
+@c @implementation
+public func png_get_user_transform_ptr(_ png_ptr: png_const_structrp?) -> png_voidp? {
+    png_ptr?.pointee.user_transform_ptr
+}
