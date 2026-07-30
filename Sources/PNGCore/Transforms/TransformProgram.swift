@@ -1,0 +1,378 @@
+// TransformProgram.swift - the order the transforms run in
+//
+// The order here is the single most important thing in this file, and it is not the order a client
+// asked for them in.  It is fixed, and it has to be: expanding a palette before stripping alpha
+// gives a different picture from stripping first, and two clients making the same requests in
+// different orders must get the same image.
+//
+// The order below is the reference's.  Some of it is forced — a palette has to become colours
+// before anything can rearrange those colours — and some of it is simply a choice that has been
+// made and now has to be matched.  The cases where it is a choice are the ones worth noting, and
+// they are noted.
+//
+// Applying and measuring go through the same list.  A client needs the finished row size before
+// any row is read, so the program is walked once over a shape alone, with no bytes, to find both
+// the final size and the largest size the row passes through.
+
+/// The transforms to apply to each row, in the order they run.
+struct TransformProgram {
+    /// One stage of the pipeline.
+    ///
+    /// A case per transform rather than a closure per transform, because the list is walked twice —
+    /// once for real and once to measure — and a closure that captured a row could not be.
+    enum Step {
+        case expandPalette
+        case expandGrayTo8
+        case expandTransparency
+        case stripAlpha
+        case grayToRgb
+        case scale16
+        case strip16
+        case expand16
+        case invertMono
+        case invertAlpha
+        case shift
+        case packing
+        case bgr
+        case packSwap
+        case filler(value: UInt32, afterColor: Bool, countsAsAlpha: Bool)
+        case swapAlpha
+        case swapBytes
+    }
+
+    private(set) var steps: [Step] = []
+
+    /// Whether the file's transparency has been dealt with, so that nothing is left to report.
+    ///
+    /// Broader than "became an alpha channel", and deliberately so, because that is what the
+    /// reference does: asking for any expansion at all settles the transparency, whether or not a
+    /// channel came out of it.  A client that asked for colour from a greyscale image is told the
+    /// transparency is gone even though the row has no alpha — the expansion is taken as the moment
+    /// the file's transparency stopped being the client's business.
+    ///
+    /// Stripping alpha settles it too, by discarding it.
+    private(set) var consumesTransparency = false
+
+    /// Builds the pipeline from what the client asked for.
+    ///
+    /// The sequence of `insert` calls below *is* the canonical order; nothing later reorders them.
+    init(
+        flags requested: TransformFlags,
+        header: Header,
+        info: InfoStore,
+        fillerValue: UInt32,
+        fillerAfterColor: Bool
+    ) {
+        let hasTransparency = info.isValid(InfoStore.Valid.trns)
+        let flags = requested.resolved(for: header, hasTransparency: hasTransparency)
+
+        // Expansion comes first because everything else works on samples, and until this has run an
+        // indexed row holds indices rather than samples.
+        if flags.contains(.expand), header.colorType.isIndexed {
+            self.steps.append(.expandPalette)
+        }
+
+        // Any expansion settles the transparency, and so does discarding the alpha.
+        if hasTransparency, flags.contains(.expand) || flags.contains(.stripAlpha) {
+            self.consumesTransparency = true
+        }
+
+        if flags.contains(.expandGrayTo8) {
+            self.steps.append(.expandGrayTo8)
+        }
+
+        // Only for a non-indexed image: an indexed one gets its alpha from the palette during the
+        // expansion above, so there is nothing left to derive here.
+        if flags.contains(.expandTransparency), !header.colorType.isIndexed, hasTransparency {
+            self.steps.append(.expandTransparency)
+            self.consumesTransparency = true
+        }
+
+
+        // Before the grey channel is tripled, so that only one channel has to be moved.
+        if flags.contains(.stripAlpha) {
+            self.steps.append(.stripAlpha)
+
+        }
+
+        if flags.contains(.grayToRgb) {
+            self.steps.append(.grayToRgb)
+        }
+
+        // Narrowing before widening, and the two narrowings are mutually exclusive by the time the
+        // flags have been resolved.
+        if flags.contains(.scale16) {
+            self.steps.append(.scale16)
+        }
+
+        if flags.contains(.strip16) {
+            self.steps.append(.strip16)
+        }
+
+        if flags.contains(.expand16) {
+            self.steps.append(.expand16)
+        }
+
+        // Inverting greyscale before it is packed out to bytes, because at one bit per pixel the
+        // whole byte inverts at once and afterwards it would not.
+        if flags.contains(.invertMono) {
+            self.steps.append(.invertMono)
+        }
+
+        if flags.contains(.invertAlpha) {
+            self.steps.append(.invertAlpha)
+        }
+
+        // The shift undoes a narrower original range, so it runs while the samples are still at the
+        // depth that range was expressed in.
+        if flags.contains(.shift) {
+            self.steps.append(.shift)
+        }
+
+        if flags.contains(.packing) {
+            self.steps.append(.packing)
+        }
+
+        if flags.contains(.bgr) {
+            self.steps.append(.bgr)
+        }
+
+        // After the packing, since a row that has been spread one sample to a byte has no shared
+        // bytes left to reorder within.
+        if flags.contains(.packSwap) {
+            self.steps.append(.packSwap)
+        }
+
+        // Before the filler, not after, and this is observable: a client that asks for both gets an
+        // added alpha channel that is *not* moved to the front.  The swap applies to the alpha the
+        // image already had, and a row that had none has nothing to swap.
+        if flags.contains(.swapAlpha) {
+            self.steps.append(.swapAlpha)
+        }
+
+        if flags.contains(.filler) || flags.contains(.addAlpha) {
+            self.steps.append(
+                .filler(
+                    value: fillerValue,
+                    afterColor: fillerAfterColor,
+                    countsAsAlpha: flags.contains(.addAlpha)
+                )
+            )
+        }
+
+        // Last of all: it reorders bytes within a sample, and every stage above reads samples
+        // rather than bytes.
+        if flags.contains(.swapBytes) {
+            self.steps.append(.swapBytes)
+        }
+    }
+
+    var isEmpty: Bool { self.steps.isEmpty }
+
+    /// Checks the shift amounts against the image.
+    ///
+    /// A shift of nothing is meaningless and a shift wider than the samples would discard them
+    /// entirely, so both are refused.  The check is here rather than in the setter because it needs
+    /// the image, which the setter may be called before.
+    ///
+    /// The limit is the image's own depth in every case, indexed images included.  That is worth
+    /// stating because the plausible alternative is wrong: an indexed image's samples live in its
+    /// palette and are eight bit, but what the reference checks against is the depth of the indices.
+    static func validateShift(_ bits: SignificantBits, header: Header) throws {
+        let limit = header.bitDepth
+
+        var required: [UInt8] = []
+
+        if header.colorType.isIndexed || header.colorType.hasColor {
+            required += [bits.red, bits.green, bits.blue]
+        } else {
+            required.append(bits.gray)
+        }
+
+        if header.colorType.hasAlpha {
+            required.append(bits.alpha)
+        }
+
+        for value in required where value < 1 || Int(value) > limit {
+            throw Diagnostic("png_set_shift: invalid shift values")
+        }
+    }
+
+    /// Runs the pipeline over one row.
+    func apply(
+        to row: UnsafeMutableBufferPointer<UInt8>,
+        info: inout RowInfo,
+        inputs: TransformInputs
+    ) {
+        for step in self.steps {
+            switch step {
+            case .expandPalette:
+                inputs.palette.withUnsafeBufferPointer { palette in
+                    inputs.paletteAlpha.withUnsafeBufferPointer { alpha in
+                        Transform.paletteToRgb(row, &info, palette: palette, alpha: alpha)
+                    }
+                }
+
+            case .expandGrayTo8:
+                Transform.grayTo8(row, &info)
+
+            case .expandTransparency:
+                Transform.transparencyToAlpha(row, &info, transparent: inputs.transparentColor)
+
+            case .stripAlpha:
+                Transform.stripAlpha(row, &info)
+
+            case .grayToRgb:
+                Transform.grayToRgb(row, &info)
+
+            case .scale16:
+                Transform.scale16(row, &info)
+
+            case .strip16:
+                Transform.strip16(row, &info)
+
+            case .expand16:
+                Transform.expand16(row, &info)
+
+            case .invertMono:
+                Transform.invertMono(row, info)
+
+            case .invertAlpha:
+                Transform.invertAlpha(row, info)
+
+            case .shift:
+                Transform.shift(row, &info, significant: inputs.significantBits)
+
+            case .packing:
+                Transform.packing(row, &info)
+
+            case .bgr:
+                Transform.bgr(row, info)
+
+            case .packSwap:
+                Transform.packSwap(row, info)
+
+            case let .filler(value, afterColor, countsAsAlpha):
+                Transform.filler(
+                    row,
+                    &info,
+                    value: value,
+                    afterColor: afterColor,
+                    countsAsAlpha: countsAsAlpha
+                )
+
+            case .swapAlpha:
+                Transform.swapAlpha(row, info)
+
+            case .swapBytes:
+                Transform.swapBytes(row, info)
+            }
+        }
+    }
+
+    /// The shape a row ends up with, worked out without decoding anything.
+    ///
+    /// This is what `png_read_update_info` reports and what a client allocates from, so it has to
+    /// agree exactly with what `apply` produces. It does so by walking the same list and applying
+    /// each step's effect on the shape — the effects are declared once, in `advance`, and both
+    /// paths read them from there.
+    func resultingShape(from start: RowInfo, hasTransparency: Bool) -> RowInfo {
+        var info = start
+
+        for step in self.steps {
+            Self.advance(&info, through: step, hasTransparency: hasTransparency)
+        }
+
+        return info
+    }
+
+    /// The largest a row becomes at any point, which is what the buffer has to hold.
+    ///
+    /// Not simply the larger of the first and last shapes: a pipeline can widen a row and narrow it
+    /// again, and the buffer still has to survive the middle.
+    func maximumRowBytes(from start: RowInfo, hasTransparency: Bool) -> Int {
+        var info = start
+        var largest = info.rowBytes
+
+        for step in self.steps {
+            Self.advance(&info, through: step, hasTransparency: hasTransparency)
+            largest = max(largest, info.rowBytes)
+        }
+
+        return largest
+    }
+
+    /// How one step changes a row's shape.
+    ///
+    /// The conditions here mirror the guards in the kernels, because a step that declines to run
+    /// must not be reported as having changed the shape.
+    private static func advance(
+        _ info: inout RowInfo,
+        through step: Step,
+        hasTransparency: Bool
+    ) {
+        switch step {
+        case .expandPalette:
+            guard info.colorType.isIndexed else { return }
+            info.colorType = hasTransparency ? .rgba : .rgb
+            info.channels = hasTransparency ? 4 : 3
+            info.bitDepth = 8
+            info.resize()
+
+        case .expandGrayTo8:
+            guard info.colorType == .grayscale, info.bitDepth < 8 else { return }
+            info.bitDepth = 8
+            info.resize()
+
+        case .expandTransparency:
+            guard !info.colorType.hasAlpha, !info.colorType.isIndexed, info.bitDepth >= 8 else {
+                return
+            }
+            info.colorType = info.colorType.hasColor ? .rgba : .grayscaleAlpha
+            info.channels += 1
+            info.resize()
+
+        case .stripAlpha:
+            guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
+            info.colorType = info.colorType.hasColor ? .rgb : .grayscale
+            info.channels -= 1
+            info.resize()
+
+        case .grayToRgb:
+            guard !info.colorType.hasColor, info.bitDepth >= 8 else { return }
+            let hadAlpha = info.colorType.hasAlpha
+            info.colorType = hadAlpha ? .rgba : .rgb
+            info.channels = hadAlpha ? 4 : 3
+            info.resize()
+
+        case .scale16, .strip16:
+            guard info.bitDepth == 16 else { return }
+            info.bitDepth = 8
+            info.resize()
+
+        case .expand16:
+            guard info.bitDepth == 8 else { return }
+            info.bitDepth = 16
+            info.resize()
+
+        case .packing:
+            guard info.bitDepth < 8 else { return }
+            info.bitDepth = 8
+            info.resize()
+
+        case let .filler(_, _, countsAsAlpha):
+            guard info.bitDepth >= 8, !info.colorType.hasAlpha, !info.colorType.isIndexed,
+                  info.channels < 4
+            else { return }
+            info.channels += 1
+            if countsAsAlpha {
+                info.colorType = info.colorType.hasColor ? .rgba : .grayscaleAlpha
+            }
+            info.resize()
+
+        case .invertMono, .invertAlpha, .shift, .bgr, .packSwap, .swapAlpha, .swapBytes:
+            // These rearrange bytes without changing the shape.
+            return
+        }
+    }
+}
