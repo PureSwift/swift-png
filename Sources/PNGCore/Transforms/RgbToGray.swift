@@ -52,7 +52,11 @@ extension Transform {
     static func rgbToGray(
         _ row: UnsafeMutableBufferPointer<UInt8>,
         _ info: inout RowInfo,
-        weights: RgbToGrayState
+        weights: RgbToGrayState,
+        toLinear: GammaTable? = nil,
+        fromLinear: GammaTable? = nil,
+        corrected: GammaTable? = nil,
+        exponents: (toLinear: Double, fromLinear: Double, corrected: Double)? = nil
     ) -> Bool {
         guard info.colorType.hasColor, !info.colorType.isIndexed, info.bitDepth >= 8 else {
             return false
@@ -79,9 +83,34 @@ extension Transform {
 
                 if r != g || r != b { sawColor = true }
 
-                // Truncated rather than rounded.  That is the reference's arithmetic, and it is
-                // visible: it puts a pixel just under a boundary one value lower than rounding would.
-                row[target] = UInt8((red * r + green * g + blue * b) >> 15)
+                // Summed on linear light when there is a curve to undo, and on the samples as they
+                // stand when there is not.  The distinction matters: a weighted sum of encoded samples
+                // is not the encoding of the weighted sum, so averaging without decoding first gives a
+                // grey that is wrong by the amount the curve bends.
+                if let toLinear, let fromLinear, let corrected {
+                    if r == g, r == b {
+                        // Already grey, so there is nothing to average and no reason to go through
+                        // linear at all: the sample takes the combined correction directly, which is
+                        // both cheaper and — because the trip through linear loses precision — a
+                        // different answer from the one the general path would give.
+                        row[target] = corrected.values[r]
+                    } else {
+                        // Rounded here, where the sum without a correction truncates.  The two paths
+                        // are the reference's and they differ; a pixel converted with a gamma in force
+                        // is not the same as one converted without and then corrected.
+                        let linear = Int(toLinear.values[r]) * red
+                            + Int(toLinear.values[g]) * green
+                            + Int(toLinear.values[b]) * blue
+                            + 16384
+
+                        row[target] = fromLinear.values[Int(linear >> 15)]
+                    }
+                } else {
+                    // Truncated rather than rounded.  That is the reference's arithmetic, and it is
+                    // visible: it puts a pixel just under a boundary one value lower than rounding
+                    // would.
+                    row[target] = UInt8((red * r + green * g + blue * b) >> 15)
+                }
 
                 if hadAlpha {
                     row[target + 1] = row[source + 3]
@@ -98,10 +127,38 @@ extension Transform {
 
                 if r != g || r != b { sawColor = true }
 
-                // Rounded here, where the eight bit path truncates.  The asymmetry is the
-                // reference's rather than a choice, and it is visible on almost every pixel: the two
-                // paths disagree by one wherever the weighted sum lands in the upper half of a step.
-                let gray = (red * r + green * g + blue * b + 16384) >> 15
+                let gray: Int
+
+                if let exponents {
+                    // The same shape as the eight bit path: through linear to average, and back
+                    // again — except that an already grey sample takes the combined correction
+                    // directly rather than making the round trip.
+                    if r == g, r == b {
+                        gray = Int(
+                            GammaTable.correct16(UInt16(r), gamma: exponents.corrected)
+                        )
+                    } else {
+                        let linear = Int(GammaTable.correct16(UInt16(r), gamma: exponents.toLinear))
+                            * red
+                            + Int(GammaTable.correct16(UInt16(g), gamma: exponents.toLinear))
+                            * green
+                            + Int(GammaTable.correct16(UInt16(b), gamma: exponents.toLinear))
+                            * blue
+                            + 16384
+
+                        gray = Int(
+                            GammaTable.correct16(
+                                UInt16(clamping: linear >> 15),
+                                gamma: exponents.fromLinear
+                            )
+                        )
+                    }
+                } else {
+                    // Rounded here, where the eight bit path truncates.  The asymmetry is the
+                    // reference's rather than a choice, and it is visible on almost every pixel: the
+                    // two paths disagree by one wherever the sum lands in the upper half of a step.
+                    gray = (red * r + green * g + blue * b + 16384) >> 15
+                }
 
                 row[target] = UInt8(truncatingIfNeeded: gray >> 8)
                 row[target + 1] = UInt8(truncatingIfNeeded: gray)
