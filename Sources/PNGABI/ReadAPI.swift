@@ -68,11 +68,7 @@ public func png_read_image(_ png_ptr: png_structrp?, _ image: png_bytepp?) {
             throw Diagnostic("png_read_image needs an array of row pointers")
         }
 
-        try context.startReadImage()
-
-        for index in 0 ..< context.height {
-            try context.readRow(into: image[index])
-        }
+        try context.readImage(rows: image)
     }
 }
 
@@ -83,6 +79,24 @@ public func png_read_end(_ png_ptr: png_structrp?, _ info_ptr: png_inforp?) {
         // the image data passes null, and the stream is still walked to the end marker.
         try context.readEnd(into: info_ptr.flatMap { InfoStore.from($0) })
     }
+}
+
+/// Asks for an interlaced image's passes to arrive as full-width rows, and reports how many
+/// times every row has to be read.
+///
+/// Seven for an interlaced image, one otherwise, so a client can loop that many times
+/// without caring which it has.
+@c @implementation
+public func png_set_interlace_handling(_ png_ptr: png_structrp?) -> Int32 {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return 1 }
+    return Int32(context.enableInterlaceHandling())
+}
+
+/// Which pass the decoder is on.
+@c @implementation
+public func png_get_current_pass_number(_ png_ptr: png_const_structrp?) -> png_byte {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return 0 }
+    return context.currentPass
 }
 
 /// Declares how many signature bytes the client already read and checked.
