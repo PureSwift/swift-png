@@ -396,6 +396,22 @@ static void apply_gamma_slight(png_structp p) { png_set_gamma(p, 1.0, 1.0 / 1.02
 static void apply_gamma_steep(png_structp p) { png_set_gamma(p, 4.0, 1.0 / 1.1); }
 static void apply_gamma_shallow(png_structp p) { png_set_gamma(p, 1.1, 1.0 / 4.0); }
 
+static void apply_rgb_to_gray(png_structp p)
+{
+   png_set_rgb_to_gray(p, PNG_ERROR_ACTION_NONE, -1, -1);
+}
+
+static void apply_rgb_to_gray_warn(png_structp p)
+{
+   png_set_rgb_to_gray(p, PNG_ERROR_ACTION_WARN, -1, -1);
+}
+
+static void apply_rgb_to_gray_weighted(png_structp p)
+{
+   /* Weights of the client's own rather than the defaults, so that the two paths are both driven. */
+   png_set_rgb_to_gray(p, PNG_ERROR_ACTION_NONE, 0.4, 0.4);
+}
+
 static void
 apply_shift(png_structp p)
 {
@@ -440,6 +456,9 @@ static const struct transform_entry transforms[] = {
    { "gamma_slight", apply_gamma_slight },
    { "gamma_steep", apply_gamma_steep },
    { "gamma_shallow", apply_gamma_shallow },
+   { "rgb_to_gray", apply_rgb_to_gray },
+   { "rgb_to_gray_warn", apply_rgb_to_gray_warn },
+   { "rgb_to_gray_weighted", apply_rgb_to_gray_weighted },
 };
 
 #define TRANSFORM_COUNT ((int)(sizeof transforms / sizeof transforms[0]))
