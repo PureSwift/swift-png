@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""Write the test corpus.
+
+The images are generated rather than downloaded so that the suite has no network
+dependency and so that the awkward cases are covered on purpose: sizes that make a
+row end mid-byte, images narrower than a filter's reach, and each filter type
+forced individually so that none of the five reconstruction paths goes untested.
+
+Only the PNG writer here is trusted, and only to produce well-formed input; what
+the two libraries make of it is what the comparison judges.
+"""
+
+import pathlib
+import struct
+import sys
+import zlib
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+GRAYSCALE = 0
+RGB = 2
+PALETTE = 3
+GRAYSCALE_ALPHA = 4
+RGBA = 6
+
+CHANNELS = {GRAYSCALE: 1, RGB: 3, PALETTE: 1, GRAYSCALE_ALPHA: 2, RGBA: 4}
+
+
+def chunk(name: bytes, payload: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(payload))
+        + name
+        + payload
+        + struct.pack(">I", zlib.crc32(name + payload) & 0xFFFF_FFFF)
+    )
+
+
+def paeth(left: int, above: int, above_left: int) -> int:
+    estimate = left + above - above_left
+    distances = (
+        (abs(estimate - left), left),
+        (abs(estimate - above), above),
+        (abs(estimate - above_left), above_left),
+    )
+    # Ties resolve towards `left`, then `above`, which min() preserves because the
+    # candidates are already in that order.
+    return min(distances, key=lambda pair: pair[0])[1]
+
+
+def filter_row(kind: int, row: bytes, previous: bytes, stride: int) -> bytes:
+    out = bytearray(len(row))
+
+    for index, value in enumerate(row):
+        left = row[index - stride] if index >= stride else 0
+        above = previous[index]
+        above_left = previous[index - stride] if index >= stride else 0
+
+        if kind == 0:
+            prediction = 0
+        elif kind == 1:
+            prediction = left
+        elif kind == 2:
+            prediction = above
+        elif kind == 3:
+            prediction = (left + above) // 2
+        else:
+            prediction = paeth(left, above, above_left)
+
+        out[index] = (value - prediction) & 0xFF
+
+    return bytes(out)
+
+
+def encode(
+    path: pathlib.Path,
+    width: int,
+    height: int,
+    bit_depth: int,
+    color_type: int,
+    rows: list[bytes],
+    filter_kind: int,
+    palette: bytes | None = None,
+) -> None:
+    """Writes one image, forcing every scanline to use `filter_kind`."""
+    stride = max(1, (CHANNELS[color_type] * bit_depth) // 8)
+    row_bytes = (width * CHANNELS[color_type] * bit_depth + 7) // 8
+
+    raw = bytearray()
+    previous = bytes(row_bytes)
+
+    for row in rows:
+        assert len(row) == row_bytes, (len(row), row_bytes)
+        raw.append(filter_kind)
+        raw += filter_row(filter_kind, row, previous, stride)
+        previous = row
+
+    body = SIGNATURE
+    body += chunk(
+        b"IHDR",
+        struct.pack(">IIBBBBB", width, height, bit_depth, color_type, 0, 0, 0),
+    )
+
+    if palette is not None:
+        body += chunk(b"PLTE", palette)
+
+    body += chunk(b"IDAT", zlib.compress(bytes(raw), 6))
+    body += chunk(b"IEND", b"")
+
+    path.write_bytes(body)
+
+
+def sample_rows(width: int, height: int, channels: int, bit_depth: int) -> list[bytes]:
+    """Values that vary along both axes and across channels.
+
+    Anything constant would hide a defiltering mistake, since a wrong prediction
+    added to a constant row often still gives the constant back.
+    """
+    row_bytes = (width * channels * bit_depth + 7) // 8
+    rows = []
+
+    for y in range(height):
+        row = bytearray(row_bytes)
+        for index in range(row_bytes):
+            row[index] = (index * 37 + y * 91 + (index & 3) * 13) & 0xFF
+        rows.append(bytes(row))
+
+    return rows
+
+
+def write_damaged() -> list[pathlib.Path]:
+    """Writes files that a decoder has to reject.
+
+    Agreeing about which files are bad, and saying the same thing about them, is as
+    much a part of being a drop-in replacement as decoding the good ones.  These
+    also exercise the path that matters most for memory: the client's error handler
+    jumps out of a half-finished decode, and everything allocated so far still has
+    to come back.
+    """
+    written = []
+    rows = sample_rows(8, 4, CHANNELS[RGB], 8)
+
+    def emit(name: str, body: bytes) -> None:
+        path = CORPUS / f"bad-{name}.png"
+        path.write_bytes(body)
+        written.append(path)
+
+    header = chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 8, RGB, 0, 0, 0))
+
+    raw = bytearray()
+    previous = bytes(len(rows[0]))
+    for row in rows:
+        raw.append(0)
+        raw += row
+        previous = row
+    data = zlib.compress(bytes(raw), 6)
+
+    emit("signature", b"\x89PNX\r\n\x1a\n" + header)
+    emit("empty", b"")
+    emit("signature-only", SIGNATURE)
+
+    # A header whose first chunk is not IHDR.
+    emit("no-ihdr", SIGNATURE + chunk(b"IDAT", data))
+
+    # Dimensions and encodings the format does not allow.
+    emit("zero-width",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 0, 4, 8, RGB, 0, 0, 0)))
+    emit("zero-height",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 0, 8, RGB, 0, 0, 0)))
+    emit("bad-depth",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 3, RGB, 0, 0, 0)))
+    emit("bad-color-type",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 8, 7, 0, 0, 0)))
+    emit("depth-color-mismatch",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 1, RGB, 0, 0, 0)))
+    emit("bad-compression",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 8, RGB, 1, 0, 0)))
+    emit("bad-filter-method",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 8, RGB, 0, 1, 0)))
+    emit("bad-interlace",
+         SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 4, 8, RGB, 0, 0, 2)))
+
+    # A checksum that does not match its payload.
+    broken = bytearray(SIGNATURE + header)
+    broken[-1] ^= 0xFF
+    emit("ihdr-crc", bytes(broken))
+
+    # No image data at all.
+    emit("no-idat", SIGNATURE + header + chunk(b"IEND", b""))
+
+    # Less image data than the dimensions call for.
+    short = zlib.compress(bytes(raw)[: len(raw) // 3], 6)
+    emit("short-idat", SIGNATURE + header + chunk(b"IDAT", short) + chunk(b"IEND", b""))
+
+    # Image data that is not a valid compressed stream.
+    emit("corrupt-zlib",
+         SIGNATURE + header + chunk(b"IDAT", b"\x78\x9c" + b"\xff" * 32)
+         + chunk(b"IEND", b""))
+
+    # A scanline naming a filter that does not exist.
+    bad_filter = bytearray()
+    for row in rows:
+        bad_filter.append(9)
+        bad_filter += row
+    emit("unknown-filter",
+         SIGNATURE + header + chunk(b"IDAT", zlib.compress(bytes(bad_filter), 6))
+         + chunk(b"IEND", b""))
+
+    # Truncated part way through, at several points, since where the cut falls
+    # decides which read fails.
+    whole = SIGNATURE + header + chunk(b"IDAT", data) + chunk(b"IEND", b"")
+    for fraction, label in ((0.25, "quarter"), (0.5, "half"), (0.9, "most")):
+        emit(f"truncated-{label}", whole[: int(len(whole) * fraction)])
+
+    return written
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        sys.exit("usage: make_corpus.py <output-directory>")
+
+    global CORPUS
+    CORPUS = pathlib.Path(sys.argv[1])
+    CORPUS.mkdir(parents=True, exist_ok=True)
+    written = []
+
+    # Every colour type this milestone decodes, at every filter, so none of the
+    # five reconstruction paths is left untested.
+    for color_type, name in ((GRAYSCALE, "gray"), (RGB, "rgb"), (RGBA, "rgba"),
+                             (GRAYSCALE_ALPHA, "graya")):
+        for filter_kind in range(5):
+            width, height = 13, 7
+            rows = sample_rows(width, height, CHANNELS[color_type], 8)
+            path = CORPUS / f"{name}8-filter{filter_kind}.png"
+            encode(path, width, height, 8, color_type, rows, filter_kind)
+            written.append(path)
+
+    # Sizes where the arithmetic is easiest to get wrong: a single pixel, a single
+    # row, a single column, and a width narrower than a filter's reach.
+    for width, height, label in ((1, 1, "1x1"), (1, 9, "1x9"), (9, 1, "9x1"),
+                                 (2, 2, "2x2"), (17, 17, "17x17")):
+        rows = sample_rows(width, height, CHANNELS[RGB], 8)
+        path = CORPUS / f"rgb8-{label}.png"
+        encode(path, width, height, 8, RGB, rows, 4)
+        written.append(path)
+
+    # Sixteen bit samples, where a filter steps back two bytes per channel.
+    rows = sample_rows(11, 5, CHANNELS[RGB], 16)
+    path = CORPUS / "rgb16-filter4.png"
+    encode(path, 11, 5, 16, RGB, rows, 4)
+    written.append(path)
+
+    rows = sample_rows(11, 5, CHANNELS[GRAYSCALE], 16)
+    path = CORPUS / "gray16-filter2.png"
+    encode(path, 11, 5, 16, GRAYSCALE, rows, 2)
+    written.append(path)
+
+    # Depths below a byte, where a row ends part way through its last byte.  The
+    # sample values deliberately set bits beyond the image width, so that whatever
+    # the decoder does with them is visible.
+    for bit_depth in (1, 2, 4):
+        for width in (1, 3, 7, 13):
+            rows = sample_rows(width, 5, 1, bit_depth)
+            path = CORPUS / f"gray{bit_depth}-w{width}.png"
+            encode(path, width, 5, bit_depth, GRAYSCALE, rows, 0)
+            written.append(path)
+
+    # The same, filtered.  These distinguish whether a decoder that discards the
+    # bits past the width does so before or after the row becomes the reference for
+    # the next one: with a filter that refers upwards, the two choices give
+    # different pixels from the second row onwards.
+    for bit_depth in (1, 2, 4):
+        for filter_kind in (1, 2, 3, 4):
+            width = 13
+            rows = sample_rows(width, 5, 1, bit_depth)
+            path = CORPUS / f"gray{bit_depth}-w13-filter{filter_kind}.png"
+            encode(path, width, 5, bit_depth, GRAYSCALE, rows, filter_kind)
+            written.append(path)
+
+    # Indexed colour, whose rows are palette indices rather than samples.
+    palette = b"".join(
+        bytes(((index * 7) & 0xFF, (index * 13) & 0xFF, (index * 29) & 0xFF))
+        for index in range(16)
+    )
+    for bit_depth in (1, 2, 4, 8):
+        width = 9
+        row_bytes = (width * bit_depth + 7) // 8
+        rows = [
+            bytes((index * 11 + y * 7) & 0xFF for index in range(row_bytes))
+            for y in range(4)
+        ]
+        # Indices must exist in the palette, so the high bits are masked off for the
+        # depth that can address more entries than the palette holds.
+        if bit_depth == 8:
+            rows = [bytes(value % 16 for value in row) for row in rows]
+        path = CORPUS / f"palette{bit_depth}.png"
+        encode(path, width, 4, bit_depth, PALETTE, rows, 0, palette=palette)
+        written.append(path)
+
+    written += write_damaged()
+
+    print(f"wrote {len(written)} images to {CORPUS}")
+
+
+if __name__ == "__main__":
+    main()
