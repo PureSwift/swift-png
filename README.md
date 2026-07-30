@@ -17,9 +17,9 @@ the control structure lifecycle, the allocator and stream callbacks, and every m
 chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
 embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
 range signalling, and all three text chunks. Interlaced images decode too, both ways a client can
-ask for them, and twenty-two of the read transforms work — the expansions, the depth conversions, the
-channel rearrangements, the filler, the shift and gamma correction. Compositing, alpha mode, the
-greyscale conversion and quantisation are still to come, as is writing.
+ask for them, and twenty-three of the read transforms work — the expansions, the depth conversions, the
+channel rearrangements, the filler, the shift, gamma correction and the conversion to greyscale.
+Compositing, alpha mode and quantisation are still to come, as is writing.
 
 ## Building
 
@@ -87,6 +87,11 @@ combinations rather than one transform at a time, and drives several of them twi
 reversed — the result has to be identical, and checking that against the reference proves it for the
 reference too rather than only for us. That is 2640 decodes over 22 images in both read modes.
 
+Discarding colour is a weighted sum in integer arithmetic, and the two depths round it differently:
+the eight bit path truncates and the sixteen bit path adds a half first. Nothing suggests that
+asymmetry and it shows on almost every pixel, so it was found by arithmetic rather than by reading —
+computing both candidates for one pixel and seeing which the reference agreed with.
+
 Gamma is the one place where agreeing to the last bit is both the point and straightforwardly
 reachable, because the reference build computes it in double precision rather than through its
 fixed-point logarithm path — so the arithmetic is reproducible rather than a reimplementation of an
@@ -144,9 +149,10 @@ and the comparison reports it without failing: `Conformance/known-differences.tx
 chunk the reference build refuses to read wherever it appears. The transform file has two kinds of
 entry and keeps them apart on purpose. On the reference's side, it accepts a filler channel it cannot
 honour on sub-byte samples, reports a row shape that cannot exist, and then fails mid-decode. On this
-library's side there are two gaps: reversing sub-byte samples within a byte is applied to an interlaced
-pass row rather than to the full-width row it is spread into, and sixteen bit gamma is computed exactly
-where the reference deliberately uses a coarser table. Unfinished work is labelled as unfinished rather
+library's side there are three gaps: reversing sub-byte samples within a byte is applied to an
+interlaced pass row rather than to the full-width row it is spread into, sixteen bit gamma is computed
+exactly where the reference deliberately uses a coarser table, and the weighted sum that discards colour
+is taken on encoded samples rather than on linear light. Unfinished work is labelled as unfinished rather
 than filed alongside a decision.
 
 The comparison also refuses to carry a recorded difference that no longer differs. An exemption that
