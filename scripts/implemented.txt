@@ -1,0 +1,35 @@
+# Published functions that have a real implementation.
+#
+# Names here are excluded from the generated stub file, so a name must not be
+# listed until something actually defines it.  Add a name in the same change
+# that adds its implementation, then regenerate:
+#
+#   python3 scripts/gen_stubs.py
+#
+# Grouped by the file that defines each function.
+
+# Sources/CPNG/spng_error.c
+png_benign_error
+png_chunk_benign_error
+png_chunk_error
+png_chunk_warning
+png_error
+png_longjmp
+png_set_longjmp_fn
+png_warning
+
+# Sources/PNGABI/Util.swift
+png_access_version_number
+png_build_grayscale_palette
+png_get_copyright
+png_get_header_ver
+png_get_header_version
+png_get_int_32
+png_get_libpng_ver
+png_get_uint_16
+png_get_uint_31
+png_get_uint_32
+png_save_int_32
+png_save_uint_16
+png_save_uint_32
+png_sig_cmp
