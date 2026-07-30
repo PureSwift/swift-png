@@ -71,6 +71,12 @@ public final class PngContext {
     /// significant bits chunk only says what the file did.
     public var shiftBits: SignificantBits?
 
+    /// The exponents a correction is computed from.
+    ///
+    /// The file's is taken from the image unless the client overrode it, which `png_set_gamma` does
+    /// unconditionally — that is what makes a client's request deterministic whatever the file said.
+    public var gamma = GammaState()
+
     /// The pipeline the requests resolve to, built once the header is known.
     var transforms: TransformProgram?
 
@@ -203,16 +209,44 @@ public final class PngContext {
             throw Diagnostic("png_read_update_info called before png_read_info")
         }
 
+        // The file's exponent comes from the image unless the client supplied one.
+        var gamma = self.gamma
+
+        if gamma.fileGamma == 0, info.isValid(InfoStore.Valid.gama) {
+            gamma.fileGamma = info.gamma
+        }
+
         let program = TransformProgram(
             flags: self.transformFlags,
             header: header,
             info: info,
             fillerValue: self.fillerValue,
-            fillerAfterColor: self.fillerAfterColor
+            fillerAfterColor: self.fillerAfterColor,
+            gamma: gamma
         )
+
+        // The correction table is built before the snapshot, because for an indexed image it changes
+        // what the snapshot should contain.
+        var gammaTable: GammaTable?
+
+        if let exponent = gamma.correctionExponent, GammaState.isSignificant(exponent) {
+            gammaTable = GammaTable(exponent: exponent)
+        }
+
+        // An indexed image is corrected in its palette rather than in its rows, since that is where
+        // its samples are.  The store's own palette is corrected, not just the copy the pipeline
+        // reads: a client that asks for the palette back gets the corrected entries, which is what
+        // the reference gives it and what makes the two consistent.
+        if let gammaTable, header.colorType.isIndexed {
+            info.applyGammaToPalette(gammaTable)
+        }
 
         self.transformInputs = TransformInputs(info)
         self.hasTransparency = info.isValid(InfoStore.Valid.trns)
+
+        if let gammaTable {
+            self.transformInputs.gammaTable = gammaTable
+        }
 
         // What the client asked for wins over what the file recorded: png_set_shift says how far to
         // move the samples, while the chunk only says what was done to them originally.
@@ -220,6 +254,7 @@ public final class PngContext {
             try TransformProgram.validateShift(shiftBits, header: header)
             self.transformInputs.significantBits = shiftBits
         }
+
         let shape = program.resultingShape(
             from: RowInfo(header),
             hasTransparency: info.isValid(InfoStore.Valid.trns)
