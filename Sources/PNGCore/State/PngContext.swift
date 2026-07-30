@@ -715,6 +715,27 @@ public final class PngContext {
         }
     }
 
+    /// How often the output is to be flushed, in rows; zero for never.
+    public var flushEveryRows = 0
+
+    /// Starts a chunk the client will fill in itself.
+    public func beginChunk(_ name: ChunkName, length: Int) throws {
+        try self.writer.beginClientChunk(name, length: length, context: self)
+    }
+
+    public func writeChunkData(_ bytes: UnsafeBufferPointer<UInt8>) {
+        self.writer.writeClientChunkData(bytes, context: self)
+    }
+
+    public func endChunk() {
+        self.writer.endClientChunk(context: self)
+    }
+
+    /// Empties the compressor and asks the caller to push whatever it is holding.
+    public func flushOutput() throws {
+        try self.writer.flush(context: self)
+    }
+
     public func writeEnd(_ info: InfoStore?) throws {
         try self.writer.writeEnd(info, context: self)
     }

@@ -79,6 +79,12 @@ public final class InfoStore {
     /// which cannot transfer control to the client.
     public var textEntries: [TextEntry] = []
 
+    /// The rows a client has handed over, for the calls that write or read a whole image at once.
+    ///
+    /// Not owned: the client allocated them and the client frees them.  Held as the pointer it gave
+    /// rather than copied, because `png_get_rows` has to hand back the same pointer.
+    public var rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?
+
     /// Storage for the tables the boundary builds in the published structures' layouts.
     ///
     /// Several accessors report a pointer to a structure rather than copying values out, and
