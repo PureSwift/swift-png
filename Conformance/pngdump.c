@@ -343,14 +343,22 @@ dump_row(png_uint_32 index, png_const_bytep row, size_t length)
    printf("\n");
 }
 
+/* How the rows are asked for.
+ *
+ * Both are ordinary client patterns and they run through different code, so both are
+ * compared.  For an interlaced image they are quite different: one hands the whole job to
+ * the library, the other loops the passes itself.
+ */
+enum read_mode { READ_ROWS, READ_IMAGE };
+
 static int
-dump_file(const char *path)
+dump_file(const char *path, enum read_mode mode)
 {
    FILE *file;
    png_structp png_ptr;
    png_infop info_ptr = NULL;
-   png_bytep row = NULL;
-   png_uint_32 height;
+   png_bytepp rows = NULL;
+   png_uint_32 height = 0;
    png_uint_32 index;
    size_t rowbytes;
 
@@ -390,8 +398,12 @@ dump_file(const char *path)
        */
       printf("aborted\n");
 
-      if (row != NULL)
-         free(row);
+      if (rows != NULL)
+      {
+         for (index = 0; index < height; ++index)
+            free(rows[index]);
+         free(rows);
+      }
 
       png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
       fclose(file);
@@ -409,9 +421,14 @@ dump_file(const char *path)
    height = png_get_image_height(png_ptr, info_ptr);
    rowbytes = png_get_rowbytes(png_ptr, info_ptr);
 
-   row = malloc(rowbytes != 0 ? rowbytes : 1);
+   /* Every row is allocated, in both modes.  An interlaced image is not decoded in row
+    * order — a pass writes scattered rows — so there is nowhere to put a row until all of
+    * them exist.  Cleared, because the passes fill them in over several sweeps and an
+    * untouched pixel has to read the same in both libraries.
+    */
+   rows = calloc(height, sizeof (png_bytep));
 
-   if (row == NULL)
+   if (rows == NULL)
    {
       printf("row allocation failed\n");
       png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
@@ -421,9 +438,40 @@ dump_file(const char *path)
 
    for (index = 0; index < height; ++index)
    {
-      png_read_row(png_ptr, row, NULL);
-      dump_row(index, row, rowbytes);
+      rows[index] = calloc(rowbytes != 0 ? rowbytes : 1, 1);
+
+      if (rows[index] == NULL)
+      {
+         printf("row allocation failed\n");
+         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+         fclose(file);
+         return 1;
+      }
    }
+
+   if (mode == READ_IMAGE)
+   {
+      png_read_image(png_ptr, rows);
+   }
+
+   else
+   {
+      /* The passes have to be read even when the client only wants the finished image, and
+       * this is how a client that reads row by row does it: ask how many sweeps are needed
+       * and make that many.
+       */
+      int passes = png_set_interlace_handling(png_ptr);
+      int pass;
+
+      for (pass = 0; pass < passes; ++pass)
+      {
+         for (index = 0; index < height; ++index)
+            png_read_row(png_ptr, rows[index], NULL);
+      }
+   }
+
+   for (index = 0; index < height; ++index)
+      dump_row(index, rows[index], rowbytes);
 
    png_read_end(png_ptr, info_ptr);
 
@@ -435,8 +483,10 @@ dump_file(const char *path)
 
    printf("done rows=%lu\n", (unsigned long)height);
 
-   free(row);
-   row = NULL;
+   for (index = 0; index < height; ++index)
+      free(rows[index]);
+   free(rows);
+   rows = NULL;
 
    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
    fclose(file);
@@ -452,11 +502,25 @@ dump_file(const char *path)
 int
 main(int argc, char **argv)
 {
-   if (argc != 2)
+   enum read_mode mode = READ_ROWS;
+
+   if (argc < 2 || argc > 3)
    {
-      fprintf(stderr, "usage: pngdump <file.png>\n");
+      fprintf(stderr, "usage: pngdump <file.png> [rows|image]\n");
       return 2;
    }
 
-   return dump_file(argv[1]);
+   if (argc == 3)
+   {
+      if (strcmp(argv[2], "image") == 0)
+         mode = READ_IMAGE;
+
+      else if (strcmp(argv[2], "rows") != 0)
+      {
+         fprintf(stderr, "pngdump: unknown mode %s\n", argv[2]);
+         return 2;
+      }
+   }
+
+   return dump_file(argv[1], mode);
 }
