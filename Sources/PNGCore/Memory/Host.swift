@@ -51,6 +51,16 @@ public struct Host {
     public typealias WarnChunk =
         @convention(c) (Owner?, UnsafePointer<UInt8>?, UInt, UInt32) -> Void
 
+    /// Hands one row to a transform the client installed, and reports the shape it
+    /// left behind: the bit depth in the low byte and the channel count in the next.
+    ///
+    /// The shape travels as plain numbers in both directions rather than through a
+    /// structure this side owns. A client may jump out of its own transform, and
+    /// anything owned by a frame here at that moment would be abandoned with it.
+    public typealias UserTransform = @convention(c) (
+        Owner?, UnsafeMutablePointer<UInt8>?, UInt32, UInt32, UInt32, UInt32
+    ) -> UInt32
+
     public let owner: Owner
     public let allocate: Allocate
     public let deallocate: Deallocate
@@ -58,13 +68,18 @@ public struct Host {
     public let warn: Warn
     public let warnChunk: WarnChunk
 
+    /// Absent for a caller with no way to install one, which is every caller but the
+    /// C boundary.
+    public let userTransform: UserTransform?
+
     public init(
         owner: Owner,
         allocate: Allocate,
         deallocate: Deallocate,
         read: Read,
         warn: Warn,
-        warnChunk: WarnChunk
+        warnChunk: WarnChunk,
+        userTransform: UserTransform? = nil
     ) {
         self.owner = owner
         self.allocate = allocate
@@ -72,6 +87,7 @@ public struct Host {
         self.read = read
         self.warn = warn
         self.warnChunk = warnChunk
+        self.userTransform = userTransform
     }
 }
 
