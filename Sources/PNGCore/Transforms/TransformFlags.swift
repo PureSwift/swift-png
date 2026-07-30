@@ -152,11 +152,26 @@ public struct TransformFlags: OptionSet, Sendable {
             flags.remove(.strip16)
         }
 
-        // Widening and narrowing at once is contradictory; the narrowing was asked for second in
-        // spirit, and the reference resolves it by dropping the widening.
-        if flags.contains(.strip16) || flags.contains(.scale16) {
-            flags.remove(.expand16)
+        // Widening samples that are narrower than sixteen bits makes each one two identical bytes, so
+        // reversing them within a sample would change nothing — and the reference takes the request
+        // away rather than doing work with no effect.
+        //
+        // Which stays invisible until something breaks the symmetry, and one thing does: the shift runs
+        // after the widening and moves each sample down, leaving two bytes that are no longer alike.
+        // The reference reverses nothing then either, because the request went away before the row was
+        // ever read.  A sixteen bit file keeps its request, even when narrowed and widened again on the
+        // way through — the decision is made from the file, not from the row.
+        if flags.contains(.expand16), header.bitDepth < 16 {
+            flags.remove(.swapBytes)
         }
+
+        // Widening and narrowing at once is not contradictory, and neither request is dropped: the
+        // narrowing happens first and the widening then puts back what it can.  A sixteen bit image
+        // asked for both comes out sixteen bit, each sample the byte the narrowing left, doubled.
+        //
+        // Which is worth stating because it looks like a mistake and is not.  A client that asks for
+        // both has said it wants sixteen bit samples and wants them derived through eight, and that is
+        // what it gets.
 
         return flags
     }
