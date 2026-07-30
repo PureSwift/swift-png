@@ -141,6 +141,17 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 ${SPNG_CORPUS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/known-transform-differences.txt)
 
+    # The same transforms drawn at random rather than from a list, which is what catches the
+    # combinations nobody thought to write down.  The seed is fixed so a failure here is a failure
+    # anyone can reproduce.
+    add_test(NAME differential_transform_fuzz
+        COMMAND ${SPNG_SCRIPTS}/fuzz_transforms.py
+                $<TARGET_FILE:pngdump>
+                $<TARGET_FILE:pngdump_reference>
+                ${SPNG_CORPUS}
+                20260730
+                400)
+
     add_test(NAME differential_decode
         COMMAND ${SPNG_SCRIPTS}/compare_decode.sh
                 $<TARGET_FILE:pngdump>
