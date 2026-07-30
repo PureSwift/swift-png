@@ -76,6 +76,7 @@ png_set_sig_bytes
 png_start_read_image
 
 # Sources/PNGABI/GetAPI.swift
+png_set_IHDR
 png_get_IHDR
 png_get_bit_depth
 png_get_channels
@@ -151,3 +152,7 @@ png_set_hIST
 png_set_iCCP
 png_set_sCAL_s
 png_set_tRNS
+
+# Sources/PNGABI/TextAPI.swift
+png_get_text
+png_set_text
