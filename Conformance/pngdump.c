@@ -107,6 +107,198 @@ dump_header(png_structp png_ptr, png_infop info_ptr)
        png_get_interlace_type(png_ptr, info_ptr));
 }
 
+/* Every metadata accessor, in a fixed order.
+ *
+ * Each line names the chunk and prints what the getter reported, including the bitmask it
+ * answered, since a getter claiming to have data is as much a part of the contract as the
+ * data itself.  A chunk that was absent prints nothing, so the diff shows a disagreement
+ * about presence as an added or removed line.
+ */
+static void
+dump_metadata(png_structp png_ptr, png_infop info_ptr)
+{
+   png_uint_32 res_x;
+   png_uint_32 res_y;
+   png_int_32 off_x;
+   png_int_32 off_y;
+   int unit;
+   int intent;
+   double gamma;
+   png_fixed_point fixed_gamma;
+   png_colorp palette;
+   int num_palette;
+   png_bytep trans_alpha;
+   int num_trans;
+   png_color_16p trans_color;
+   png_color_16p background;
+   png_color_8p sig_bit;
+   png_uint_16p histogram;
+   png_timep mod_time;
+   png_charp profile_name;
+   png_bytep profile;
+   png_uint_32 profile_length;
+   int compression_type;
+   png_uint_32 num_exif;
+   png_bytep exif;
+   png_charp scale_width;
+   png_charp scale_height;
+   png_byte primaries;
+   png_byte transfer;
+   png_byte matrix;
+   png_byte range;
+   png_uint_32 max_cll;
+   png_uint_32 max_fall;
+   png_fixed_point chrm[8];
+   png_uint_32 max_lum;
+   png_uint_32 min_lum;
+   size_t index;
+
+   if (png_get_gAMA_fixed(png_ptr, info_ptr, &fixed_gamma) != 0)
+      printf("gama fixed=%ld\n", (long)fixed_gamma);
+
+   if (png_get_gAMA(png_ptr, info_ptr, &gamma) != 0)
+      printf("gama double=%.5f\n", gamma);
+
+   if (png_get_cHRM_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3],
+       &chrm[4], &chrm[5], &chrm[6], &chrm[7]) != 0)
+   {
+      printf("chrm");
+      for (index = 0; index < 8; ++index)
+         printf(" %ld", (long)chrm[index]);
+      printf("\n");
+   }
+
+   if (png_get_sRGB(png_ptr, info_ptr, &intent) != 0)
+      printf("srgb intent=%d\n", intent);
+
+   if (png_get_sBIT(png_ptr, info_ptr, &sig_bit) != 0)
+      printf("sbit red=%d green=%d blue=%d gray=%d alpha=%d\n",
+          sig_bit->red, sig_bit->green, sig_bit->blue, sig_bit->gray, sig_bit->alpha);
+
+   if (png_get_PLTE(png_ptr, info_ptr, &palette, &num_palette) != 0)
+   {
+      printf("plte count=%d", num_palette);
+      for (index = 0; index < (size_t)num_palette; ++index)
+         printf(" %02x%02x%02x", palette[index].red, palette[index].green,
+             palette[index].blue);
+      printf("\n");
+   }
+
+   num_trans = 0;
+   trans_alpha = NULL;
+   trans_color = NULL;
+
+   if (png_get_tRNS(png_ptr, info_ptr, &trans_alpha, &num_trans, &trans_color) != 0)
+   {
+      printf("trns count=%d", num_trans);
+
+      if (trans_alpha != NULL)
+      {
+         for (index = 0; index < (size_t)num_trans; ++index)
+            printf(" %02x", trans_alpha[index]);
+      }
+
+      if (trans_color != NULL)
+      {
+         printf(" color=%d,%d,%d,%d,%d", trans_color->index, trans_color->red,
+             trans_color->green, trans_color->blue, trans_color->gray);
+      }
+
+      printf("\n");
+   }
+
+   if (png_get_bKGD(png_ptr, info_ptr, &background) != 0)
+      printf("bkgd index=%d red=%d green=%d blue=%d gray=%d\n",
+          background->index, background->red, background->green, background->blue,
+          background->gray);
+
+   if (png_get_hIST(png_ptr, info_ptr, &histogram) != 0)
+   {
+      printf("hist");
+      /* One entry per palette entry, so the palette decides how many to print. */
+      if (png_get_PLTE(png_ptr, info_ptr, &palette, &num_palette) != 0)
+      {
+         for (index = 0; index < (size_t)num_palette; ++index)
+            printf(" %u", histogram[index]);
+      }
+      printf("\n");
+   }
+
+   if (png_get_pHYs(png_ptr, info_ptr, &res_x, &res_y, &unit) != 0)
+      printf("phys x=%lu y=%lu unit=%d\n", (unsigned long)res_x, (unsigned long)res_y,
+          unit);
+
+   if (png_get_pHYs_dpi(png_ptr, info_ptr, &res_x, &res_y, &unit) != 0)
+      printf("phys dpi x=%lu y=%lu unit=%d\n", (unsigned long)res_x,
+          (unsigned long)res_y, unit);
+
+   printf("phys derived xm=%lu ym=%lu m=%lu xi=%lu yi=%lu i=%lu ratio=%.5f"
+       " ratio_fixed=%ld\n",
+       (unsigned long)png_get_x_pixels_per_meter(png_ptr, info_ptr),
+       (unsigned long)png_get_y_pixels_per_meter(png_ptr, info_ptr),
+       (unsigned long)png_get_pixels_per_meter(png_ptr, info_ptr),
+       (unsigned long)png_get_x_pixels_per_inch(png_ptr, info_ptr),
+       (unsigned long)png_get_y_pixels_per_inch(png_ptr, info_ptr),
+       (unsigned long)png_get_pixels_per_inch(png_ptr, info_ptr),
+       (double)png_get_pixel_aspect_ratio(png_ptr, info_ptr),
+       (long)png_get_pixel_aspect_ratio_fixed(png_ptr, info_ptr));
+
+   if (png_get_oFFs(png_ptr, info_ptr, &off_x, &off_y, &unit) != 0)
+      printf("offs x=%ld y=%ld unit=%d\n", (long)off_x, (long)off_y, unit);
+
+   printf("offs derived xp=%ld yp=%ld xu=%ld yu=%ld xi=%.5f yi=%.5f xif=%ld yif=%ld\n",
+       (long)png_get_x_offset_pixels(png_ptr, info_ptr),
+       (long)png_get_y_offset_pixels(png_ptr, info_ptr),
+       (long)png_get_x_offset_microns(png_ptr, info_ptr),
+       (long)png_get_y_offset_microns(png_ptr, info_ptr),
+       (double)png_get_x_offset_inches(png_ptr, info_ptr),
+       (double)png_get_y_offset_inches(png_ptr, info_ptr),
+       (long)png_get_x_offset_inches_fixed(png_ptr, info_ptr),
+       (long)png_get_y_offset_inches_fixed(png_ptr, info_ptr));
+
+   if (png_get_tIME(png_ptr, info_ptr, &mod_time) != 0)
+      printf("time %04d-%02d-%02d %02d:%02d:%02d\n", mod_time->year, mod_time->month,
+          mod_time->day, mod_time->hour, mod_time->minute, mod_time->second);
+
+   if (png_get_iCCP(png_ptr, info_ptr, &profile_name, &compression_type, &profile,
+       &profile_length) != 0)
+   {
+      printf("iccp name=%s compression=%d length=%lu", profile_name, compression_type,
+          (unsigned long)profile_length);
+      for (index = 0; index < (size_t)profile_length; ++index)
+         printf(" %02x", profile[index]);
+      printf("\n");
+   }
+
+   if (png_get_eXIf_1(png_ptr, info_ptr, &num_exif, &exif) != 0)
+   {
+      printf("exif length=%lu", (unsigned long)num_exif);
+      for (index = 0; index < (size_t)num_exif; ++index)
+         printf(" %02x", exif[index]);
+      printf("\n");
+   }
+
+   if (png_get_sCAL_s(png_ptr, info_ptr, &unit, &scale_width, &scale_height) != 0)
+      printf("scal unit=%d width=%s height=%s\n", unit, scale_width, scale_height);
+
+   if (png_get_cICP(png_ptr, info_ptr, &primaries, &transfer, &matrix, &range) != 0)
+      printf("cicp primaries=%d transfer=%d matrix=%d range=%d\n", primaries, transfer,
+          matrix, range);
+
+   if (png_get_cLLI_fixed(png_ptr, info_ptr, &max_cll, &max_fall) != 0)
+      printf("clli max_cll=%lu max_fall=%lu\n", (unsigned long)max_cll,
+          (unsigned long)max_fall);
+
+   if (png_get_mDCV_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3],
+       &chrm[4], &chrm[5], &chrm[6], &chrm[7], &max_lum, &min_lum) != 0)
+   {
+      printf("mdcv");
+      for (index = 0; index < 8; ++index)
+         printf(" %ld", (long)chrm[index]);
+      printf(" max=%lu min=%lu\n", (unsigned long)max_lum, (unsigned long)min_lum);
+   }
+}
+
 /* Rows are printed as hex.  Comparing them byte for byte is the point of the
  * exercise, and a hex dump keeps the diff pointing at the exact byte.
  */
@@ -184,6 +376,7 @@ dump_file(const char *path)
    png_read_info(png_ptr, info_ptr);
 
    dump_header(png_ptr, info_ptr);
+   dump_metadata(png_ptr, info_ptr);
 
    height = png_get_image_height(png_ptr, info_ptr);
    rowbytes = png_get_rowbytes(png_ptr, info_ptr);
@@ -204,7 +397,13 @@ dump_file(const char *path)
       dump_row(index, row, rowbytes);
    }
 
-   png_read_end(png_ptr, NULL);
+   png_read_end(png_ptr, info_ptr);
+
+   /* Again after the image data, since metadata is allowed on either side of it and a
+    * client that reads to the end expects to see both.
+    */
+   printf("after end\n");
+   dump_metadata(png_ptr, info_ptr);
 
    printf("done rows=%lu\n", (unsigned long)height);
 
