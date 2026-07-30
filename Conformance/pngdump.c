@@ -454,6 +454,24 @@ static void apply_background_white(png_structp p, png_infop i)
 static void apply_background_file(png_structp p, png_infop i)
 { compose_against(p, i, 128, 64, 192, PNG_BACKGROUND_GAMMA_FILE); }
 
+/* The alpha arrangements.
+ *
+ * Each also settles the output gamma, which is the API's easier way of defaulting the file's: a file
+ * with no gamma chunk is taken to have been encoded for the display just named.
+ */
+static void apply_alpha_png(png_structp p, png_infop i)
+{ (void)i; png_set_alpha_mode(p, PNG_ALPHA_PNG, 2.2); }
+static void apply_alpha_png_linear(png_structp p, png_infop i)
+{ (void)i; png_set_alpha_mode(p, PNG_ALPHA_PNG, 1.0); }
+static void apply_alpha_premultiplied(png_structp p, png_infop i)
+{ (void)i; png_set_alpha_mode(p, PNG_ALPHA_STANDARD, 2.2); }
+static void apply_alpha_premultiplied_linear(png_structp p, png_infop i)
+{ (void)i; png_set_alpha_mode(p, PNG_ALPHA_STANDARD, 1.0); }
+static void apply_alpha_optimized(png_structp p, png_infop i)
+{ (void)i; png_set_alpha_mode(p, PNG_ALPHA_OPTIMIZED, 2.2); }
+static void apply_alpha_broken(png_structp p, png_infop i)
+{ (void)i; png_set_alpha_mode(p, PNG_ALPHA_BROKEN, 2.2); }
+
 static void
 apply_shift(png_structp p, png_infop i)
 {
@@ -507,6 +525,12 @@ static const struct transform_entry transforms[] = {
    { "background_black", apply_background_black },
    { "background_white", apply_background_white },
    { "background_file", apply_background_file },
+   { "alpha_png", apply_alpha_png },
+   { "alpha_png_linear", apply_alpha_png_linear },
+   { "alpha_premultiplied", apply_alpha_premultiplied },
+   { "alpha_premultiplied_linear", apply_alpha_premultiplied_linear },
+   { "alpha_optimized", apply_alpha_optimized },
+   { "alpha_broken", apply_alpha_broken },
 };
 
 #define TRANSFORM_COUNT ((int)(sizeof transforms / sizeof transforms[0]))
