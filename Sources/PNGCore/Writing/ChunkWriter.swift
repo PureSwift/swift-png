@@ -113,4 +113,9 @@ extension Host {
 
         writeBytes(self.owner, bytes, UInt(count))
     }
+
+    /// Asks the caller to push what it has been given.
+    func flush() {
+        self.flushBytes?(self.owner)
+    }
 }

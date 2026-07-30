@@ -42,6 +42,9 @@ public struct Host {
     public typealias Write =
         @convention(c) (Owner?, UnsafeMutablePointer<UInt8>?, UInt) -> Void
 
+    /// Asks the caller to push whatever it has been given so far.
+    public typealias Flush = @convention(c) (Owner?) -> Void
+
     /// Reports a condition that does not stop the decode.
     ///
     /// Takes a length rather than expecting a terminator, because the messages
@@ -80,6 +83,7 @@ public struct Host {
 
     /// Absent for a caller that only reads.
     public let writeBytes: Write?
+    public let flushBytes: Flush?
 
     public init(
         owner: Owner,
@@ -89,7 +93,8 @@ public struct Host {
         warn: Warn,
         warnChunk: WarnChunk,
         userTransform: UserTransform? = nil,
-        writeBytes: Write? = nil
+        writeBytes: Write? = nil,
+        flushBytes: Flush? = nil
     ) {
         self.owner = owner
         self.allocate = allocate
@@ -99,6 +104,7 @@ public struct Host {
         self.warnChunk = warnChunk
         self.userTransform = userTransform
         self.writeBytes = writeBytes
+        self.flushBytes = flushBytes
     }
 }
 

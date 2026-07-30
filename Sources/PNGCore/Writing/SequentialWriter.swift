@@ -53,6 +53,15 @@ final class SequentialWriter {
     /// that does not must not have its text written twice.
     var textWritten = 0
 
+    /// How many rows have been written since the output was last pushed.
+    private var rowsSinceFlush = 0
+
+    /// A chunk the client is filling in itself, kept across the calls that fill it.
+    ///
+    /// The one piece of writer state that has to survive between calls rather than living on a frame,
+    /// because the client is doing the filling and decides when it is done.
+    private var clientChunk: ChunkWriter?
+
     /// Whether anything has been handed to the compressor yet.
     ///
     /// Distinguishes an image with no rows written from one part way through, which matters at the end:
@@ -168,6 +177,18 @@ final class SequentialWriter {
         try self.encodeAndCompress(row, stored: stored, header: header, context: context)
 
         self.rowIndex += 1
+        try self.flushIfDue(context: context)
+    }
+
+    /// Pushes the output when the client asked for that every so many rows.
+    private func flushIfDue(context: PngContext) throws {
+        guard context.flushEveryRows > 0 else { return }
+
+        self.rowsSinceFlush += 1
+
+        if self.rowsSinceFlush >= context.flushEveryRows {
+            try self.flush(context: context)
+        }
     }
 
     /// Filters one scanline and hands it to the compressor.
@@ -297,6 +318,30 @@ final class SequentialWriter {
         self.stage = .ended
     }
 
+    // -- chunks the client writes itself -------------------------------------
+
+    func beginClientChunk(_ name: ChunkName, length: Int, context: PngContext) throws {
+        try self.beginFile(context: context)
+
+        var writer = context.chunkWriter
+        writer.begin(name, length: length)
+        self.clientChunk = writer
+    }
+
+    func writeClientChunkData(_ bytes: UnsafeBufferPointer<UInt8>, context: PngContext) {
+        guard var writer = self.clientChunk, bytes.count > 0 else { return }
+
+        writer.data(bytes)
+        self.clientChunk = writer
+    }
+
+    func endClientChunk(context: PngContext) {
+        guard var writer = self.clientChunk else { return }
+
+        writer.end()
+        self.clientChunk = nil
+    }
+
     // -- the image data ------------------------------------------------------
 
     private func startImageData(context: PngContext) throws {
@@ -327,8 +372,26 @@ final class SequentialWriter {
         deflater.setInput(bytes)
 
         while !deflater.needsInput {
-            try self.drain(deflater, context: context, finishing: false)
+            try self.drain(deflater, context: context, ending: .none)
         }
+    }
+
+    /// Empties the compressor and asks the caller to push what it has.
+    ///
+    /// Both halves are needed and neither is enough: the compressor is holding bytes it has not
+    /// decided how to encode yet, and whatever the client writes through is holding bytes it has not
+    /// decided when to send.
+    func flush(context: PngContext) throws {
+        if let deflater = self.deflater, self.startedImageData, !deflater.isFinished {
+            var produced = 0
+
+            repeat {
+                produced = try self.drainOnce(deflater, context: context, ending: .flush)
+            } while produced > 0
+        }
+
+        context.host.flush()
+        self.rowsSinceFlush = 0
     }
 
     private func finishImageData(context: PngContext) throws {
@@ -337,7 +400,7 @@ final class SequentialWriter {
         deflater.setInput(UnsafeBufferPointer(start: nil, count: 0))
 
         while !deflater.isFinished {
-            try self.drain(deflater, context: context, finishing: true)
+            try self.drain(deflater, context: context, ending: .finish)
         }
 
         deflater.release()
@@ -352,24 +415,35 @@ final class SequentialWriter {
     private func drain(
         _ deflater: DeflateStream,
         context: PngContext,
-        finishing: Bool
+        ending: DeflateStream.Ending
     ) throws {
+        _ = try self.drainOnce(deflater, context: context, ending: ending)
+    }
+
+    @discardableResult
+    private func drainOnce(
+        _ deflater: DeflateStream,
+        context: PngContext,
+        ending: DeflateStream.Ending
+    ) throws -> Int {
         let capacity = context.inputBuffer.count
         let produced = try deflater.deflate(
             into: context.inputBuffer.bytes.baseAddress!,
             count: capacity,
-            finishing: finishing
+            ending: ending
         )
 
         // Nothing came back: the compressor is holding what it was given, which is what it does until
         // it has enough to work with.  An empty chunk would be legal and pointless.
-        guard produced > 0 else { return }
+        guard produced > 0 else { return 0 }
 
         var writer = context.chunkWriter
         writer.write(
             .idat,
             UnsafeBufferPointer(start: context.inputBuffer.bytes.baseAddress, count: produced)
         )
+
+        return produced
     }
 
     static func put32(_ bytes: UnsafeMutableBufferPointer<UInt8>, _ offset: Int, _ value: UInt32) {

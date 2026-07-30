@@ -53,6 +53,9 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
         },
         writeBytes: { owner, data, count in
             spng_c_call_write(owner?.pngStruct, data, size_t(count))
+        },
+        flushBytes: { owner in
+            spng_c_call_flush(owner?.pngStruct)
         }
     )
 }
