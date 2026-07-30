@@ -172,11 +172,52 @@ struct TransformTests {
         #expect(both.contains(.scale16))
         #expect(!both.contains(.strip16))
 
-        // Narrowing and widening at once: the narrowing wins.
+        // Narrowing and widening at once: neither is dropped.  The narrowing happens first and the
+        // widening puts back what it can, so the samples end up sixteen bit and derived through eight.
         let opposed = TransformFlags([.strip16, .expand16])
             .resolved(for: header, hasTransparency: false)
         #expect(opposed.contains(.strip16))
-        #expect(!opposed.contains(.expand16))
+        #expect(opposed.contains(.expand16))
+    }
+
+    /// Widening samples narrower than sixteen bits makes each one two identical bytes, so reversing
+    /// them within a sample would do nothing — and the request goes away rather than being carried.
+    ///
+    /// Only for a file that is not already sixteen bit: one that is keeps its request even when it is
+    /// narrowed and widened again on the way through, because the decision is made from the file.
+    @Test("Drops the byte reversal that widening would make pointless")
+    func dropsPointlessByteSwap() {
+        let widened = TransformFlags([.expand16, .swapBytes])
+            .resolved(for: self.header(depth: 8, colorType: 2), hasTransparency: false)
+        #expect(!widened.contains(.swapBytes))
+
+        let native = TransformFlags([.expand16, .swapBytes])
+            .resolved(for: self.header(depth: 16, colorType: 2), hasTransparency: false)
+        #expect(native.contains(.swapBytes))
+
+        let narrowedFirst = TransformFlags([.strip16, .expand16, .swapBytes])
+            .resolved(for: self.header(depth: 16, colorType: 2), hasTransparency: false)
+        #expect(narrowedFirst.contains(.swapBytes))
+    }
+
+    /// The three things a client can ask to be told about a pixel that had colour are two sticky bits
+    /// rather than one choice, so asking twice for different things silences both.
+    @Test("Accumulates the colour-loss requests rather than replacing them")
+    func accumulatesErrorActions() {
+        func after(_ actions: [RgbToGrayState.ErrorAction]) -> RgbToGrayState.ErrorAction {
+            var state = RgbToGrayState()
+            actions.forEach { state.request($0) }
+            return state.errorAction
+        }
+
+        #expect(after([.warn]) == .warn)
+        #expect(after([.error]) == .error)
+        #expect(after([.warn, .warn]) == .warn)
+        #expect(after([.none]) == .none)
+        #expect(after([.warn, .error]) == .none)
+        #expect(after([.error, .warn]) == .none)
+        #expect(after([.none, .warn]) == .none)
+        #expect(after([.warn, .none]) == .none)
     }
 
     /// Widening a low-depth greyscale image scales the samples rather than merely unpacking them, so
