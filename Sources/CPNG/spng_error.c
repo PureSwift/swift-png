@@ -243,6 +243,33 @@ spng_c_warning_bytes(png_const_structrp png_ptr, const char *message,
 }
 
 void
+spng_c_warning_chunk_bytes(png_const_structrp png_ptr, const char *message,
+    size_t length, png_uint_32 packed_name)
+{
+   png_structp mutable_ptr = (png_structp)png_ptr;
+   char staged[SPNG_MESSAGE_MAX];
+   char name[5];
+   size_t count = length;
+
+   if (mutable_ptr == NULL || message == NULL)
+      return;
+
+   name[0] = (char)((packed_name >> 24) & 0xFF);
+   name[1] = (char)((packed_name >> 16) & 0xFF);
+   name[2] = (char)((packed_name >> 8) & 0xFF);
+   name[3] = (char)(packed_name & 0xFF);
+   name[4] = '\0';
+
+   if (count > SPNG_MESSAGE_MAX - 1)
+      count = SPNG_MESSAGE_MAX - 1;
+
+   memcpy(staged, message, count);
+   staged[count] = '\0';
+
+   spng_c_chunk_warning(png_ptr, name, staged);
+}
+
+void
 spng_c_benign_error(png_const_structrp png_ptr, png_const_charp message)
 {
    png_benign_error(png_ptr, message);
