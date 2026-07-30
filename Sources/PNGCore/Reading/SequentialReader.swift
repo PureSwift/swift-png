@@ -38,8 +38,22 @@ final class SequentialReader {
 
     let lexer = ChunkLexer()
 
-    /// The row index the next call will produce.
+    /// How many scanlines of the current pass have been consumed.
     private(set) var rowIndex = 0
+
+    /// Which row of the whole image the next call corresponds to.
+    ///
+    /// Only meaningful when the client asked for the passes to be spread across full-width
+    /// rows.  In that arrangement a client sweeps every row of the image once per pass, and
+    /// most of those sweeps are over rows the pass does not contain, so this counts calls
+    /// rather than scanlines.
+    private(set) var imageRowIndex = 0
+
+    /// Which pass the next row belongs to, or zero for an image that is not interlaced.
+    ///
+    /// Empty passes are skipped rather than read from: a pass with no pixels is absent from
+    /// the stream, not present as nothing.
+    private(set) var pass = 0
 
     /// Set when the checksum of a chunk did not match. What to do about it is the
     /// client's choice, so it is recorded rather than acted on here.
@@ -132,33 +146,75 @@ final class SequentialReader {
             throw Diagnostic("Missing IHDR")
         }
 
-        guard !header.isInterlaced else {
-            throw Diagnostic("interlaced images are not supported yet")
-        }
+        // Sized for the widest pass, so one allocation serves all seven.  For an image that
+        // is not interlaced that is simply the image's own row.
+        let widest = header.isInterlaced
+            ? Adam7.widestRowBytes(header: header)
+            : header.rowBytes
 
         // One extra byte because the reconstruction reads a filter byte ahead of
         // each scanline.
-        try context.reserve(\.rowBuffer, header.rowBytes + 1)
-        try context.reserve(\.previousRow, header.rowBytes)
+        try context.reserve(\.rowBuffer, widest + 1)
+        try context.reserve(\.previousRow, widest)
         try context.reserve(\.inputBuffer, Self.inputBufferSize)
-
-        // The filters that refer upwards treat the row above the first as zeroes.
-        context.previousRow.zero()
 
         context.inflater = try InflateStream()
 
         self.phase = .rows
+        self.pass = 0
         self.rowIndex = 0
+
+        if header.isInterlaced {
+            self.skipEmptyPasses(header: header)
+        }
+
+        // The filters that refer upwards treat the row above the first as zeroes, and each
+        // pass starts afresh: a pass's first row has no predecessor either.
+        context.previousRow.zero()
     }
 
-    /// Produces the next scanline into `destination`.
+    /// Advances past any pass this image is too small to contain.
+    private func skipEmptyPasses(header: Header) {
+        while self.pass < Adam7.passCount,
+              Adam7.isEmpty(
+                  pass: self.pass,
+                  imageWidth: header.width,
+                  imageHeight: header.height
+              ) {
+            self.pass += 1
+        }
+    }
+
+    /// How many scanlines the current pass has.
+    private func rowsInCurrentPass(header: Header) -> Int {
+        guard header.isInterlaced else { return header.height }
+        guard self.pass < Adam7.passCount else { return 0 }
+
+        return Adam7.height(ofPass: self.pass, imageHeight: header.height)
+    }
+
+    /// How many bytes a scanline of the current pass occupies.
+    private func bytesInCurrentPass(header: Header) -> Int {
+        guard header.isInterlaced else { return header.rowBytes }
+        guard self.pass < Adam7.passCount else { return 0 }
+
+        return Adam7.rowBytes(ofPass: self.pass, header: header)
+    }
+
+    /// Whether every pass has been read.
+    var isImageComplete: Bool {
+        self.phase == .imageEnd || self.phase == .streamEnd
+    }
+
+    /// Decodes one scanline of the current pass into the row buffer, leaving it there.
     ///
-    /// `destination` is the client's buffer, so it is written only once the row is
-    /// complete and correct.
-    func readRow(
-        into destination: UnsafeMutablePointer<UInt8>?,
-        context: PngContext
-    ) throws {
+    /// Returns how many bytes of it are meaningful, which for an interlaced image is the
+    /// current pass's width rather than the image's.
+    ///
+    /// Advances nothing but the scanline count. What a row means to the client differs
+    /// between the three ways of reading, so moving to the next pass is the caller's job.
+    @discardableResult
+    private func decodeScanline(context: PngContext) throws -> Int {
         if self.phase == .header {
             try self.startRows(context: context)
         }
@@ -167,11 +223,11 @@ final class SequentialReader {
             throw Diagnostic("no image data to read")
         }
 
-        guard self.rowIndex < header.height else {
+        guard self.rowIndex < self.rowsInCurrentPass(header: header) else {
             throw Diagnostic("all rows have already been read")
         }
 
-        let stored = header.rowBytes
+        let stored = self.bytesInCurrentPass(header: header)
 
         // The filter byte and the scanline are one contiguous run in the stream.
         try self.inflateExactly(count: stored + 1, context: context)
@@ -182,41 +238,243 @@ final class SequentialReader {
             throw Diagnostic("bad adaptive filter value")
         }
 
-        let row = UnsafeMutableBufferPointer(
-            start: raw.baseAddress! + 1,
-            count: stored
-        )
+        let row = UnsafeMutableBufferPointer(start: raw.baseAddress! + 1, count: stored)
 
         Defilter.apply(
             filter,
             to: row,
-            previous: UnsafeBufferPointer(context.previousRow.bytes),
+            previous: UnsafeBufferPointer(
+                start: context.previousRow.bytes.baseAddress,
+                count: stored
+            ),
             stride: header.filterStride
         )
 
         // This row becomes the reference for the next one, and it has to be the
         // bytes as stored: the encoder computed its filters against those, so
         // discarding anything first would decode the next row wrongly.
-        context.previousRow.bytes.baseAddress!.update(
-            from: row.baseAddress!,
-            count: stored
-        )
+        context.previousRow.bytes.baseAddress!.update(from: row.baseAddress!, count: stored)
 
-        // Only what the client sees is tidied.  A row narrower than a whole number
-        // of bytes leaves spare bits the format says nothing about, and clearing
-        // them means a client gets the same bytes whatever the encoder wrote there.
-        if let mask = header.trailingBitMask, stored > 0 {
+        // Only what the client sees is tidied.  A row narrower than a whole number of bytes
+        // leaves spare bits the format says nothing about, and clearing them means a client
+        // gets the same bytes whatever the encoder wrote there.
+        //
+        // Computed for the pass rather than the image, since a pass is narrower and its rows
+        // end at a different bit.
+        if stored > 0, let mask = self.trailingBitMask(header: header) {
             row[stored - 1] &= mask
-        }
-
-        if let destination {
-            destination.update(from: row.baseAddress!, count: stored)
         }
 
         self.rowIndex += 1
 
-        if self.rowIndex == header.height {
+        return stored
+    }
+
+    /// Keeps only the bits of the current row's last byte that belong to the image.
+    private func trailingBitMask(header: Header) -> UInt8? {
+        guard header.isInterlaced else { return header.trailingBitMask }
+
+        let width = Adam7.width(ofPass: self.pass, imageWidth: header.width)
+        let used = (width * header.pixelDepth) % 8
+
+        guard used != 0 else { return nil }
+
+        return UInt8(truncatingIfNeeded: 0xFF << (8 - used))
+    }
+
+    /// Moves to the next pass, or finishes the image when there is none.
+    private func advancePass(header: Header, context: PngContext) {
+        self.pass += 1
+        self.rowIndex = 0
+        self.imageRowIndex = 0
+        self.skipEmptyPasses(header: header)
+
+        if self.pass >= Adam7.passCount {
             self.phase = .imageEnd
+            return
+        }
+
+        // Each pass reconstructs from its own notional row of zeroes, so the reference row is
+        // cleared rather than carried over from the pass that just ended.
+        context.previousRow.zero()
+    }
+
+    /// Whether a row of the image is one the current pass carries.
+    private func passContains(imageRow: Int) -> Bool {
+        guard self.pass < Adam7.passCount else { return false }
+
+        let start = Adam7.rowStart[self.pass]
+
+        guard imageRow >= start else { return false }
+
+        return (imageRow - start) % Adam7.rowStride[self.pass] == 0
+    }
+
+    /// Writes a decoded pass scanline into a full-width row at the columns it belongs to.
+    ///
+    /// Everything between those columns is left as it was, which is what lets a client read
+    /// all seven passes into the same rows and end up with the whole picture.
+    private func spread(
+        _ row: UnsafeBufferPointer<UInt8>,
+        ofPass pass: Int,
+        into destination: UnsafeMutablePointer<UInt8>,
+        header: Header
+    ) {
+        let full = UnsafeMutableBufferPointer(start: destination, count: header.rowBytes)
+        let width = Adam7.width(ofPass: pass, imageWidth: header.width)
+
+        for column in 0 ..< width {
+            PixelCopy.copy(
+                from: row,
+                at: column,
+                to: full,
+                at: Adam7.imageColumn(ofPass: pass, passColumn: column),
+                pixelDepth: header.pixelDepth
+            )
+        }
+    }
+
+    /// The scanline last decoded, as it sits in the row buffer.
+    private func decodedRow(count: Int, context: PngContext) -> UnsafeBufferPointer<UInt8> {
+        UnsafeBufferPointer(start: context.rowBuffer.bytes.baseAddress! + 1, count: count)
+    }
+
+    /// Produces the next row into `destination`.
+    ///
+    /// What a row means depends on the image and on what the client asked for. For an image
+    /// that is not interlaced it is one scanline. For an interlaced one it is a scanline of
+    /// the current pass, which is narrower — unless the client called for the passes to be
+    /// spread, in which case a call stands for one row of the whole image and only the rows
+    /// the pass actually carries consume anything from the stream.
+    ///
+    /// That last arrangement is the one the reference documents, and it is why a client can
+    /// sweep every row of the image seven times without knowing which rows are in which pass.
+    ///
+    /// `destination` is the client's buffer, so it is written only once the row is complete
+    /// and correct.
+    func readRow(
+        into destination: UnsafeMutablePointer<UInt8>?,
+        context: PngContext
+    ) throws {
+        if self.phase == .header {
+            try self.startRows(context: context)
+        }
+
+        guard let header = context.header else {
+            throw Diagnostic("no image data to read")
+        }
+
+        guard header.isInterlaced else {
+            let stored = try self.decodeScanline(context: context)
+
+            if let destination {
+                destination.update(
+                    from: self.decodedRow(count: stored, context: context).baseAddress!,
+                    count: stored
+                )
+            }
+
+            if self.rowIndex >= header.height {
+                self.phase = .imageEnd
+            }
+
+            return
+        }
+
+        guard context.spreadsInterlacedRows else {
+            // The client is placing the pass's pixels itself, so it gets the subimage row as
+            // it stands and is responsible for calling the right number of times per pass.
+            let sourcePass = self.pass
+            let stored = try self.decodeScanline(context: context)
+
+            if let destination {
+                destination.update(
+                    from: self.decodedRow(count: stored, context: context).baseAddress!,
+                    count: stored
+                )
+            }
+
+            if self.rowIndex >= Adam7.height(ofPass: sourcePass, imageHeight: header.height) {
+                self.advancePass(header: header, context: context)
+            }
+
+            return
+        }
+
+        // Sweeps left over after the last pass are ignored rather than refused.  A client
+        // following the documented loop makes seven of them whatever the image is, and an
+        // image small enough to have empty passes runs out of data before it runs out of
+        // sweeps: a single pixel is carried entirely by the first pass, so six of the seven
+        // sweeps over it have nothing to do.
+        guard self.phase == .rows else { return }
+
+        // A sweep over every row of the image.  Most calls in most passes fall on rows the
+        // pass does not carry, and those consume nothing.
+        if self.passContains(imageRow: self.imageRowIndex) {
+            let sourcePass = self.pass
+            let stored = try self.decodeScanline(context: context)
+
+            if let destination {
+                self.spread(
+                    self.decodedRow(count: stored, context: context),
+                    ofPass: sourcePass,
+                    into: destination,
+                    header: header
+                )
+            }
+        }
+
+        self.imageRowIndex += 1
+
+        if self.imageRowIndex >= header.height {
+            self.advancePass(header: header, context: context)
+        }
+    }
+
+    /// Decodes the whole image into `rows`, one entry per row of the image.
+    ///
+    /// Interlacing is resolved here rather than left to the client: each pass's pixels are
+    /// scattered to the rows and columns they belong to, so what the client is left with is
+    /// the picture rather than seven subimages.
+    func readImage(
+        rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
+        context: PngContext
+    ) throws {
+        if self.phase == .header {
+            try self.startRows(context: context)
+        }
+
+        guard let header = context.header else {
+            throw Diagnostic("no image data to read")
+        }
+
+        guard header.isInterlaced else {
+            for index in 0 ..< header.height {
+                try self.readRow(into: rows[index], context: context)
+            }
+            return
+        }
+
+        while self.pass < Adam7.passCount, self.phase == .rows {
+            let sourcePass = self.pass
+            let passRows = Adam7.height(ofPass: sourcePass, imageHeight: header.height)
+
+            for passRow in 0 ..< passRows {
+                let stored = try self.decodeScanline(context: context)
+
+                let imageRow = Adam7.imageRow(ofPass: sourcePass, passRow: passRow)
+
+                if let destination = rows[imageRow] {
+                    self.spread(
+                        self.decodedRow(count: stored, context: context),
+                        ofPass: sourcePass,
+                        into: destination,
+                        header: header
+                    )
+                }
+            }
+
+            self.advancePass(header: header, context: context)
         }
     }
 
