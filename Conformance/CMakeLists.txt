@@ -111,6 +111,27 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
     add_custom_target(spng_corpus DEPENDS ${SPNG_CORPUS}/.stamp)
     add_dependencies(pngdump spng_corpus)
 
+    # The setters, which the decode comparison never reaches: a decoded file arrives through
+    # the parsers, never through png_set_gAMA and its neighbours.
+    add_executable(metadata_roundtrip metadata_roundtrip.c)
+    target_link_libraries(metadata_roundtrip PRIVATE png16)
+
+    add_executable(metadata_roundtrip_reference metadata_roundtrip.c)
+    target_include_directories(metadata_roundtrip_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(metadata_roundtrip_reference PRIVATE
+        ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(metadata_roundtrip BEFORE PRIVATE
+            ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_test(NAME metadata_roundtrip
+        COMMAND ${SPNG_SCRIPTS}/compare_output.sh
+                $<TARGET_FILE:metadata_roundtrip>
+                $<TARGET_FILE:metadata_roundtrip_reference>)
+
     add_test(NAME differential_decode
         COMMAND ${SPNG_SCRIPTS}/compare_decode.sh
                 $<TARGET_FILE:pngdump>
