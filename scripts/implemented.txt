@@ -158,3 +158,25 @@ png_set_tRNS
 # Sources/PNGABI/TextAPI.swift
 png_get_text
 png_set_text
+
+# Sources/PNGABI/TransformAPI.swift
+png_read_update_info
+png_set_add_alpha
+png_set_bgr
+png_set_expand
+png_set_expand_16
+png_set_expand_gray_1_2_4_to_8
+png_set_filler
+png_set_gray_to_rgb
+png_set_invert_alpha
+png_set_invert_mono
+png_set_packing
+png_set_packswap
+png_set_palette_to_rgb
+png_set_scale_16
+png_set_shift
+png_set_strip_16
+png_set_strip_alpha
+png_set_swap
+png_set_swap_alpha
+png_set_tRNS_to_alpha
