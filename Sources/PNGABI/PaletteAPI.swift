@@ -119,15 +119,16 @@ public func png_get_tRNS(
     query(info_ptr, 0) { info in
         guard info.isValid(PNG_INFO_tRNS) else { return 0 }
 
-        let hasTable = info.transparentAlpha.address != nil
+        let hasTable = info.transparentCount > 0 && info.transparentAlpha.address != nil
 
-        if let address = info.transparentAlpha.address {
+        if hasTable, let address = info.transparentAlpha.address {
             trans_alpha?.pointee = address
-            num_trans?.pointee = Int32(info.transparentAlpha.count)
+            num_trans?.pointee = Int32(info.transparentCount)
         } else {
-            // A non-indexed image has a colour rather than a table, and the reference still
-            // reports a count of one.
-            num_trans?.pointee = 1
+            // A non-indexed image has a colour rather than a table, and the reference still reports a
+            // count of one — unless the transparency has already been folded into a channel, in which
+            // case there is nothing left to count.
+            num_trans?.pointee = info.transparencyConsumed ? 0 : 1
         }
 
         // The colour is reported either way.  For an indexed image it is zeroed rather than
