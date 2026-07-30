@@ -853,3 +853,132 @@ struct ComposeTests {
         #expect(palette[2].blue == 90)
     }
 }
+
+@Suite("Alpha arrangements")
+struct AlphaModeTests {
+    /// The curves for a file encoded at 1/2.2 shown on a display of 2.2.
+    ///
+    /// The eight bit entries these produce are the ones the reference was probed for: a sample of 50
+    /// is 7 in light, seven eighths of a coverage of 150 leaves 4, and 4 comes back as 39.
+    private let toLinear = GammaTable(exponent: 220_000)
+    private let fromLinear = GammaTable(exponent: 45_455)
+    private let corrected = GammaTable(exponent: GammaState.one)
+
+    private func arrange(
+        _ pixels: [UInt8],
+        width: Int = 1,
+        colorType: ColorType = .grayscaleAlpha,
+        channels: Int = 2,
+        bitDepth: Int = 8,
+        mode: AlphaMode,
+        withCurves: Bool = true
+    ) -> [UInt8] {
+        var bytes = pixels
+        let shape = RowInfo(
+            width: width,
+            bitDepth: bitDepth,
+            colorType: colorType,
+            channels: channels
+        )
+
+        bytes.withUnsafeMutableBufferPointer { row in
+            Transform.alphaMode(
+                row,
+                shape,
+                mode: mode,
+                toLinear: withCurves ? self.toLinear : nil,
+                fromLinear: withCurves ? self.fromLinear : nil,
+                corrected: withCurves ? self.corrected : nil
+            )
+        }
+
+        return bytes
+    }
+
+    /// Multiplying colour by coverage is blending against black, so the arithmetic is the blend's and
+    /// so is the divisor: 255, not 256.
+    @Test("Multiplies by coverage when there is no curve")
+    func multipliesWithoutACurve() {
+        #expect(
+            self.arrange([200, 128], mode: .premultiplied, withCurves: false) == [100, 128]
+        )
+        #expect(
+            self.arrange([200, 255], mode: .premultiplied, withCurves: false) == [200, 255]
+        )
+        #expect(
+            self.arrange([200, 0], mode: .premultiplied, withCurves: false) == [0, 0]
+        )
+    }
+
+    /// Unlike compositing, which consumes the coverage, this keeps it: the client is being handed
+    /// colour and coverage in a different relationship, not an image with the coverage spent.
+    @Test("Keeps the alpha channel")
+    func keepsAlpha() {
+        for mode in [AlphaMode.premultiplied, .optimized] {
+            #expect(self.arrange([200, 128], mode: mode)[1] == 128, "\(mode)")
+        }
+    }
+
+    /// The three arrangements differ in exactly two places — whether the blend is encoded again, and
+    /// whether the coverage is put through the display's curve — and this pins both at once against
+    /// values taken from the reference.
+    @Test("Differs between the arrangements only in the encoding")
+    func arrangementsDiffer() {
+        #expect(self.arrange([50, 150], mode: .premultiplied) == [39, 150])
+        #expect(self.arrange([50, 150], mode: .optimized) == [4, 150])
+        #expect(self.arrange([50, 150], mode: .broken) == [39, 200])
+    }
+
+    /// A pixel that needs no blending is corrected once rather than taken to light and back, which is
+    /// the only way to avoid losing the low bits to a round trip.
+    @Test("Corrects an opaque pixel rather than round tripping it")
+    func opaqueIsCorrectedOnce() {
+        for value in [1, 50, 128, 254] as [UInt8] {
+            #expect(
+                self.arrange([value, 255], mode: .premultiplied)
+                    == [self.corrected.values[Int(value)], 255],
+                "opaque \(value)"
+            )
+        }
+    }
+
+    @Test("Leaves nothing of a fully transparent pixel")
+    func transparentIsBlack() {
+        #expect(self.arrange([200, 0], mode: .premultiplied) == [0, 0])
+        #expect(self.arrange([200, 0], mode: .optimized) == [0, 0])
+    }
+
+    /// The format's own arrangement is the identity, whatever else is in force.
+    @Test("Leaves the row alone for the format's own arrangement")
+    func pngModeIsIdentity() {
+        #expect(self.arrange([50, 150], mode: .png) == [50, 150])
+    }
+
+    /// Nothing to rearrange without a coverage channel, and nothing to correct either: an image with
+    /// no alpha is the ordinary gamma step's business, not this one's.
+    @Test("Leaves a row with no coverage alone")
+    func withoutAlphaIsUntouched() {
+        #expect(
+            self.arrange(
+                [50, 100, 150],
+                colorType: .rgb,
+                channels: 3,
+                mode: .premultiplied
+            ) == [50, 100, 150]
+        )
+    }
+
+    /// Coverage is monotonic here as it is in a blend: more of the pixel can never move the result
+    /// away from the pixel.
+    @Test("Moves steadily from black to the pixel")
+    func isMonotonic() {
+        var previous = -1
+
+        for alpha in 0 ... 255 {
+            let result = self.arrange([200, UInt8(alpha)], mode: .optimized)
+
+            #expect(Int(result[0]) >= previous, "coverage \(alpha)")
+            previous = Int(result[0])
+        }
+    }
+}
