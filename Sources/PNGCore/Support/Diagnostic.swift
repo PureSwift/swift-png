@@ -16,7 +16,11 @@
 /// Deliberately not an `Error` carrying references: the value has to be
 /// constructible without allocating, since some failures are reported while
 /// recovering from a failed allocation.
-public struct Diagnostic: Error, Sendable {
+/// `Error` requires `Sendable`, and the borrowed message is a raw pointer, which the
+/// compiler cannot see is safe to share. It is: the only text ever borrowed comes from
+/// a decompressor's table of static strings, which outlives every use and is never
+/// written.
+public struct Diagnostic: Error, @unchecked Sendable {
     /// Whether the condition is fatal, or recoverable and reportable as a
     /// warning.
     public enum Severity: Sendable {
@@ -30,6 +34,15 @@ public struct Diagnostic: Error, Sendable {
     public let message: StaticString
     public let severity: Severity
 
+    /// Text from somewhere other than this library, used instead of ``message``
+    /// when present.
+    ///
+    /// The decompressor reports its own faults, and a client sees those words, so
+    /// they are passed through rather than replaced with a summary of our own. The
+    /// pointer must address storage that outlives the report, which is true of the
+    /// static strings a decompressor returns.
+    public let borrowedMessage: UnsafePointer<CChar>?
+
     /// The four-character chunk name to prefix the message with, when the
     /// failure is attributable to a specific chunk.
     public let chunk: ChunkName?
@@ -42,5 +55,21 @@ public struct Diagnostic: Error, Sendable {
         self.message = message
         self.severity = severity
         self.chunk = chunk
+        self.borrowedMessage = nil
+    }
+
+    /// A failure described by text this library did not author.
+    ///
+    /// `message` is the fallback for when the borrowed text is absent.
+    public init(
+        borrowing borrowedMessage: UnsafePointer<CChar>?,
+        or message: StaticString,
+        severity: Severity = .error,
+        chunk: ChunkName? = nil
+    ) {
+        self.message = message
+        self.severity = severity
+        self.chunk = chunk
+        self.borrowedMessage = borrowedMessage
     }
 }
