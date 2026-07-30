@@ -91,6 +91,11 @@ static const struct image_case cases[] = {
     */
    { "text_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 3 },
 
+   /* Flushed every other row, which cuts the compressed stream into pieces at points the encoder
+    * would not otherwise have chosen — and must still decode to the same picture.
+    */
+   { "flushed",      13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 4 },
+
    { "meta_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 1 },
    { "meta_gray",    13,  7, 8, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1, 1 },
    { "meta_palette",  9,  3, 8, PNG_COLOR_TYPE_PALETTE,   0, -1, -1, -1, 1 },
@@ -237,6 +242,8 @@ static int write_file(const char *path, const struct image_case *c)
 
       png_set_PLTE(p, i, palette, entries);
    }
+
+   if (c->metadata == 4) png_set_flush(p, 2);
 
    if (c->metadata == 3)
    {
