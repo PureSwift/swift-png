@@ -97,15 +97,26 @@ final class DeflateStream {
         #endif
     }
 
+    /// How much a call is asking the stream to give up.
+    ///
+    /// Compressing well means holding on to what you have been given until you have enough of it to
+    /// find the repetitions, so a compressor produces nothing for a while by design.  These are the
+    /// two ways of asking it to stop holding: one that ends the stream, and one that only empties it,
+    /// for a client that wants the bytes it has so far to reach whatever is reading them.
+    enum Ending {
+        case none
+        case flush
+        case finish
+    }
+
     /// Compresses into `destination`, returning how many bytes were produced.
     ///
-    /// `finishing` says there is no more input coming, which is what makes the stream write out its
-    /// last block and its check value.  Until then a result smaller than `count` simply means the
-    /// stream is holding on to what it has been given, which is what a compressor does.
+    /// A result smaller than `count` with no ending asked for simply means the stream is holding on to
+    /// what it has been given, which is what a compressor does.
     func deflate(
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int,
-        finishing: Bool = false
+        ending: Ending = .none
     ) throws -> Int {
         guard count > 0 else { return 0 }
 
@@ -113,7 +124,15 @@ final class DeflateStream {
         self.stream.next_out = destination
         self.stream.avail_out = UInt32(count)
 
-        let status = CZlib.deflate(&self.stream, finishing ? Z_FINISH : Z_NO_FLUSH)
+        let mode: Int32
+
+        switch ending {
+        case .none: mode = Z_NO_FLUSH
+        case .flush: mode = Z_SYNC_FLUSH
+        case .finish: mode = Z_FINISH
+        }
+
+        let status = CZlib.deflate(&self.stream, mode)
 
         switch status {
         case Z_OK, Z_BUF_ERROR:
