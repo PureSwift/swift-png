@@ -838,6 +838,17 @@ main(int argc, char **argv)
       return 2;
    }
 
+   /* The names this build understands, so that anything driving it does not have to keep its own
+    * copy of the list and drift out of step with this one.
+    */
+   if (strcmp(argv[1], "--transforms") == 0)
+   {
+      for (unsigned k = 0; k < sizeof transforms / sizeof *transforms; k++)
+         printf("%s\n", transforms[k].name);
+
+      return 0;
+   }
+
    if (argc >= 3)
    {
       if (strcmp(argv[2], "image") == 0)
