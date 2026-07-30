@@ -115,6 +115,16 @@ alpha_premultiplied,gray_to_rgb
 alpha_premultiplied,strip_16
 alpha_broken,bgr
 alpha_optimized,expand
+user_invert
+user_widen
+user_first_channel
+user_invert,expand
+user_invert,gray_to_rgb
+user_invert,strip_16
+user_invert,bgr
+user_first_channel,expand
+user_widen,gray_1_2_4_to_8
+gamma_bright,user_invert
 gamma_bright,expand
 gamma_bright,gray_to_rgb
 gamma_bright,strip_alpha
@@ -175,6 +185,8 @@ gray_to_rgb,background
 gamma_bright,background
 expand,alpha_premultiplied
 gray_to_rgb,alpha_premultiplied
+expand,user_invert
+bgr,user_invert
 expand,gamma_bright
 gray_to_rgb,gamma_bright
 strip_16,gamma_dark
