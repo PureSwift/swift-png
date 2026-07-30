@@ -93,12 +93,6 @@ png_get_compression_buffer_size(png_const_structrp png_ptr)
    png_error(png_ptr, "png_get_compression_buffer_size is not implemented");
 }
 
-png_byte PNGAPI
-png_get_current_pass_number(png_const_structrp spng_arg0)
-{
-   png_error(spng_arg0, "png_get_current_pass_number is not implemented");
-}
-
 png_uint_32 PNGAPI
 png_get_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *exif)
 {
@@ -488,12 +482,6 @@ void PNGAPI
 png_set_gray_to_rgb(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_set_gray_to_rgb is not implemented");
-}
-
-int PNGAPI
-png_set_interlace_handling(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_set_interlace_handling is not implemented");
 }
 
 void PNGAPI
