@@ -92,6 +92,18 @@ the eight bit path truncates and the sixteen bit path adds a half first. Nothing
 asymmetry and it shows on almost every pixel, so it was found by arithmetic rather than by reading —
 computing both candidates for one pixel and seeing which the reference agreed with.
 
+Averaging samples at all is only meaningful on light levels, and a file's samples are not light
+levels: they carry the file's own curve. So when a gamma correction is in force the conversion decodes
+each sample to linear, averages there, and re-encodes — and the correction then belongs to the
+conversion rather than to the separate gamma step, which would otherwise apply it twice. Four
+consequences of that fall out of the comparison rather than out of the design. The sum rounds on this
+path where the plain sum truncates. A pixel that was already grey skips the round trip and takes the
+combined correction directly, which is a different answer because the trip through eight bit linear
+loses precision. An indexed image's palette is left uncorrected, since the conversion will correct it
+as it averages. And asking for the conversion suppresses the gamma step even on a greyscale image
+where the conversion does not run — so a client asking for both on such an image gets no gamma at all,
+which is peculiar, but is what clients see.
+
 Gamma is the one place where agreeing to the last bit is both the point and straightforwardly
 reachable, because the reference build computes it in double precision rather than through its
 fixed-point logarithm path — so the arithmetic is reproducible rather than a reimplementation of an
