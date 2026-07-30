@@ -128,6 +128,11 @@ public func png_get_tRNS(
             // A non-indexed image has a colour rather than a table, and the reference still reports a
             // count of one — unless the transparency has already been folded into a channel, in which
             // case there is nothing left to count.
+            //
+            // The table pointer is cleared rather than left as the client had it, and that matters
+            // more than it looks: the count is reported either way, so a client that reads the table
+            // because the count is not zero reads whatever was on its stack.
+            trans_alpha?.pointee = nil
             num_trans?.pointee = info.transparencyConsumed ? 0 : 1
         }
 
