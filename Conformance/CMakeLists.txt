@@ -132,6 +132,26 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:metadata_roundtrip>
                 $<TARGET_FILE:metadata_roundtrip_reference>)
 
+    # The writer, which cannot be checked by comparing files: two correct encoders need not agree on
+    # the filter each row chose or on how the compressed stream is cut into chunks.  What is compared
+    # is what the files mean, and each library is also made to read the other's.
+    add_executable(pngwrite pngwrite.c)
+    target_link_libraries(pngwrite PRIVATE png16)
+
+    add_executable(pngwrite_reference pngwrite.c)
+    target_include_directories(pngwrite_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngwrite_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngwrite BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_test(NAME differential_write
+        COMMAND ${SPNG_SCRIPTS}/compare_write.sh
+                $<TARGET_FILE:pngwrite>
+                $<TARGET_FILE:pngwrite_reference>)
+
     # The transforms, over combinations rather than one at a time: the interesting defects are in
     # the interactions, and in whether the order the client asked in leaks into the result.
     add_test(NAME differential_transforms
