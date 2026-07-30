@@ -33,12 +33,14 @@ private func updateAllocating(
 
     do {
         try body(info)
-    } catch {
+    } catch let diagnostic as Diagnostic {
         // The published signature has no way to report a failure, so it goes through the
         // control structure's error path, as every other failure does.
-        if let png_ptr {
-            spng_c_error(png_structp(mutating: png_ptr), "out of memory")
-        }
+        guard let png_ptr else { return }
+        report(diagnostic, to: png_structp(mutating: png_ptr))
+    } catch {
+        guard let png_ptr else { return }
+        spng_c_error(png_structp(mutating: png_ptr), "out of memory")
     }
 }
 
