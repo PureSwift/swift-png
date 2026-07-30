@@ -42,20 +42,67 @@ interlaced-gray2-9x9.png filler,bgr As above.
 interlaced-gray2-9x9.png add_alpha As above.
 interlaced-gray2-9x9.png add_alpha,swap_alpha As above.
 interlaced-gray2-9x9.png add_alpha,invert_alpha As above.
+gray1-w13.png gamma_bright,bgr,add_alpha As above.
+gray2-w13.png gamma_bright,bgr,add_alpha As above.
+gray4-w13.png gamma_bright,bgr,add_alpha As above.
+interlaced-gray2-9x9.png gamma_bright,bgr,add_alpha As above.
 
 # -- this library's own gaps, still to be closed ------------------------------------------------
 #
-# These are defects here, not there.  They are listed so the suite stays honest about what it is
-# and is not checking, and each one is a piece of work rather than a decision.
+# These are defects here, not there.  They are listed so the suite stays honest about what it is and
+# is not checking, and each one is a piece of work rather than a decision.
+
+# Sixteen bit gamma, where the reference deliberately works at reduced precision.
 #
-# Reversing the sample order within a byte is the one transform whose result depends on where a
-# pixel sits inside a byte rather than only on the pixel.  For an interlaced image that matters:
-# the reference spreads a pass across a full-width row *before* transforming it and then merges the
-# result with a bit mask, so the reversal happens at the pixel's final position.  This library
-# transforms the narrow pass row and spreads afterwards, so the reversal happens at its position
-# within the pass.  Every other transform is per-pixel and agrees either way; this one does not.
+# A table over sixteen bit samples would need 65536 entries per image, so the reference does not build
+# one.  It builds a coarser table instead and looks samples up in it, which loses the low bits on
+# purpose.  How coarse depends on the image: the significant-bits chunk saying fewer than sixteen bits
+# makes it coarser, and asking to narrow the samples to eight afterwards makes it coarser still, since
+# precision that is about to be discarded is not worth keeping.
 #
-# Closing it means adopting the reference's arrangement: expand the pass to full width, transform,
-# then merge under a mask that accounts for the reversal.
+# This library computes each sixteen bit sample exactly instead.  That agrees with the reference
+# wherever its table happens to be at full precision — which is every sixteen bit image here that has
+# no significant-bits chunk and is not being narrowed — and differs by a bit or two elsewhere.
+#
+# So the two lists below are exactly the cases where the reference's table is coarse: one image with a
+# significant-bits chunk, and the narrowing combinations on the others.
+#
+# Closing this means reproducing the coarse table rather than improving on it, since the goal is to
+# agree rather than to be more accurate.  It is deliberately not guessed at: the way the table is
+# built is not something to reconstruct from memory, and it can be recovered by probing the reference
+# with chosen sample values.
+
+gray16-filter2.png gamma_dark,strip_16 Not implemented here: sixteen bit gamma is computed exactly, while the reference uses a coarser table when the samples are about to be narrowed to eight bits.
+gray16-filter2.png strip_16,gamma_dark As above.
+rgb16-filter4.png gamma_dark,strip_16 As above.
+rgb16-filter4.png strip_16,gamma_dark As above.
+interlaced-rgb16-11x7.png gamma_dark,strip_16 As above.
+interlaced-rgb16-11x7.png strip_16,gamma_dark As above.
+meta-rgb16-sbit-bkgd.png gamma_bright Not implemented here: this image's significant-bits chunk asks for fewer than sixteen bits, so the reference's gamma table is coarser than exact computation.
+meta-rgb16-sbit-bkgd.png gamma_dark As above.
+meta-rgb16-sbit-bkgd.png gamma_steep As above.
+meta-rgb16-sbit-bkgd.png gamma_shallow As above.
+meta-rgb16-sbit-bkgd.png gamma_bright,expand As above.
+meta-rgb16-sbit-bkgd.png expand,gamma_bright As above.
+meta-rgb16-sbit-bkgd.png gamma_bright,gray_to_rgb As above.
+meta-rgb16-sbit-bkgd.png gray_to_rgb,gamma_bright As above.
+meta-rgb16-sbit-bkgd.png gamma_bright,strip_alpha As above.
+meta-rgb16-sbit-bkgd.png gamma_dark,expand_16 As above.
+meta-rgb16-sbit-bkgd.png gamma_dark,strip_16 As above.
+meta-rgb16-sbit-bkgd.png strip_16,gamma_dark As above.
+meta-rgb16-sbit-bkgd.png gamma_steep,packing As above.
+meta-rgb16-sbit-bkgd.png gamma_bright,bgr,add_alpha As above.
+
+# Reversing sub-byte samples within a byte, for an interlaced image.
+#
+# This is the one transform whose result depends on where a pixel sits inside a byte rather than only
+# on the pixel, and for an interlaced image that matters.  The reference spreads a pass across a
+# full-width row *before* transforming it and then merges the result under a bit mask, so the reversal
+# happens at the pixel's final position.  This library transforms the narrow pass row and spreads
+# afterwards, so the reversal happens at its position within the pass.  Every other transform is
+# per-pixel and agrees either way; this one does not.
+#
+# Closing it means adopting the reference's arrangement: expand the pass to full width, transform, then
+# merge under a mask that accounts for the reversal.
 
 interlaced-gray2-9x9.png packswap Not implemented here: the sample reversal is applied to the narrow pass row rather than to the full-width row it is spread into, so sub-byte interlaced images disagree.
