@@ -73,6 +73,24 @@ static const struct image_case cases[] = {
    /* Everything the file can say about itself, over the colour types that carry those chunks
     * differently: a background is an index for one, a grey for another and a colour for the third.
     */
+   /* Interlaced, at sizes where whole passes are empty and where a pass row ends part way through
+    * a byte — the two places the geometry is easiest to get wrong.
+    */
+   { "interlaced_rgb8",   16, 16, 8, PNG_COLOR_TYPE_RGB,  1, -1, -1, -1, 0 },
+   { "interlaced_rgba8",   9,  9, 8, PNG_COLOR_TYPE_RGB_ALPHA, 1, -1, -1, -1, 0 },
+   { "interlaced_gray1",  13, 11, 1, PNG_COLOR_TYPE_GRAY, 1, -1, -1, -1, 0 },
+   { "interlaced_gray2",   9,  9, 2, PNG_COLOR_TYPE_GRAY, 1, -1, -1, -1, 0 },
+   { "interlaced_gray4",   3,  3, 4, PNG_COLOR_TYPE_GRAY, 1, -1, -1, -1, 0 },
+   { "interlaced_rgb16",  11,  7, 16, PNG_COLOR_TYPE_RGB, 1, -1, -1, -1, 0 },
+   { "interlaced_small",   1,  1, 8, PNG_COLOR_TYPE_RGB,  1, -1, -1, -1, 0 },
+   { "interlaced_5x3",     5,  3, 8, PNG_COLOR_TYPE_RGB,  1, -1, -1, -1, 0 },
+   { "interlaced_palette", 10, 10, 8, PNG_COLOR_TYPE_PALETTE, 1, -1, -1, -1, 0 },
+
+   /* The three text chunks, which are one idea with three encodings.  Written both before and after
+    * the rows, since the format allows either and a client means the difference.
+    */
+   { "text_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 3 },
+
    { "meta_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 1 },
    { "meta_gray",    13,  7, 8, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1, 1 },
    { "meta_palette",  9,  3, 8, PNG_COLOR_TYPE_PALETTE,   0, -1, -1, -1, 1 },
@@ -220,7 +238,39 @@ static int write_file(const char *path, const struct image_case *c)
       png_set_PLTE(p, i, palette, entries);
    }
 
-   if (c->metadata) set_metadata(p, i, c);
+   if (c->metadata == 3)
+   {
+      png_text texts[3];
+      static char long_text[600];
+      int k;
+
+      /* Long enough that compressing it is worth something, and repetitive enough that the two
+       * compressed forms have something to work with.
+       */
+      for (k = 0; k < (int)sizeof long_text - 1; k++)
+         long_text[k] = (char)('a' + (k % 26));
+
+      long_text[sizeof long_text - 1] = 0;
+
+      memset(texts, 0, sizeof texts);
+
+      texts[0].compression = PNG_TEXT_COMPRESSION_NONE;
+      texts[0].key = "Title";
+      texts[0].text = "a plain keyword and its text";
+
+      texts[1].compression = PNG_TEXT_COMPRESSION_zTXt;
+      texts[1].key = "Description";
+      texts[1].text = long_text;
+
+      texts[2].compression = PNG_ITXT_COMPRESSION_NONE;
+      texts[2].key = "Comment";
+      texts[2].text = "international, uncompressed";
+      texts[2].lang = "en";
+      texts[2].lang_key = "Comment";
+
+      png_set_text(p, i, texts, 3);
+   }
+   else if (c->metadata) set_metadata(p, i, c);
 
    if (c->filters >= 0) png_set_filter(p, PNG_FILTER_TYPE_BASE, c->filters);
    if (c->level >= 0) png_set_compression_level(p, c->level);
@@ -230,13 +280,38 @@ static int write_file(const char *path, const struct image_case *c)
 
    row = malloc(png_get_rowbytes(p, i) + 8);
 
-   for (y = 0; y < c->height; y++)
    {
-      fill(row, y, c);
-      png_write_row(p, row);
+      /* Every row of the image, once per pass.  For an image that is not interlaced that is one
+       * pass and the ordinary loop; for one that is, the library keeps the rows each pass wants and
+       * counts the rest.
+       */
+      int passes = png_set_interlace_handling(p);
+      int pass;
+
+      for (pass = 0; pass < passes; pass++)
+         for (y = 0; y < c->height; y++)
+         {
+            fill(row, y, c);
+            png_write_row(p, row);
+         }
    }
 
-   png_write_end(p, NULL);
+   if (c->metadata == 3)
+   {
+      /* Text set after the rows, which belongs after them in the file. */
+      png_text after;
+
+      memset(&after, 0, sizeof after);
+      after.compression = PNG_ITXT_COMPRESSION_zTXt;
+      after.key = "Software";
+      after.text = "international, compressed, and written after the image data";
+      after.lang = "en";
+      after.lang_key = "Software";
+
+      png_set_text(p, i, &after, 1);
+   }
+
+   png_write_end(p, c->metadata == 3 ? i : NULL);
    free(row);
    png_destroy_write_struct(&p, &i);
    fclose(fp);
@@ -303,6 +378,20 @@ static void dump_metadata(png_structp p, png_infop i)
       printf("\n");
    }
 
+   {
+      png_textp texts;
+      int count = png_get_text(p, i, &texts, NULL);
+      int k;
+
+      for (k = 0; k < count; k++)
+         printf("text compression=%d key=%s lang=%s lang_key=%s len=%u text=%s\n",
+                texts[k].compression, texts[k].key,
+                texts[k].lang != NULL ? texts[k].lang : "",
+                texts[k].lang_key != NULL ? texts[k].lang_key : "",
+                (unsigned)texts[k].text_length,
+                texts[k].text != NULL ? texts[k].text : "");
+   }
+
    if (png_get_tRNS(p, i, &alphas, &num_alphas, &transparent))
    {
       int k;
@@ -329,8 +418,6 @@ static int dump_file(const char *path)
    FILE *fp = fopen(path, "rb");
    png_structp p;
    png_infop i;
-   png_bytep row;
-   png_uint_32 y;
    png_colorp palette;
    int entries;
 
@@ -369,23 +456,42 @@ static int dump_file(const char *path)
 
    dump_metadata(p, i);
 
-   row = malloc(png_get_rowbytes(p, i) + 8);
-
-   for (y = 0; y < png_get_image_height(p, i); y++)
    {
-      size_t k;
+      /* Read the whole image rather than pass by pass: what is being compared is the picture, and an
+       * interlaced file holds the same one as a file that is not.
+       */
+      int passes = png_set_interlace_handling(p);
+      png_uint_32 height = png_get_image_height(p, i);
+      png_bytepp rows = malloc(sizeof(png_bytep) * height);
+      png_uint_32 r;
+      int pass;
 
-      png_read_row(p, row, NULL);
-      printf("row %u", (unsigned)y);
+      png_read_update_info(p, i);
 
-      for (k = 0; k < png_get_rowbytes(p, i); k++)
-         printf(" %02x", row[k]);
+      for (r = 0; r < height; r++)
+         rows[r] = calloc(1, png_get_rowbytes(p, i) + 8);
 
-      printf("\n");
+      for (pass = 0; pass < passes; pass++)
+         for (r = 0; r < height; r++)
+            png_read_row(p, rows[r], NULL);
+
+      for (r = 0; r < height; r++)
+      {
+         size_t k;
+
+         printf("row %u", (unsigned)r);
+
+         for (k = 0; k < png_get_rowbytes(p, i); k++)
+            printf(" %02x", rows[r][k]);
+
+         printf("\n");
+         free(rows[r]);
+      }
+
+      free(rows);
    }
 
    png_read_end(p, NULL);
-   free(row);
    png_destroy_read_struct(&p, &i, NULL);
    fclose(fp);
 
