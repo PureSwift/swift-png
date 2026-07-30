@@ -53,6 +53,57 @@ public final class PngContext {
     /// subimages and has to place their pixels itself.
     public var spreadsInterlacedRows = false
 
+    /// What the client has asked to be done to each row.
+    ///
+    /// Recorded as a set rather than acted on when requested, because the order the requests arrive
+    /// in must not affect the result.
+    public var transformFlags = TransformFlags()
+
+    /// The value a filler channel is given, at sixteen bits; at eight only the low byte is used.
+    public var fillerValue: UInt32 = 0
+
+    /// Whether the filler channel goes after the colour rather than before it.
+    public var fillerAfterColor = true
+
+    /// How far to move each channel when the client asked for the shift.
+    ///
+    /// From the client rather than from the file: `png_set_shift` says how far, where the
+    /// significant bits chunk only says what the file did.
+    public var shiftBits: SignificantBits?
+
+    /// The pipeline the requests resolve to, built once the header is known.
+    var transforms: TransformProgram?
+
+    /// Whether the client resolved the pipeline itself rather than leaving it to the first row.
+    ///
+    /// Worth distinguishing because it changes what a later call can still do: once the client has
+    /// been told what its rows will look like, turning interlace handling on would change that
+    /// answer, so asking for the whole image afterwards is worth a word of warning.
+    private(set) var clientUpdatedInfo = false
+
+    /// The shape a row has once the pipeline has run, which is what the client allocates from.
+    ///
+    /// Absent until the pipeline is built, before which the row is whatever the file stores.
+    public private(set) var transformedShape: RowInfo?
+
+    /// What the transforms need from the metadata, copied at the point the pipeline is built.
+    ///
+    /// Copied rather than referred to, and for a reason: most of the reading API is given only the
+    /// control structure, so the info structure is not available when a row is transformed. Taking
+    /// a snapshot also settles the lifetime question — a client that destroys its info structure
+    /// mid-decode cannot leave the pipeline reading freed palette entries.
+    var transformInputs = TransformInputs()
+
+    /// Whether the file carried transparency, which several stages need to know.
+    public private(set) var hasTransparency = false
+
+    /// The info structure the header was read into.
+    ///
+    /// Held only until the pipeline is resolved, which is the one thing that needs it and which may
+    /// happen either when the client asks or at the first row.  Cleared afterwards, so the decode
+    /// does not depend on a structure the client is free to destroy.
+    private var headerInfo: InfoStore?
+
     public init(host: Host, isReading: Bool) {
         self.host = host
         self.isReading = isReading
@@ -120,10 +171,76 @@ public final class PngContext {
         // Both structures describe the image from here on: the info structure for
         // the client's accessors, this one for the reading API.
         self.header = info.header
+        self.headerInfo = info
     }
 
     public func startReadImage() throws {
         try self.reader.startRows(context: self)
+    }
+
+    /// Resolves the requested transforms and reports the shape a row will have.
+    ///
+    /// Separate from starting the decode because a client calls this to find out how much to
+    /// allocate, which it has to know before any row is read.
+    /// Resolves the pipeline without the client having asked, for a client that set transforms and
+    /// went straight to reading rows.
+    func resolveTransforms() throws {
+        guard let info = self.headerInfo else {
+            throw Diagnostic("no image description to transform")
+        }
+
+        try self.updateInfo(info)
+    }
+
+    /// Resolves the pipeline at the client's request, recording that it was asked for.
+    public func updateInfoForClient(_ info: InfoStore) throws {
+        try self.updateInfo(info)
+        self.clientUpdatedInfo = true
+    }
+
+    public func updateInfo(_ info: InfoStore) throws {
+        guard let header = self.header else {
+            throw Diagnostic("png_read_update_info called before png_read_info")
+        }
+
+        let program = TransformProgram(
+            flags: self.transformFlags,
+            header: header,
+            info: info,
+            fillerValue: self.fillerValue,
+            fillerAfterColor: self.fillerAfterColor
+        )
+
+        self.transformInputs = TransformInputs(info)
+        self.hasTransparency = info.isValid(InfoStore.Valid.trns)
+
+        // What the client asked for wins over what the file recorded: png_set_shift says how far to
+        // move the samples, while the chunk only says what was done to them originally.
+        if let shiftBits = self.shiftBits {
+            try TransformProgram.validateShift(shiftBits, header: header)
+            self.transformInputs.significantBits = shiftBits
+        }
+        let shape = program.resultingShape(
+            from: RowInfo(header),
+            hasTransparency: info.isValid(InfoStore.Valid.trns)
+        )
+
+        self.transforms = program
+        self.transformedShape = shape
+
+        // The info structure now describes the rows the client will receive rather than the ones
+        // the file holds, which is the whole point of the call: png_get_rowbytes and its
+        // neighbours have to answer for what is about to be handed over.
+        info.applyTransformedShape(shape)
+
+        // The transparency has become a channel, so there is no longer a table to report.  A client
+        // that read one now would apply the transparency a second time.
+        if program.consumesTransparency {
+            info.consumeTransparency()
+        }
+
+        // Everything needed has been copied out, so the structure is not held any longer.
+        self.headerInfo = nil
     }
 
     public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
