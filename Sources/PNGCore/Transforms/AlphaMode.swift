@@ -103,6 +103,26 @@ extension Transform {
         }
     }
 
+    /// Puts the coverage through the display's curve, leaving the colour alone.
+    ///
+    /// The broken arrangement's other half, for the one case where the two halves have to happen in
+    /// different places: an indexed image is multiplied in its palette, since that is where its colour
+    /// is, but its coverage does not exist until the palette has been expanded into the row.
+    static func encodeAlpha(
+        _ row: UnsafeMutableBufferPointer<UInt8>,
+        _ info: RowInfo,
+        table: GammaTable?
+    ) {
+        guard let table, info.colorType.hasAlpha, info.bitDepth == 8 else { return }
+
+        let alphaOffset = info.channels - 1
+
+        for pixel in 0 ..< info.width {
+            let offset = pixel * info.channels + alphaOffset
+            row[offset] = table.values[Int(row[offset])]
+        }
+    }
+
     /// The same at sixteen bits, where the curves are computed rather than tabulated.
     ///
     /// A table over sixteen bit samples would be sixty five thousand entries per image, so each sample
