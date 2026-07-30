@@ -64,24 +64,6 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_
 }
 
 png_uint_32 PNGAPI
-png_get_PLTE(png_const_structrp png_ptr, png_inforp info_ptr, png_colorp *palette, int *num_palette)
-{
-   png_error(png_ptr, "png_get_PLTE is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_bKGD(png_const_structrp png_ptr, png_inforp info_ptr, png_color_16p *background)
-{
-   png_error(png_ptr, "png_get_bKGD is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cHRM(png_const_structrp png_ptr, png_const_inforp info_ptr, double *white_x, double *white_y, double *red_x, double *red_y, double *green_x, double *green_y, double *blue_x, double *blue_y)
-{
-   png_error(png_ptr, "png_get_cHRM is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_cHRM_XYZ(png_const_structrp png_ptr, png_const_inforp info_ptr, double *red_X, double *red_Y, double *red_Z, double *green_X, double *green_Y, double *green_Z, double *blue_X, double *blue_Y, double *blue_Z)
 {
    png_error(png_ptr, "png_get_cHRM_XYZ is not implemented");
@@ -91,30 +73,6 @@ png_uint_32 PNGAPI
 png_get_cHRM_XYZ_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_red_X, png_fixed_point *int_red_Y, png_fixed_point *int_red_Z, png_fixed_point *int_green_X, png_fixed_point *int_green_Y, png_fixed_point *int_green_Z, png_fixed_point *int_blue_X, png_fixed_point *int_blue_Y, png_fixed_point *int_blue_Z)
 {
    png_error(png_ptr, "png_get_cHRM_XYZ_fixed is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cHRM_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_white_x, png_fixed_point *int_white_y, png_fixed_point *int_red_x, png_fixed_point *int_red_y, png_fixed_point *int_green_x, png_fixed_point *int_green_y, png_fixed_point *int_blue_x, png_fixed_point *int_blue_y)
-{
-   png_error(png_ptr, "png_get_cHRM_fixed is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cICP(png_const_structrp png_ptr, png_const_inforp info_ptr, png_bytep colour_primaries, png_bytep transfer_function, png_bytep matrix_coefficients, png_bytep video_full_range_flag)
-{
-   png_error(png_ptr, "png_get_cICP is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cLLI(png_const_structrp png_ptr, png_const_inforp info_ptr, double *maximum_content_light_level, double *maximum_frame_average_light_level)
-{
-   png_error(png_ptr, "png_get_cLLI is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cLLI_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32p maximum_content_light_level_scaled_by_10000, png_uint_32p maximum_frame_average_light_level_scaled_by_10000)
-{
-   png_error(png_ptr, "png_get_cLLI_fixed is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -148,36 +106,6 @@ png_get_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *exif)
 }
 
 png_uint_32 PNGAPI
-png_get_eXIf_1(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *num_exif, png_bytep *exif)
-{
-   png_error(png_ptr, "png_get_eXIf_1 is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_gAMA(png_const_structrp png_ptr, png_const_inforp info_ptr, double *file_gamma)
-{
-   png_error(png_ptr, "png_get_gAMA is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_gAMA_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_file_gamma)
-{
-   png_error(png_ptr, "png_get_gAMA_fixed is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_hIST(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_16p *hist)
-{
-   png_error(png_ptr, "png_get_hIST is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_iCCP(png_const_structrp png_ptr, png_inforp info_ptr, png_charpp name, int *compression_type, png_bytepp profile, png_uint_32 *proflen)
-{
-   png_error(png_ptr, "png_get_iCCP is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_io_chunk_type(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_io_chunk_type is not implemented");
@@ -190,69 +118,15 @@ png_get_io_state(png_const_structrp png_ptr)
 }
 
 png_uint_32 PNGAPI
-png_get_mDCV(png_const_structrp png_ptr, png_const_inforp info_ptr, double *white_x, double *white_y, double *red_x, double *red_y, double *green_x, double *green_y, double *blue_x, double *blue_y, double *mastering_display_maximum_luminance, double *mastering_display_minimum_luminance)
-{
-   png_error(png_ptr, "png_get_mDCV is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_mDCV_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_white_x, png_fixed_point *int_white_y, png_fixed_point *int_red_x, png_fixed_point *int_red_y, png_fixed_point *int_green_x, png_fixed_point *int_green_y, png_fixed_point *int_blue_x, png_fixed_point *int_blue_y, png_uint_32p mastering_display_maximum_luminance_scaled_by_10000, png_uint_32p mastering_display_minimum_luminance_scaled_by_10000)
-{
-   png_error(png_ptr, "png_get_mDCV_fixed is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_oFFs(png_const_structrp png_ptr, png_const_inforp info_ptr, png_int_32 *offset_x, png_int_32 *offset_y, int *unit_type)
-{
-   png_error(png_ptr, "png_get_oFFs is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_charp *purpose, png_int_32 *X0, png_int_32 *X1, int *type, int *nparams, png_charp *units, png_charpp *params)
 {
    png_error(png_ptr, "png_get_pCAL is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_pHYs(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *res_x, png_uint_32 *res_y, int *unit_type)
-{
-   png_error(png_ptr, "png_get_pHYs is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_pHYs_dpi(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *res_x, png_uint_32 *res_y, int *unit_type)
-{
-   png_error(png_ptr, "png_get_pHYs_dpi is not implemented");
 }
 
 int PNGAPI
 png_get_palette_max(png_const_structp png_ptr, png_const_infop info_ptr)
 {
    png_error(png_ptr, "png_get_palette_max is not implemented");
-}
-
-float PNGAPI
-png_get_pixel_aspect_ratio(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_pixel_aspect_ratio is not implemented");
-}
-
-png_fixed_point PNGAPI
-png_get_pixel_aspect_ratio_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_pixel_aspect_ratio_fixed is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_pixels_per_inch(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_pixels_per_inch is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_pixels_per_meter(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_pixels_per_meter is not implemented");
 }
 
 png_voidp PNGAPI
@@ -274,12 +148,6 @@ png_get_rows(png_const_structrp png_ptr, png_const_inforp info_ptr)
 }
 
 png_uint_32 PNGAPI
-png_get_sBIT(png_const_structrp png_ptr, png_inforp info_ptr, png_color_8p *sig_bit)
-{
-   png_error(png_ptr, "png_get_sBIT is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_sCAL(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, double *width, double *height)
 {
    png_error(png_ptr, "png_get_sCAL is not implemented");
@@ -291,40 +159,16 @@ png_get_sCAL_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, int *u
    png_error(png_ptr, "png_get_sCAL_fixed is not implemented");
 }
 
-png_uint_32 PNGAPI
-png_get_sCAL_s(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, png_charpp swidth, png_charpp sheight)
-{
-   png_error(png_ptr, "png_get_sCAL_s is not implemented");
-}
-
 int PNGAPI
 png_get_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_sPLT_tpp entries)
 {
    png_error(png_ptr, "png_get_sPLT is not implemented");
 }
 
-png_uint_32 PNGAPI
-png_get_sRGB(png_const_structrp png_ptr, png_const_inforp info_ptr, int *file_srgb_intent)
-{
-   png_error(png_ptr, "png_get_sRGB is not implemented");
-}
-
 png_const_bytep PNGAPI
 png_get_signature(png_const_structrp png_ptr, png_const_inforp info_ptr)
 {
    png_error(png_ptr, "png_get_signature is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_tIME(png_const_structrp png_ptr, png_inforp info_ptr, png_timep *mod_time)
-{
-   png_error(png_ptr, "png_get_tIME is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_tRNS(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *trans_alpha, int *num_trans, png_color_16p *trans_color)
-{
-   png_error(png_ptr, "png_get_tRNS is not implemented");
 }
 
 int PNGAPI
@@ -361,78 +205,6 @@ png_uint_32 PNGAPI
 png_get_user_width_max(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_user_width_max is not implemented");
-}
-
-float PNGAPI
-png_get_x_offset_inches(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_x_offset_inches is not implemented");
-}
-
-png_fixed_point PNGAPI
-png_get_x_offset_inches_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_x_offset_inches_fixed is not implemented");
-}
-
-png_int_32 PNGAPI
-png_get_x_offset_microns(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_x_offset_microns is not implemented");
-}
-
-png_int_32 PNGAPI
-png_get_x_offset_pixels(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_x_offset_pixels is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_x_pixels_per_inch(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_x_pixels_per_inch is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_x_pixels_per_meter(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_x_pixels_per_meter is not implemented");
-}
-
-float PNGAPI
-png_get_y_offset_inches(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_y_offset_inches is not implemented");
-}
-
-png_fixed_point PNGAPI
-png_get_y_offset_inches_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_y_offset_inches_fixed is not implemented");
-}
-
-png_int_32 PNGAPI
-png_get_y_offset_microns(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_y_offset_microns is not implemented");
-}
-
-png_int_32 PNGAPI
-png_get_y_offset_pixels(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_y_offset_pixels is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_y_pixels_per_inch(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_y_pixels_per_inch is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_y_pixels_per_meter(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_y_pixels_per_meter is not implemented");
 }
 
 int PNGAPI
@@ -551,12 +323,6 @@ png_set_IHDR(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 width,
 }
 
 void PNGAPI
-png_set_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_const_colorp palette, int num_palette)
-{
-   png_error(png_ptr, "png_set_PLTE is not implemented");
-}
-
-void PNGAPI
 png_set_add_alpha(png_structrp png_ptr, png_uint_32 filler, int flags)
 {
    png_error(png_ptr, "png_set_add_alpha is not implemented");
@@ -572,12 +338,6 @@ void PNGAPI
 png_set_alpha_mode_fixed(png_structrp png_ptr, int mode, png_fixed_point output_gamma)
 {
    png_error(png_ptr, "png_set_alpha_mode_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_bKGD(png_const_structrp png_ptr, png_inforp info_ptr, png_const_color_16p background)
-{
-   png_error(png_ptr, "png_set_bKGD is not implemented");
 }
 
 void PNGAPI
@@ -599,12 +359,6 @@ png_set_bgr(png_structrp png_ptr)
 }
 
 void PNGAPI
-png_set_cHRM(png_const_structrp png_ptr, png_inforp info_ptr, double white_x, double white_y, double red_x, double red_y, double green_x, double green_y, double blue_x, double blue_y)
-{
-   png_error(png_ptr, "png_set_cHRM is not implemented");
-}
-
-void PNGAPI
 png_set_cHRM_XYZ(png_const_structrp png_ptr, png_inforp info_ptr, double red_X, double red_Y, double red_Z, double green_X, double green_Y, double green_Z, double blue_X, double blue_Y, double blue_Z)
 {
    png_error(png_ptr, "png_set_cHRM_XYZ is not implemented");
@@ -614,30 +368,6 @@ void PNGAPI
 png_set_cHRM_XYZ_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_red_X, png_fixed_point int_red_Y, png_fixed_point int_red_Z, png_fixed_point int_green_X, png_fixed_point int_green_Y, png_fixed_point int_green_Z, png_fixed_point int_blue_X, png_fixed_point int_blue_Y, png_fixed_point int_blue_Z)
 {
    png_error(png_ptr, "png_set_cHRM_XYZ_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_cHRM_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_white_x, png_fixed_point int_white_y, png_fixed_point int_red_x, png_fixed_point int_red_y, png_fixed_point int_green_x, png_fixed_point int_green_y, png_fixed_point int_blue_x, png_fixed_point int_blue_y)
-{
-   png_error(png_ptr, "png_set_cHRM_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_cICP(png_const_structrp png_ptr, png_inforp info_ptr, png_byte colour_primaries, png_byte transfer_function, png_byte matrix_coefficients, png_byte video_full_range_flag)
-{
-   png_error(png_ptr, "png_set_cICP is not implemented");
-}
-
-void PNGAPI
-png_set_cLLI(png_const_structrp png_ptr, png_inforp info_ptr, double maximum_content_light_level, double maximum_frame_average_light_level)
-{
-   png_error(png_ptr, "png_set_cLLI is not implemented");
-}
-
-void PNGAPI
-png_set_cLLI_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 maximum_content_light_level_scaled_by_10000, png_uint_32 maximum_frame_average_light_level_scaled_by_10000)
-{
-   png_error(png_ptr, "png_set_cLLI_fixed is not implemented");
 }
 
 void PNGAPI
@@ -707,12 +437,6 @@ png_set_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep exif)
 }
 
 void PNGAPI
-png_set_eXIf_1(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 num_exif, png_bytep exif)
-{
-   png_error(png_ptr, "png_set_eXIf_1 is not implemented");
-}
-
-void PNGAPI
 png_set_expand(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_set_expand is not implemented");
@@ -761,18 +485,6 @@ png_set_flush(png_structrp png_ptr, int nrows)
 }
 
 void PNGAPI
-png_set_gAMA(png_const_structrp png_ptr, png_inforp info_ptr, double file_gamma)
-{
-   png_error(png_ptr, "png_set_gAMA is not implemented");
-}
-
-void PNGAPI
-png_set_gAMA_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_file_gamma)
-{
-   png_error(png_ptr, "png_set_gAMA_fixed is not implemented");
-}
-
-void PNGAPI
 png_set_gamma(png_structrp png_ptr, double screen_gamma, double override_file_gamma)
 {
    png_error(png_ptr, "png_set_gamma is not implemented");
@@ -788,18 +500,6 @@ void PNGAPI
 png_set_gray_to_rgb(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_set_gray_to_rgb is not implemented");
-}
-
-void PNGAPI
-png_set_hIST(png_const_structrp png_ptr, png_inforp info_ptr, png_const_uint_16p hist)
-{
-   png_error(png_ptr, "png_set_hIST is not implemented");
-}
-
-void PNGAPI
-png_set_iCCP(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp name, int compression_type, png_const_bytep profile, png_uint_32 proflen)
-{
-   png_error(png_ptr, "png_set_iCCP is not implemented");
 }
 
 int PNGAPI
@@ -832,24 +532,6 @@ png_set_keep_unknown_chunks(png_structrp png_ptr, int keep, png_const_bytep chun
    png_error(png_ptr, "png_set_keep_unknown_chunks is not implemented");
 }
 
-void PNGAPI
-png_set_mDCV(png_const_structrp png_ptr, png_inforp info_ptr, double white_x, double white_y, double red_x, double red_y, double green_x, double green_y, double blue_x, double blue_y, double mastering_display_maximum_luminance, double mastering_display_minimum_luminance)
-{
-   png_error(png_ptr, "png_set_mDCV is not implemented");
-}
-
-void PNGAPI
-png_set_mDCV_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_white_x, png_fixed_point int_white_y, png_fixed_point int_red_x, png_fixed_point int_red_y, png_fixed_point int_green_x, png_fixed_point int_green_y, png_fixed_point int_blue_x, png_fixed_point int_blue_y, png_uint_32 mastering_display_maximum_luminance_scaled_by_10000, png_uint_32 mastering_display_minimum_luminance_scaled_by_10000)
-{
-   png_error(png_ptr, "png_set_mDCV_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_oFFs(png_const_structrp png_ptr, png_inforp info_ptr, png_int_32 offset_x, png_int_32 offset_y, int unit_type)
-{
-   png_error(png_ptr, "png_set_oFFs is not implemented");
-}
-
 int PNGAPI
 png_set_option(png_structrp png_ptr, int option, int onoff)
 {
@@ -860,12 +542,6 @@ void PNGAPI
 png_set_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp purpose, png_int_32 X0, png_int_32 X1, int type, int nparams, png_const_charp units, png_charpp params)
 {
    png_error(png_ptr, "png_set_pCAL is not implemented");
-}
-
-void PNGAPI
-png_set_pHYs(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 res_x, png_uint_32 res_y, int unit_type)
-{
-   png_error(png_ptr, "png_set_pHYs is not implemented");
 }
 
 void PNGAPI
@@ -929,12 +605,6 @@ png_set_rows(png_const_structrp png_ptr, png_inforp info_ptr, png_bytepp row_poi
 }
 
 void PNGAPI
-png_set_sBIT(png_const_structrp png_ptr, png_inforp info_ptr, png_const_color_8p sig_bit)
-{
-   png_error(png_ptr, "png_set_sBIT is not implemented");
-}
-
-void PNGAPI
 png_set_sCAL(png_const_structrp png_ptr, png_inforp info_ptr, int unit, double width, double height)
 {
    png_error(png_ptr, "png_set_sCAL is not implemented");
@@ -947,21 +617,9 @@ png_set_sCAL_fixed(png_const_structrp png_ptr, png_inforp info_ptr, int unit, pn
 }
 
 void PNGAPI
-png_set_sCAL_s(png_const_structrp png_ptr, png_inforp info_ptr, int unit, png_const_charp swidth, png_const_charp sheight)
-{
-   png_error(png_ptr, "png_set_sCAL_s is not implemented");
-}
-
-void PNGAPI
 png_set_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_const_sPLT_tp entries, int nentries)
 {
    png_error(png_ptr, "png_set_sPLT is not implemented");
-}
-
-void PNGAPI
-png_set_sRGB(png_const_structrp png_ptr, png_inforp info_ptr, int srgb_intent)
-{
-   png_error(png_ptr, "png_set_sRGB is not implemented");
 }
 
 void PNGAPI
@@ -1004,18 +662,6 @@ void PNGAPI
 png_set_swap_alpha(png_structrp png_ptr)
 {
    png_error(png_ptr, "png_set_swap_alpha is not implemented");
-}
-
-void PNGAPI
-png_set_tIME(png_const_structrp png_ptr, png_inforp info_ptr, png_const_timep mod_time)
-{
-   png_error(png_ptr, "png_set_tIME is not implemented");
-}
-
-void PNGAPI
-png_set_tRNS(png_structrp png_ptr, png_inforp info_ptr, png_const_bytep trans_alpha, int num_trans, png_const_color_16p trans_color)
-{
-   png_error(png_ptr, "png_set_tRNS is not implemented");
 }
 
 void PNGAPI
