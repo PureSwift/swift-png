@@ -44,6 +44,19 @@ struct TransformProgram {
 
     private(set) var steps: [Step] = []
 
+    /// Whether the colour conversion has taken charge of the gamma correction.
+    ///
+    /// Set by the request alone, not by whether the conversion will actually do anything, and that is
+    /// the reference's behaviour rather than a simplification: asking to discard colour moves the
+    /// correction inside that conversion, and on an image with no colour to discard the conversion does
+    /// not run and nothing is corrected at all. A client that asks for both on a greyscale image gets
+    /// no gamma — which is peculiar, but it is what clients see.
+    ///
+    /// It also settles what happens to a palette. An indexed image is normally corrected in its
+    /// palette, but when the conversion is going to correct as it averages, correcting the palette
+    /// first would apply the curve twice.
+    private(set) var colorConversionOwnsGamma = false
+
     /// Whether the file's transparency has been dealt with, so that nothing is left to report.
     ///
     /// Broader than "became an alpha channel", and deliberately so, because that is what the
@@ -115,7 +128,13 @@ struct TransformProgram {
         // Not for an indexed image, and this is the one place the distinction bites.  Such an image is
         // corrected in its palette, once, and the rows are then expanded from the corrected entries —
         // so a row step here would correct the same samples a second time.
+        // Nor when the colour conversion is going to run: with a gamma in force that conversion
+        // corrects as it goes, having gone through linear to do the averaging, so a step here would
+        // correct the same samples twice.
+        self.colorConversionOwnsGamma = flags.contains(.rgbToGray)
+
         if flags.contains(.gamma), !header.colorType.isIndexed,
+           !self.colorConversionOwnsGamma,
            let exponent = gamma.correctionExponent, GammaState.isSignificant(exponent) {
             self.steps.append(.gamma(exponent: exponent))
         }
@@ -256,7 +275,15 @@ struct TransformProgram {
                 Transform.stripAlpha(row, &info)
 
             case .rgbToGray:
-                if Transform.rgbToGray(row, &info, weights: inputs.rgbToGray) {
+                if Transform.rgbToGray(
+                    row,
+                    &info,
+                    weights: inputs.rgbToGray,
+                    toLinear: inputs.toLinear,
+                    fromLinear: inputs.fromLinear,
+                    corrected: inputs.gammaTable,
+                    exponents: inputs.linearExponents
+                ) {
                     observations.sawColor = true
                 }
 
