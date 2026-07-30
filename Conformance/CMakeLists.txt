@@ -132,6 +132,15 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:metadata_roundtrip>
                 $<TARGET_FILE:metadata_roundtrip_reference>)
 
+    # The transforms, over combinations rather than one at a time: the interesting defects are in
+    # the interactions, and in whether the order the client asked in leaks into the result.
+    add_test(NAME differential_transforms
+        COMMAND ${SPNG_SCRIPTS}/compare_transforms.sh
+                $<TARGET_FILE:pngdump>
+                $<TARGET_FILE:pngdump_reference>
+                ${SPNG_CORPUS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-transform-differences.txt)
+
     add_test(NAME differential_decode
         COMMAND ${SPNG_SCRIPTS}/compare_decode.sh
                 $<TARGET_FILE:pngdump>
