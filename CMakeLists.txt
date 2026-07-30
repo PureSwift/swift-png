@@ -1,0 +1,205 @@
+# CMakeLists.txt - builds the installable C library
+#
+# SwiftPM covers development and the Swift library, but it cannot set an install
+# name, a soname, or an export list, and those are exactly what make a library
+# substitutable for another one.  So the artifact that gets installed is built
+# here.
+#
+# CMake compiles Swift only under the Ninja and Xcode generators, and a single
+# target cannot mix Swift with another language, so the engine builds as a static
+# Swift archive and the C shim links it into the shared library.
+
+cmake_minimum_required(VERSION 3.29) # CMP0157, for Swift compilation mode
+
+project(swift-png
+    VERSION 1.6.58
+    DESCRIPTION "libpng, implemented in Swift"
+    LANGUAGES C Swift)
+
+include(GNUInstallDirs)
+
+option(SPNG_USE_SYSTEM_ZLIB
+    "Compress with the system zlib rather than the Swift implementation" ON)
+option(SPNG_STATIC_STDLIB
+    "Link the Swift runtime statically, so the library needs no toolchain at run time" OFF)
+option(SPNG_BUILD_TESTS "Build the conformance programs" ON)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# The ABI we are compatible with.  16 is the soname generation; 75 is the Mach-O
+# compatibility version the reference build carries.  Clients bind to these, so
+# they are part of the contract rather than our own version number.
+set(SPNG_ABI_SONAME 16)
+set(SPNG_MACHO_COMPATIBILITY_VERSION 75)
+
+set(SPNG_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Sources/CPNG/include)
+set(SPNG_MODULE_MAP ${SPNG_INCLUDE_DIR}/module.modulemap)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+if(SPNG_USE_SYSTEM_ZLIB)
+    find_package(ZLIB REQUIRED)
+endif()
+
+# -- generated sources -------------------------------------------------------
+#
+# These are committed as well as generated, so a checkout builds without Python
+# and CI can diff the regenerated output to catch a stale file.
+
+set(SPNG_EXPORT_LIST ${CMAKE_CURRENT_BINARY_DIR}/png16.exp)
+set(SPNG_VERSION_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/png16.vers)
+
+add_custom_command(
+    OUTPUT ${SPNG_EXPORT_LIST} ${SPNG_VERSION_SCRIPT}
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_symbols.py
+            ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_symbols.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/symbols.txt
+    COMMENT "Generating linker export lists")
+
+add_custom_target(spng_export_lists
+    DEPENDS ${SPNG_EXPORT_LIST} ${SPNG_VERSION_SCRIPT})
+
+# -- the engine --------------------------------------------------------------
+
+file(GLOB_RECURSE SPNG_SWIFT_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/Sources/PNGCore/*.swift
+    ${CMAKE_CURRENT_SOURCE_DIR}/Sources/PNGABI/*.swift
+    ${CMAKE_CURRENT_SOURCE_DIR}/Sources/LZ77/*.swift)
+
+add_library(PNGCore STATIC ${SPNG_SWIFT_SOURCES})
+
+set_target_properties(PNGCore PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    Swift_MODULE_NAME PNGABI
+    # Whole-module optimisation matters here: the row pipeline crosses several
+    # files per scanline, and the inlining that removes those boundaries is what
+    # keeps it competitive.
+    Swift_COMPILATION_MODE $<IF:$<CONFIG:Release>,wholemodule,incremental>)
+
+target_compile_options(PNGCore PRIVATE
+    "SHELL:-Xcc -I${SPNG_INCLUDE_DIR}"
+    "SHELL:-Xcc -fmodule-map-file=${SPNG_MODULE_MAP}")
+
+if(SPNG_USE_SYSTEM_ZLIB)
+    target_compile_definitions(PNGCore PRIVATE SPNG_SYSTEM_ZLIB)
+endif()
+
+# -- the shared library ------------------------------------------------------
+
+add_library(png16 SHARED
+    Sources/CPNG/spng_error.c
+    Sources/CPNG/gen/spng_stubs.c)
+
+add_dependencies(png16 spng_export_lists)
+
+target_include_directories(png16
+    PUBLIC $<BUILD_INTERFACE:${SPNG_INCLUDE_DIR}>
+           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libpng${SPNG_ABI_SONAME}>)
+
+target_link_libraries(png16 PRIVATE PNGCore)
+
+if(SPNG_USE_SYSTEM_ZLIB)
+    target_link_libraries(png16 PRIVATE ZLIB::ZLIB)
+endif()
+
+# Driving the link with swiftc is what pulls in the Swift runtime and the
+# metadata registration object the static archive needs.
+set_target_properties(png16 PROPERTIES
+    LINKER_LANGUAGE Swift
+    OUTPUT_NAME png${SPNG_ABI_SONAME}
+    VERSION ${SPNG_ABI_SONAME}
+    SOVERSION ${SPNG_ABI_SONAME})
+
+if(APPLE)
+    set_target_properties(png16 PROPERTIES
+        INSTALL_NAME_DIR ${CMAKE_INSTALL_FULL_LIBDIR})
+
+    # A client records the compatibility version of what it linked against, and
+    # dyld refuses a library that offers a lower one, so this has to match the
+    # reference build rather than track our own version number.
+    #
+    # The MACHO_COMPATIBILITY_VERSION and MACHO_CURRENT_VERSION properties do not
+    # reach the link when the link is driven by swiftc, so the flags are passed
+    # directly.
+    target_link_options(png16 PRIVATE
+        "LINKER:-compatibility_version,${SPNG_MACHO_COMPATIBILITY_VERSION}"
+        "LINKER:-current_version,${SPNG_MACHO_COMPATIBILITY_VERSION}")
+
+    # Without this the Swift engine's symbols would also be exported, letting a
+    # client bind to something outside the published API.
+    target_link_options(png16 PRIVATE
+        "LINKER:-exported_symbols_list,${SPNG_EXPORT_LIST}")
+else()
+    target_link_options(png16 PRIVATE
+        "LINKER:--version-script=${SPNG_VERSION_SCRIPT}")
+    if(SPNG_STATIC_STDLIB)
+        target_link_options(png16 PRIVATE -static-stdlib)
+    endif()
+endif()
+
+# -- install -----------------------------------------------------------------
+#
+# The layout mirrors the reference build's, including the unversioned aliases,
+# because build systems and pkg-config files in the wild look for those names.
+
+set(SPNG_HEADER_SUBDIR ${CMAKE_INSTALL_INCLUDEDIR}/libpng${SPNG_ABI_SONAME})
+
+install(TARGETS png16
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+install(FILES
+    ${SPNG_INCLUDE_DIR}/png.h
+    ${SPNG_INCLUDE_DIR}/pngconf.h
+    ${SPNG_INCLUDE_DIR}/pnglibconf.h
+    DESTINATION ${SPNG_HEADER_SUBDIR})
+
+# Clients include either <png.h> or <libpng16/png.h>; both have to resolve.
+install(CODE "
+    execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
+        libpng${SPNG_ABI_SONAME}/png.h
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/png.h)
+    execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
+        libpng${SPNG_ABI_SONAME}/pngconf.h
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/pngconf.h)
+    execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
+        libpng${SPNG_ABI_SONAME}/pnglibconf.h
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/pnglibconf.h)
+")
+
+if(APPLE)
+    set(SPNG_UNVERSIONED_ALIAS libpng${CMAKE_SHARED_LIBRARY_SUFFIX})
+    set(SPNG_VERSIONED_TARGET libpng${SPNG_ABI_SONAME}${CMAKE_SHARED_LIBRARY_SUFFIX})
+else()
+    set(SPNG_UNVERSIONED_ALIAS libpng${CMAKE_SHARED_LIBRARY_SUFFIX})
+    set(SPNG_VERSIONED_TARGET libpng${SPNG_ABI_SONAME}${CMAKE_SHARED_LIBRARY_SUFFIX})
+endif()
+
+install(CODE "
+    execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
+        ${SPNG_VERSIONED_TARGET}
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${SPNG_UNVERSIONED_ALIAS})
+")
+
+# pkg-config is how most build systems find libpng, so shipping these is part of
+# being a drop-in rather than a nicety.
+configure_file(cmake/libpng16.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/libpng${SPNG_ABI_SONAME}.pc @ONLY)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libpng${SPNG_ABI_SONAME}.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+install(CODE "
+    execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
+        libpng${SPNG_ABI_SONAME}.pc
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/pkgconfig/libpng.pc)
+")
+
+# -- conformance -------------------------------------------------------------
+
+if(SPNG_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests/abi)
+endif()
