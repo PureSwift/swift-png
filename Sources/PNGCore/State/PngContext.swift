@@ -86,6 +86,25 @@ public final class PngContext {
     /// How the client wants colour and coverage arranged in the rows it receives.
     public var alphaMode: AlphaMode = .png
 
+    /// Whether any arrangement has claimed the blend, which nothing gives back.
+    ///
+    /// Asking for the format's own arrangement after asking for another does not undo the first: it
+    /// turns off the parts that encode, and leaves the blend against black where it was.  So a client
+    /// that asks for premultiplied colour and then for the format's own gets colour multiplied by
+    /// coverage and encoded for the display it named — which is neither of the two things it asked
+    /// for, and is what the reference gives it.
+    public var alphaModeComposes = false
+
+    /// The arrangement the pipeline should actually apply.
+    ///
+    /// The format's own arrangement means "as the file has it" only while nothing has claimed the
+    /// blend.  Once something has, it means the blend without either of the encodings.
+    var effectiveAlphaMode: AlphaMode {
+        guard self.alphaModeComposes else { return .png }
+
+        return self.alphaMode == .png ? .premultiplied : self.alphaMode
+    }
+
     /// What the client says its own transform will leave a row looking like.
     ///
     /// Zero means it did not say, in which case the row keeps the shape the library gave it.  The
@@ -385,7 +404,7 @@ public final class PngContext {
             fillerAfterColor: self.fillerAfterColor,
             gamma: gamma,
             background: background,
-            alphaMode: self.alphaMode
+            alphaMode: self.effectiveAlphaMode
         )
 
         // The correction table is built before the snapshot, because for an indexed image it changes
@@ -397,24 +416,42 @@ public final class PngContext {
         }
 
         // The pair that take a sample to light and bring it back, together with the correction that is
-        // the two composed.  Built whenever something is going to average or blend samples, and — unlike
-        // the correction above — not gated on whether that correction does anything: a curve that undoes
-        // itself over the round trip still has to be undone before the blend, because a blend of encoded
-        // samples is not the encoding of the blend.
+        // the two composed.  Built whenever something is going to average or blend samples.
         //
-        // The three are built together or not at all.  Having one without the others would leave samples
-        // in a space nothing else agreed to.
+        // Each of the three is gated on its own exponent rather than on the group's, and that is the
+        // whole of the subtlety here.  A curve that undoes itself over the round trip composes to
+        // nothing while each half still bends, so the halves are needed even though the correction is
+        // not; and a half too slight to matter is left as the identity even when the other half bends,
+        // because the reference does not put samples through a curve it has decided is no curve.
+        //
+        // The identity is a real table rather than an absence, so that the three always agree about
+        // what space a sample is in.
         var blend: (toLinear: GammaTable, fromLinear: GammaTable, corrected: GammaTable)?
+        var blendExponents: (toLinear: Double, fromLinear: Double, corrected: Double)?
 
         if self.transformFlags.contains(.rgbToGray) || self.transformFlags.contains(.compose)
             || self.transformFlags.contains(.alphaMode),
            let toLinear = gamma.toLinearExponent,
            let fromLinear = gamma.fromLinearExponent {
-            blend = (
-                GammaTable(exponent: toLinear),
-                GammaTable(exponent: fromLinear),
-                GammaTable(exponent: gamma.correctionExponent ?? GammaState.one)
-            )
+            let combined = gamma.correctionExponent ?? GammaState.one
+
+            func significant(_ exponent: FixedPoint) -> FixedPoint {
+                GammaState.isSignificant(exponent) ? exponent : GammaState.one
+            }
+
+            if [toLinear, fromLinear, combined].contains(where: GammaState.isSignificant) {
+                blend = (
+                    GammaTable(exponent: significant(toLinear)),
+                    GammaTable(exponent: significant(fromLinear)),
+                    GammaTable(exponent: significant(combined))
+                )
+
+                blendExponents = (
+                    toLinear: Double(significant(toLinear)) * 1e-5,
+                    fromLinear: Double(significant(fromLinear)) * 1e-5,
+                    corrected: Double(significant(combined)) * 1e-5
+                )
+            }
         }
 
         // An indexed image is corrected in its palette rather than in its rows, since that is where
@@ -456,6 +493,17 @@ public final class PngContext {
             info.consumeTransparency()
         }
 
+        // Three requests the reference cannot honour together: it corrects, it blends, and it averages
+        // colour away, and each of the last two wants the correction for itself.  The client is told,
+        // once, and the decode goes on — so this is a warning about a result rather than a refusal.
+        //
+        // Only when all three actually come into force.  An image with nothing to blend has had the
+        // blend dropped, and a correction too slight to matter is no correction at all.
+        if self.transformFlags.contains(.rgbToGray), program.composes || program.arrangesAlpha,
+           blend != nil {
+            self.host.warn("libpng does not support gamma+background+rgb_to_gray")
+        }
+
         self.transformInputs = TransformInputs(info)
         self.hasTransparency = hadTransparency
 
@@ -472,15 +520,7 @@ public final class PngContext {
             self.transformInputs.toLinear = blend.toLinear
             self.transformInputs.fromLinear = blend.fromLinear
             self.transformInputs.blendCorrected = blend.corrected
-
-            if let toLinear = gamma.toLinearExponent, let fromLinear = gamma.fromLinearExponent,
-               let combined = gamma.correctionExponent {
-                self.transformInputs.linearExponents = (
-                    toLinear: Double(toLinear) * 1e-5,
-                    fromLinear: Double(fromLinear) * 1e-5,
-                    corrected: Double(combined) * 1e-5
-                )
-            }
+            self.transformInputs.linearExponents = blendExponents
         }
 
         // What the client asked for wins over what the file recorded: png_set_shift says how far to
@@ -516,7 +556,16 @@ public final class PngContext {
             // expressed as a palette index, and replacing that with a colour the client named in
             // another form would leave the two describing different things.
             if !header.colorType.isIndexed {
-                info.background = self.compose.color
+                // As the display should see it, rather than as the client gave it.  A client that names
+                // a colour in the file's terms is told what that colour turned out to be, which is the
+                // only form the answer is useful in — it is the colour its transparent pixels now are.
+                var reported = self.compose.color
+                reported.red = background.screen.red
+                reported.green = background.screen.green
+                reported.blue = background.screen.blue
+                reported.gray = background.screen.gray
+
+                info.background = reported
             }
 
         } else if program.arrangesAlpha, !header.colorType.isIndexed {
@@ -551,6 +600,16 @@ public final class PngContext {
         }
 
         shape.resize()
+    }
+
+    /// Checks a shift request against the image it will be applied to.
+    ///
+    /// Passes silently when the header has not been read: there is nothing to check against yet, and
+    /// the pipeline checks again when it is built.
+    public func validateShift(_ bits: SignificantBits) throws {
+        guard let header = self.header else { return }
+
+        try TransformProgram.validateShift(bits, header: header)
     }
 
     public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
