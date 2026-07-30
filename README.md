@@ -16,8 +16,8 @@ sequentially — every colour type, every bit depth from 1 to 16, every filter �
 the control structure lifecycle, the allocator and stream callbacks, and every metadata
 chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
 embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
-range signalling, and all three text chunks. Interlaced images, the transforms, and writing
-are still to come.
+range signalling, and all three text chunks. Interlaced images decode too, both ways a client
+can ask for them. The transforms and writing are still to come.
 
 ## Building
 
@@ -78,6 +78,14 @@ reports a bad header as one warning per fault followed by a single generic error
 rather than failing at the first. It passes the decompressor's own wording through
 rather than summarising it. None of that is written down anywhere; all of it is what
 clients actually observe.
+
+Interlacing turned up a contract that is easy to get wrong. A client that reads an interlaced
+image row by row calls `png_set_interlace_handling`, is told there are seven passes, and then
+sweeps every row of the image seven times — so most of those calls fall on rows the current
+pass does not carry, and those consume nothing from the stream. An image small enough to have
+empty passes runs out of data before it runs out of sweeps: a single pixel is carried entirely
+by the first pass, so six of its seven sweeps have nothing to do at all, and refusing them
+would break the documented loop.
 
 The metadata chunks turned up more of the same. The significant-bits chunk does not report
 zero for the channels it does not carry: a greyscale value is mirrored into the colour
