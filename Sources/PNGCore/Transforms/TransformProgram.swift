@@ -27,6 +27,7 @@ struct TransformProgram {
         case stripAlpha
         case rgbToGray
         case grayToRgb
+        case compose(background: ComposeBackground)
         case scale16
         case strip16
         case expand16
@@ -57,6 +58,9 @@ struct TransformProgram {
     /// first would apply the curve twice.
     private(set) var colorConversionOwnsGamma = false
 
+    /// Whether the image is laid over a background, and so ends with no alpha channel.
+    private(set) var composes = false
+
     /// Whether the file's transparency has been dealt with, so that nothing is left to report.
     ///
     /// Broader than "became an alpha channel", and deliberately so, because that is what the
@@ -77,7 +81,8 @@ struct TransformProgram {
         info: InfoStore,
         fillerValue: UInt32,
         fillerAfterColor: Bool,
-        gamma: GammaState = GammaState()
+        gamma: GammaState = GammaState(),
+        background: ComposeBackground = ComposeBackground()
     ) {
         let hasTransparency = info.isValid(InfoStore.Valid.trns)
         let flags = requested.resolved(for: header, hasTransparency: hasTransparency)
@@ -121,6 +126,15 @@ struct TransformProgram {
             self.steps.append(.grayToRgb)
         }
 
+        // Only when there is something to blend.  An image with neither an alpha channel nor a
+        // transparent colour has nothing the background could show through, and the reference drops the
+        // request rather than carrying it — which matters beyond the blend itself, because a request
+        // still standing would take the gamma correction with it and leave such an image uncorrected.
+        if flags.contains(.compose), header.colorType.hasAlpha || hasTransparency {
+            self.steps.append(.compose(background: background))
+            self.composes = true
+        }
+
         // After the channel arrangement is settled and before the depth changes: the correction is
         // defined on the samples as the file encoded them, so narrowing them first would correct
         // values that had already lost precision.
@@ -131,7 +145,9 @@ struct TransformProgram {
         // Nor when the colour conversion is going to run: with a gamma in force that conversion
         // corrects as it goes, having gone through linear to do the averaging, so a step here would
         // correct the same samples twice.
-        self.colorConversionOwnsGamma = flags.contains(.rgbToGray)
+        // Compositing corrects as it blends, for the same reason the colour conversion does, so it
+        // takes the correction over in the same way.
+        self.colorConversionOwnsGamma = flags.contains(.rgbToGray) || self.composes
 
         if flags.contains(.gamma), !header.colorType.isIndexed,
            !self.colorConversionOwnsGamma,
@@ -290,6 +306,16 @@ struct TransformProgram {
             case .grayToRgb:
                 Transform.grayToRgb(row, &info)
 
+            case let .compose(background):
+                Transform.compose(
+                    row,
+                    &info,
+                    background: background,
+                    toLinear: inputs.toLinear,
+                    fromLinear: inputs.fromLinear,
+                    corrected: inputs.gammaTable
+                )
+
             case .scale16:
                 Transform.scale16(row, &info)
 
@@ -415,6 +441,12 @@ struct TransformProgram {
             let hadAlpha = info.colorType.hasAlpha
             info.colorType = hadAlpha ? .grayscaleAlpha : .grayscale
             info.channels = hadAlpha ? 2 : 1
+            info.resize()
+
+        case .compose:
+            guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
+            info.colorType = info.colorType.hasColor ? .rgb : .grayscale
+            info.channels -= 1
             info.resize()
 
         case .grayToRgb:
