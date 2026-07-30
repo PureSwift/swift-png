@@ -86,6 +86,15 @@ public final class PngContext {
     /// How the client wants colour and coverage arranged in the rows it receives.
     public var alphaMode: AlphaMode = .png
 
+    /// What the client says its own transform will leave a row looking like.
+    ///
+    /// Zero means it did not say, in which case the row keeps the shape the library gave it.  The
+    /// library cannot work this out for itself — the transform is the client's code — so the
+    /// declaration is taken at its word, and a client that declares wrongly gets rows that do not
+    /// match the size it was told.  That is the reference's bargain too.
+    public var userTransformDepth = 0
+    public var userTransformChannels = 0
+
     /// Records that a pixel with colour reached the conversion.
     ///
     /// The running record, which `png_get_rgb_to_gray_status` reports.  Telling the client is separate
@@ -481,10 +490,15 @@ public final class PngContext {
             self.transformInputs.significantBits = shiftBits
         }
 
-        let shape = program.resultingShape(
+        var shape = program.resultingShape(
             from: RowInfo(header),
             hasTransparency: info.isValid(InfoStore.Valid.trns)
         )
+
+        // The client's own transform has the last word on the shape, since it runs last.  Only over
+        // the depth and the channel count: the reference leaves the colour type saying whatever it
+        // said before, so a row can be reported as three channels of colour while carrying one.
+        self.applyDeclaredUserShape(to: &shape)
 
         self.transforms = program
         self.transformedShape = shape
@@ -519,6 +533,24 @@ public final class PngContext {
 
         // Everything needed has been copied out, so the structure is not held any longer.
         self.headerInfo = nil
+    }
+
+    /// Applies what the client declared its own transform leaves behind.
+    ///
+    /// Shared by the shape the client is told about and the buffer the row is decoded into, which have
+    /// to agree: the transform runs in that buffer, so it has to be big enough for what comes out.
+    func applyDeclaredUserShape(to shape: inout RowInfo) {
+        guard self.transformFlags.contains(.userTransform) else { return }
+
+        if self.userTransformDepth != 0 {
+            shape.bitDepth = self.userTransformDepth
+        }
+
+        if self.userTransformChannels != 0 {
+            shape.channels = self.userTransformChannels
+        }
+
+        shape.resize()
     }
 
     public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
