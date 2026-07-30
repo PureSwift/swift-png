@@ -22,6 +22,9 @@ let package = Package(
         .library(name: "png", type: .dynamic, targets: ["PNGABI"]),
     ],
     traits: [
+        // Enabled by default for now: the Swift compression path is not written
+        // yet, so this is the only working backend.  The default flips when it is.
+        .default(enabledTraits: ["SystemZlib"]),
         // The engine reaches DEFLATE through one interface with two backends.
         // Swift clients get the Swift implementation so the library stays
         // dependency-free; the C library defaults to zlib, matching what the
