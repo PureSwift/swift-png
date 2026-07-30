@@ -10,9 +10,12 @@ That includes the details substitution actually depends on: the complete exporte
 symbol set and nothing beyond it, the versioned library name, and the Mach-O
 compatibility version or ELF symbol version that the dynamic loader checks.
 
-Status: the C surface is complete as a set of symbols, and the build, install and
-conformance machinery is in place. Most functions currently report that they are
-not implemented; they are being filled in against a differential test suite.
+Status: 67 of the 256 published functions are implemented, and the rest report that
+they are not rather than answering wrongly. What works today is reading a
+non-interlaced image sequentially — every colour type, every bit depth from 1 to 16,
+every filter — along with the control structure lifecycle, the allocator and stream
+callbacks, and the header accessors. Interlaced images, the metadata chunks, the
+transforms, and writing are still to come.
 
 ## Building
 
@@ -63,9 +66,24 @@ client's handler as the last thing it does.
 The C API's behaviour is not something to infer from documentation. Every
 expectation in the conformance suite is checked against the reference
 implementation as well as against this one, by compiling the same program twice
-and linking it against each library. An expectation that only holds for us is a
-bug in the test, and this arrangement is what catches it — already, on details
-like the exact bytes `png_get_header_version` returns.
+and linking it against each library. An expectation that only holds for us is a bug
+in the test, and this arrangement is what catches it.
+
+It has already paid for itself several times over. The reference clears the unused
+bits at the end of a row narrower than a whole number of bytes, but only in the copy
+it hands the client, still reconstructing the next row from the bits as stored. It
+reports a bad header as one warning per fault followed by a single generic error,
+rather than failing at the first. It passes the decompressor's own wording through
+rather than summarising it. None of that is written down anywhere; all of it is what
+clients actually observe.
+
+The damaged-file half of the corpus is also what verifies the jump discipline, and it
+found a real defect: a client jumping out of its error handler used to leave a Swift
+exclusivity access open, so the next call trapped. Reading a byte through a
+`mutating` method on a struct held in a class property takes an exclusive access for
+the whole call, including the part that runs the client's callback — so the engine's
+mutable state is held by reference, and buffers are replaced rather than mutated in
+place.
 
 ## Licensing
 
