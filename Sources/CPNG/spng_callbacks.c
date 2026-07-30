@@ -259,3 +259,66 @@ spng_c_call_write_row_status(png_structrp png_ptr, png_uint_32 row, int pass)
    png_ptr->write_row_fn(png_ptr, row, pass);
    png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
 }
+
+/* The two user transforms.
+ *
+ * One body for both directions, since the only difference is which function the
+ * client installed.  The row description is a local: nothing owns it, and a jump
+ * out of the client's transform abandons it with no consequence.
+ */
+static png_uint_32
+call_user_transform(png_structrp png_ptr, png_user_transform_ptr fn,
+    png_bytep row, png_uint_32 width, png_uint_32 bit_depth,
+    png_uint_32 channels, png_uint_32 color_type)
+{
+   png_row_info row_info;
+
+   if (png_ptr == NULL || fn == NULL)
+      return (bit_depth & 0xFFU) | ((channels & 0xFFU) << 8);
+
+   row_info.width = width;
+   row_info.bit_depth = (png_byte)bit_depth;
+   row_info.channels = (png_byte)channels;
+   row_info.color_type = (png_byte)color_type;
+   row_info.pixel_depth = (png_byte)(bit_depth * channels);
+   /* Spelled out rather than borrowed: the macro that does this lives in a private
+    * header, and the whole point of the vendored ones is that nothing private is
+    * needed to build against them.
+    */
+   row_info.rowbytes = row_info.pixel_depth >= 8
+       ? (size_t)width * (size_t)(row_info.pixel_depth >> 3)
+       : (((size_t)width * (size_t)row_info.pixel_depth) + 7) >> 3;
+
+   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   fn(png_ptr, &row_info, row);
+   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+
+   /* What the client declared wins over what it left behind in the description. */
+   if (png_ptr->user_transform_depth != 0)
+      row_info.bit_depth = png_ptr->user_transform_depth;
+
+   if (png_ptr->user_transform_channels != 0)
+      row_info.channels = png_ptr->user_transform_channels;
+
+   return (png_uint_32)row_info.bit_depth | ((png_uint_32)row_info.channels << 8);
+}
+
+png_uint_32
+spng_c_call_read_user_transform(png_structrp png_ptr, png_bytep row,
+    png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
+    png_uint_32 color_type)
+{
+   return call_user_transform(png_ptr,
+       png_ptr == NULL ? NULL : png_ptr->read_user_transform_fn,
+       row, width, bit_depth, channels, color_type);
+}
+
+png_uint_32
+spng_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
+    png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
+    png_uint_32 color_type)
+{
+   return call_user_transform(png_ptr,
+       png_ptr == NULL ? NULL : png_ptr->write_user_transform_fn,
+       row, width, bit_depth, channels, color_type);
+}
