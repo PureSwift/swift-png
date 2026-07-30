@@ -67,6 +67,9 @@ public struct TransformFlags: OptionSet, Sendable {
     /// Samples are shifted up to occupy the full depth, undoing a narrower original range.
     public static let shift = Self(rawValue: 1 << 17)
 
+    /// Samples are corrected between the file's encoding curve and the display's.
+    public static let gamma = Self(rawValue: 1 << 18)
+
     /// Resolves the requests against the image, adding what one request implies.
     ///
     /// This exists because the requests are not independent.  Asking for the transparency to
