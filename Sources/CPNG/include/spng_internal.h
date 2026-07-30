@@ -39,6 +39,12 @@ void spng_c_warning(png_const_structrp png_ptr, png_const_charp message);
 void spng_c_warning_bytes(png_const_structrp png_ptr, const char *message,
     size_t length);
 
+/* As above, prefixed with a chunk type given as its four bytes packed big-endian.
+ * Packed rather than passed as a string because the engine holds it that way.
+ */
+void spng_c_warning_chunk_bytes(png_const_structrp png_ptr, const char *message,
+    size_t length, png_uint_32 packed_name);
+
 /* Reported as an error or a warning depending on png_set_benign_errors. */
 void spng_c_benign_error(png_const_structrp png_ptr, png_const_charp message);
 
