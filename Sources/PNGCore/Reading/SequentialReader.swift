@@ -120,9 +120,7 @@ final class SequentialReader {
                 throw Diagnostic("out of place", chunk: .iend)
             }
 
-            // Metadata chunks are recognised from the next milestone onwards; for
-            // now they are skipped, with their checksums still verified.
-            try self.skipChunk(context: context)
+            try self.handleOptional(chunk, info: info, context: context)
         }
     }
 
@@ -282,33 +280,76 @@ final class SequentialReader {
 
     /// Reads whatever remains of the stream after the image data, up to and
     /// including the end marker.
-    func readEnd(context: PngContext) throws {
+    func readEnd(info: InfoStore?, context: PngContext) throws {
         guard self.phase == .imageEnd || self.phase == .rows else { return }
 
-        // Any image data chunks the decoder did not need still have to be walked
-        // past, since the client may not have read every row.
-        while self.lexer.current?.name == .idat || self.lexer.remainingInChunk > 0 {
-            try self.skipChunk(context: context)
-
-            let chunk = try self.lexer.readHeader(host: context.host)
-
-            if chunk.name == .iend {
-                try self.finishChunk(context: context)
-                self.phase = .streamEnd
-                return
-            }
-        }
-
-        while true {
-            if self.lexer.current?.name == .iend {
-                try self.finishChunk(context: context)
-                self.phase = .streamEnd
-                return
-            }
-
+        // Image data the client did not read still has to be walked past, since it may
+        // have stopped short of the last row.  Only the image data: the condition must not
+        // also test for unread bytes, or it would swallow the first metadata chunk after
+        // it as well.
+        while self.lexer.current?.name == .idat {
             try self.skipChunk(context: context)
             _ = try self.lexer.readHeader(host: context.host)
         }
+
+        // Metadata is allowed after the image data as well as before it, and is reported
+        // through the same accessors, so the walk parses rather than discards.
+        while true {
+            guard let current = self.lexer.current else { return }
+
+            if current.name == .iend {
+                try self.finishChunk(context: context)
+                self.phase = .streamEnd
+                return
+            }
+
+            try self.handleOptional(current, info: info, context: context)
+            _ = try self.lexer.readHeader(host: context.host)
+        }
+    }
+
+    /// Reads an optional chunk whole and parses it, or skips it when it is one this
+    /// library does not recognise.
+    ///
+    /// The payload is buffered into the context rather than a local, because reading it
+    /// runs the client's callback and a client may jump out of that.
+    private func handleOptional(
+        _ chunk: ChunkHeader,
+        info: InfoStore?,
+        context: PngContext
+    ) throws {
+        // With nowhere to record it, there is nothing to gain from parsing it; the
+        // checksum is still verified on the way past.
+        guard let info, Self.isRecognised(chunk.name) else {
+            try self.skipChunk(context: context)
+            return
+        }
+
+        // A chunk far larger than anything these carry is refused rather than allocated
+        // for: the length comes from the file, and an ancillary chunk is not worth
+        // exhausting memory over.
+        guard chunk.length <= InfoStore.chunkMallocMax else {
+            host: do { context.host.warn("chunk is too large") }
+            try self.skipChunk(context: context)
+            return
+        }
+
+        try context.reserve(\.scratch, max(chunk.length, 1))
+        try self.lexer.readWholePayload(into: context.scratch.bytes, host: context.host)
+
+        // The checksum is verified before the contents are trusted, so that a damaged
+        // payload is reported as damaged rather than as malformed.
+        try self.finishChunk(context: context)
+
+        try self.parseOptional(
+            chunk.name,
+            payload: UnsafeBufferPointer(
+                start: context.scratch.bytes.baseAddress,
+                count: chunk.length
+            ),
+            info: info,
+            host: context.host
+        )
     }
 
     /// Names the chunk that turned up where the header should have been.
