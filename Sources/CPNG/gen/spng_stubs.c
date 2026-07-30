@@ -129,12 +129,6 @@ png_get_progressive_ptr(png_const_structrp png_ptr)
    png_error(png_ptr, "png_get_progressive_ptr is not implemented");
 }
 
-png_byte PNGAPI
-png_get_rgb_to_gray_status(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_rgb_to_gray_status is not implemented");
-}
-
 png_bytepp PNGAPI
 png_get_rows(png_const_structrp png_ptr, png_const_inforp info_ptr)
 {
@@ -470,18 +464,6 @@ void PNGAPI
 png_set_read_user_transform_fn(png_structrp png_ptr, png_user_transform_ptr read_user_transform_fn)
 {
    png_error(png_ptr, "png_set_read_user_transform_fn is not implemented");
-}
-
-void PNGAPI
-png_set_rgb_to_gray(png_structrp png_ptr, int error_action, double red, double green)
-{
-   png_error(png_ptr, "png_set_rgb_to_gray is not implemented");
-}
-
-void PNGAPI
-png_set_rgb_to_gray_fixed(png_structrp png_ptr, int error_action, png_fixed_point red, png_fixed_point green)
-{
-   png_error(png_ptr, "png_set_rgb_to_gray_fixed is not implemented");
 }
 
 void PNGAPI
