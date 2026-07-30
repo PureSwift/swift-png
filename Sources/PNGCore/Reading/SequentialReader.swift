@@ -175,6 +175,14 @@ final class SequentialReader {
                     widest,
                     program.maximumRowBytes(from: start, hasTransparency: hasTransparency)
                 )
+
+                // And for whatever the client's own transform says it will leave behind, which can be
+                // larger than anything the library would produce: a client widening a one bit row to
+                // eight expands it eightfold and does so in this buffer.
+                var declared = program.resultingShape(from: start, hasTransparency: hasTransparency)
+                context.applyDeclaredUserShape(to: &declared)
+
+                widest = max(widest, declared.rowBytes)
             }
         }
 
@@ -298,7 +306,10 @@ final class SequentialReader {
         // the width for the same reason.
         self.maskTrailingBits(of: shape, in: row)
 
-        guard let program = context.transforms, !program.isEmpty else {
+        let runsPipeline = !(context.transforms?.isEmpty ?? true)
+        let runsUserTransform = context.transformFlags.contains(.userTransform)
+
+        guard runsPipeline || runsUserTransform else {
             self.transformedShape = nil
             return stored
         }
@@ -310,34 +321,95 @@ final class SequentialReader {
             count: context.rowBuffer.count - 1
         )
 
-        let observations = program.apply(
-            to: whole,
-            info: &shape,
-            inputs: context.transformInputs
-        )
+        if let program = context.transforms, runsPipeline {
+            let observations = program.apply(
+                to: whole,
+                info: &shape,
+                inputs: context.transformInputs
+            )
 
-        // Reported per row, which is what the reference does: a client watching its handler learns how
-        // much of the image had colour rather than merely that some of it did.
+            try self.report(observations, context: context)
+        }
+
+        // The client's own transform, after everything the library does, which is where the reference
+        // puts it and the only place it could sensibly go: a client asking for a row in a particular
+        // arrangement wants to see the arrangement it asked for.
         //
-        // Safe from here.  A warning goes out through the host's trampoline, which is one of the
-        // designated points a client may jump out of, and this frame owns nothing by then — every
-        // buffer belongs to the context.  The failing form throws instead, and unwinds normally.
-        if observations.sawColor {
-            context.noteColorDuringConversion()
+        // Called from here rather than from inside the pipeline, and that is deliberate.  The pipeline
+        // is handed a copy of what the transforms need, which includes tables; a client jumping out of
+        // its own transform would abandon that copy along with the frame holding it.  By the time this
+        // runs the pipeline has returned and the copy is gone.
+        if runsUserTransform {
+            Self.applyUserTransform(to: whole, shape: &shape, host: context.host)
 
-            switch context.rgbToGray.errorAction {
-            case .none:
-                break
-            case .warn:
-                context.host.warn("png_do_rgb_to_gray found nongray pixel")
-            case .error:
-                throw Diagnostic("png_do_rgb_to_gray found nongray pixel")
-            }
+            // Again, because the client's transform is the one thing that can disturb them.  Every
+            // transform the library has confines itself to the samples inside the width; a client's
+            // works on whatever bytes it likes, and the reference hands over a row whose spare bits
+            // are zero however they got set.
+            self.maskTrailingBits(of: shape, in: whole)
         }
 
         self.transformedShape = shape
 
         return shape.rowBytes
+    }
+
+    /// Tells the client what the pipeline noticed about the row.
+    ///
+    /// Reported per row, which is what the reference does: a client watching its handler learns how
+    /// much of the image had colour rather than merely that some of it did.
+    ///
+    /// A warning goes out through the host's trampoline, which is one of the designated points a
+    /// client may jump out of, and this frame owns nothing by then — every buffer belongs to the
+    /// context.  The failing form throws instead, and unwinds normally.
+    private func report(
+        _ observations: TransformProgram.Observations,
+        context: PngContext
+    ) throws {
+        guard observations.sawColor else { return }
+
+        context.noteColorDuringConversion()
+
+        switch context.rgbToGray.errorAction {
+        case .none:
+            break
+        case .warn:
+            context.host.warn("png_do_rgb_to_gray found nongray pixel")
+        case .error:
+            throw Diagnostic("png_do_rgb_to_gray found nongray pixel")
+        }
+    }
+
+    /// Hands the row to the transform the client installed.
+    ///
+    /// Static, and takes nothing but plain memory and plain numbers, because of what it is allowed to
+    /// own: the client may jump out of its own transform, abandoning this frame without unwinding it,
+    /// so a reference held here would never be released.  The row is the context's buffer and the
+    /// shape is a value, so this frame owns nothing at all.
+    ///
+    /// The shape that comes back is what the client declared through `png_set_user_transform_info`,
+    /// or what it left in the row description if it declared nothing.  The colour type is not among
+    /// them: the reference leaves it alone, so a row can come back with a channel count its colour
+    /// type does not imply, and that is what a client sees.
+    private static func applyUserTransform(
+        to row: UnsafeMutableBufferPointer<UInt8>,
+        shape: inout RowInfo,
+        host: Host
+    ) {
+        guard let transform = host.userTransform else { return }
+
+        let result = transform(
+            host.owner,
+            row.baseAddress,
+            UInt32(shape.width),
+            UInt32(shape.bitDepth),
+            UInt32(shape.channels),
+            UInt32(shape.colorType.rawValue)
+        )
+
+        shape.bitDepth = Int(result & 0xFF)
+        shape.channels = Int((result >> 8) & 0xFF)
+        shape.resize()
     }
 
     /// The shape the last decoded row ended up with, when the pipeline changed it.
