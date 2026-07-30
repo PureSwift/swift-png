@@ -53,7 +53,7 @@ func attempt(
 ///
 /// Chunk-attributed messages are prefixed the way the reference implementation
 /// prefixes them, since clients display these.
-private func report(_ diagnostic: Diagnostic, to png_ptr: png_structrp) {
+func report(_ diagnostic: Diagnostic, to png_ptr: png_structrp) {
     // Staged into the structure's own buffer first, because the dispatchers take a
     // terminated string and a Swift literal's termination is an implementation
     // detail rather than a guarantee.
