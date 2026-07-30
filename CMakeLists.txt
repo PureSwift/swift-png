@@ -63,34 +63,63 @@ add_custom_target(spng_export_lists
     DEPENDS ${SPNG_EXPORT_LIST} ${SPNG_VERSION_SCRIPT})
 
 # -- the engine --------------------------------------------------------------
+#
+# One CMake target per Swift module, matching the package's layout.  Building
+# them as separate modules rather than compiling every source into one is what
+# lets the same `import` lines work under both build systems, and it keeps the
+# engine unable to reach the C API by accident.
 
-file(GLOB_RECURSE SPNG_SWIFT_SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/Sources/PNGCore/*.swift
-    ${CMAKE_CURRENT_SOURCE_DIR}/Sources/PNGABI/*.swift
-    ${CMAKE_CURRENT_SOURCE_DIR}/Sources/LZ77/*.swift)
+# Whole-module optimisation matters here: the row pipeline crosses several files
+# per scanline, and the inlining that removes those boundaries is what keeps it
+# competitive.
+set(SPNG_COMPILATION_MODE $<IF:$<CONFIG:Release>,wholemodule,incremental>)
 
-add_library(PNGCore STATIC ${SPNG_SWIFT_SOURCES})
+function(spng_add_swift_module name)
+    file(GLOB_RECURSE sources CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/Sources/${name}/*.swift)
 
-set_target_properties(PNGCore PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-    Swift_MODULE_NAME PNGABI
-    # Whole-module optimisation matters here: the row pipeline crosses several
-    # files per scanline, and the inlining that removes those boundaries is what
-    # keeps it competitive.
-    Swift_COMPILATION_MODE $<IF:$<CONFIG:Release>,wholemodule,incremental>)
+    add_library(${name} STATIC ${sources})
 
-target_compile_options(PNGCore PRIVATE
+    set_target_properties(${name} PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        Swift_MODULE_NAME ${name}
+        Swift_COMPILATION_MODE ${SPNG_COMPILATION_MODE})
+endfunction()
+
+spng_add_swift_module(LZ77)
+spng_add_swift_module(PNGCore)
+spng_add_swift_module(PNGABI)
+
+target_link_libraries(PNGCore PUBLIC LZ77)
+target_link_libraries(PNGABI PUBLIC PNGCore)
+
+# Only the boundary module sees the C API.
+target_compile_options(PNGABI PRIVATE
     "SHELL:-Xcc -I${SPNG_INCLUDE_DIR}"
     "SHELL:-Xcc -fmodule-map-file=${SPNG_MODULE_MAP}")
 
 if(SPNG_USE_SYSTEM_ZLIB)
-    target_compile_definitions(PNGCore PRIVATE SPNG_SYSTEM_ZLIB)
+    target_compile_definitions(PNGCore PRIVATE SystemZlib)
+
+    # The module map has to be visible to everything that imports PNGCore, not just
+    # to PNGCore itself: a clang module a Swift module depends on has to be
+    # loadable wherever that Swift module is imported.
+    set(SPNG_ZLIB_MODULE_MAP
+        ${CMAKE_CURRENT_SOURCE_DIR}/Sources/CZlib/module.modulemap)
+
+    foreach(target PNGCore PNGABI)
+        target_compile_options(${target} PRIVATE
+            "SHELL:-Xcc -fmodule-map-file=${SPNG_ZLIB_MODULE_MAP}")
+    endforeach()
 endif()
 
 # -- the shared library ------------------------------------------------------
 
 add_library(png16 SHARED
     Sources/CPNG/spng_error.c
+    Sources/CPNG/spng_memory.c
+    Sources/CPNG/spng_lifecycle.c
+    Sources/CPNG/spng_callbacks.c
     Sources/CPNG/gen/spng_stubs.c)
 
 add_dependencies(png16 spng_export_lists)
@@ -99,7 +128,7 @@ target_include_directories(png16
     PUBLIC $<BUILD_INTERFACE:${SPNG_INCLUDE_DIR}>
            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libpng${SPNG_ABI_SONAME}>)
 
-target_link_libraries(png16 PRIVATE PNGCore)
+target_link_libraries(png16 PRIVATE PNGABI)
 
 if(SPNG_USE_SYSTEM_ZLIB)
     target_link_libraries(png16 PRIVATE ZLIB::ZLIB)
