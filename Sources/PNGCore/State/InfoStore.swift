@@ -210,6 +210,15 @@ public final class InfoStore {
         self.transformedShape = shape
     }
 
+    /// Corrects the palette for gamma, in place.
+    ///
+    /// The entries a client reads back are the corrected ones, because an indexed image's samples are
+    /// its palette: correcting a copy and leaving this one alone would have the client's own reading
+    /// of the image disagree with the rows it was handed.
+    public func applyGammaToPalette(_ table: GammaTable) {
+        Transform.gammaPalette(self.palette.elements, table: table)
+    }
+
     /// Whether the transparency has been turned into an alpha channel.
     ///
     /// Recorded rather than inferred from the count, which is zero for a non-indexed image whether
