@@ -147,7 +147,8 @@ extension Transform {
         background: ComposeBackground,
         toLinear: GammaTable? = nil,
         fromLinear: GammaTable? = nil,
-        corrected: GammaTable? = nil
+        corrected: GammaTable? = nil,
+        exponents: (toLinear: Double, fromLinear: Double, corrected: Double)? = nil
     ) {
         guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
 
@@ -212,10 +213,33 @@ extension Transform {
                 for channel in 0 ..< colorChannels {
                     let offset = source + channel * 2
                     let foreground = Int(row[offset]) << 8 | Int(row[offset + 1])
+                    let blended: Int
 
-                    let blended = Int(
-                        Self.blend16(foreground, alpha, screenSamples[channel])
-                    )
+                    // The same three cases as at eight bits, with the curve computed for each sample
+                    // rather than looked up: a table over sixteen bit samples would be sixty five
+                    // thousand entries per image.
+                    if let exponents {
+                        if alpha == 65535 {
+                            blended = Int(
+                                GammaTable.correct16(UInt16(foreground), gamma: exponents.corrected)
+                            )
+                        } else if alpha == 0 {
+                            blended = screenSamples[channel]
+                        } else {
+                            let light = Int(
+                                GammaTable.correct16(UInt16(foreground), gamma: exponents.toLinear)
+                            )
+
+                            blended = Int(
+                                GammaTable.correct16(
+                                    Self.blend16(light, alpha, linearSamples[channel]),
+                                    gamma: exponents.fromLinear
+                                )
+                            )
+                        }
+                    } else {
+                        blended = Int(Self.blend16(foreground, alpha, screenSamples[channel]))
+                    }
 
                     row[target + channel * 2] = UInt8(truncatingIfNeeded: blended >> 8)
                     row[target + channel * 2 + 1] = UInt8(truncatingIfNeeded: blended)
