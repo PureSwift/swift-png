@@ -28,6 +28,7 @@ struct TransformProgram {
         case rgbToGray
         case grayToRgb
         case compose(background: ComposeBackground)
+        case alphaMode(AlphaMode)
         case scale16
         case strip16
         case expand16
@@ -61,6 +62,21 @@ struct TransformProgram {
     /// Whether the image is laid over a background, and so ends with no alpha channel.
     private(set) var composes = false
 
+    /// Whether a row step rearranges the colour and coverage out of the format's own arrangement.
+    ///
+    /// The narrower of the two questions, and the one that decides the gamma: a step that leaves the
+    /// samples as light, or premultiplied, takes the correction over, because a correction afterwards
+    /// would be correcting the wrong thing.
+    private(set) var rearrangesAlpha = false
+
+    /// Whether the arrangement the client asked for stands at all.
+    ///
+    /// Broader than the row step, because the request outlives the rows.  An indexed image is
+    /// rearranged in its palette and its rows are left as indices; an image whose transparency is
+    /// still a chunk has nothing in its rows to multiply yet.  In both cases the image is now
+    /// described as laid over black, which is what the client is told when it asks for the background.
+    private(set) var arrangesAlpha = false
+
     /// Whether the file's transparency has been dealt with, so that nothing is left to report.
     ///
     /// Broader than "became an alpha channel", and deliberately so, because that is what the
@@ -82,7 +98,8 @@ struct TransformProgram {
         fillerValue: UInt32,
         fillerAfterColor: Bool,
         gamma: GammaState = GammaState(),
-        background: ComposeBackground = ComposeBackground()
+        background: ComposeBackground = ComposeBackground(),
+        alphaMode: AlphaMode = .png
     ) {
         let hasTransparency = info.isValid(InfoStore.Valid.trns)
         let flags = requested.resolved(for: header, hasTransparency: hasTransparency)
@@ -135,6 +152,33 @@ struct TransformProgram {
             self.composes = true
         }
 
+        // After compositing, which is the other thing that can consume an alpha channel: a row laid
+        // over a background has none left to rearrange, so the two never both apply.
+        //
+        // And only when the row will actually have coverage in it.  An image that is opaque throughout
+        // has nothing to multiply its colour by, and one whose transparency is still a chunk the client
+        // did not ask to expand has nothing there either — in both cases the request is dropped, which
+        // leaves the ordinary gamma correction in place, and that is the whole of what such an image
+        // gets.
+        //
+        // An indexed image is rearranged in its palette, for the same reason it is corrected and
+        // composited there: its rows hold indices, which name colours rather than being them.  So the
+        // arrangement is recorded, for the caller that owns the palette, and no row step is added.
+        if flags.contains(.alphaMode), alphaMode != .png, !self.composes,
+           header.colorType.hasAlpha || hasTransparency {
+            self.arrangesAlpha = true
+
+            // The row step, which is a narrower question than whether the request stands.  An image
+            // whose transparency is still a chunk the client did not ask to expand has no coverage in
+            // its rows to multiply by, so nothing happens to them — and the ordinary gamma correction
+            // is left in place, which is then the whole of what such an image gets.
+            if !header.colorType.isIndexed,
+               header.colorType.hasAlpha || flags.contains(.expandTransparency) {
+                self.steps.append(.alphaMode(alphaMode))
+                self.rearrangesAlpha = true
+            }
+        }
+
         // After the channel arrangement is settled and before the depth changes: the correction is
         // defined on the samples as the file encoded them, so narrowing them first would correct
         // values that had already lost precision.
@@ -147,7 +191,14 @@ struct TransformProgram {
         // correct the same samples twice.
         // Compositing corrects as it blends, for the same reason the colour conversion does, so it
         // takes the correction over in the same way.
-        self.colorConversionOwnsGamma = flags.contains(.rgbToGray) || self.composes
+        // Rearranging the alpha leaves the samples as light or premultiplied rather than corrected for
+        // a display, so a correction afterwards would be correcting the wrong thing.
+        // The rearrangement of an indexed image happens in its palette and corrects it on the way, so
+        // it takes the correction over there even though no row step was added.
+        self.colorConversionOwnsGamma = flags.contains(.rgbToGray)
+            || self.composes
+            || self.rearrangesAlpha
+            || (self.arrangesAlpha && header.colorType.isIndexed)
 
         if flags.contains(.gamma), !header.colorType.isIndexed,
            !self.colorConversionOwnsGamma,
@@ -306,6 +357,17 @@ struct TransformProgram {
             case .grayToRgb:
                 Transform.grayToRgb(row, &info)
 
+            case let .alphaMode(mode):
+                Transform.alphaMode(
+                    row,
+                    info,
+                    mode: mode,
+                    toLinear: inputs.toLinear,
+                    fromLinear: inputs.fromLinear,
+                    corrected: inputs.blendCorrected,
+                    exponents: inputs.linearExponents
+                )
+
             case let .compose(background):
                 Transform.compose(
                     row,
@@ -313,7 +375,8 @@ struct TransformProgram {
                     background: background,
                     toLinear: inputs.toLinear,
                     fromLinear: inputs.fromLinear,
-                    corrected: inputs.gammaTable
+                    corrected: inputs.blendCorrected,
+                    exponents: inputs.linearExponents
                 )
 
             case .scale16:
@@ -481,7 +544,8 @@ struct TransformProgram {
             }
             info.resize()
 
-        case .invertMono, .invertAlpha, .shift, .gamma, .bgr, .packSwap, .swapAlpha, .swapBytes:
+        case .alphaMode, .invertMono, .invertAlpha, .shift, .gamma, .bgr, .packSwap, .swapAlpha,
+             .swapBytes:
             // These rearrange bytes without changing the shape.
             return
         }
