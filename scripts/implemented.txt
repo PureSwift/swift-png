@@ -160,6 +160,9 @@ png_get_text
 png_set_text
 
 # Sources/PNGABI/TransformAPI.swift
+png_get_rgb_to_gray_status
+png_set_rgb_to_gray
+png_set_rgb_to_gray_fixed
 png_set_gamma
 png_set_gamma_fixed
 png_read_update_info
