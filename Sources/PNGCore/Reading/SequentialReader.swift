@@ -682,9 +682,18 @@ final class SequentialReader {
             produced += made
 
             if made == 0 {
-                // No progress and nothing left to give it: the stream ended before
-                // the image did.
-                if inflater.isFinished || self.lexer.remainingInChunk == 0 {
+                // The stream ended before the image did, which is a truncated file.
+                if inflater.isFinished {
+                    throw Diagnostic("Not enough image data")
+                }
+
+                // No progress and the decompressor is asking for bytes: the ordinary case of one
+                // image data chunk running out part way through a row.  The next one is fetched at
+                // the top of the loop, which is also where the file having no next one is noticed.
+                //
+                // Anything else is a decompressor that is neither finished nor hungry, which would
+                // spin here forever.
+                guard inflater.needsInput else {
                     throw Diagnostic("Not enough image data")
                 }
             }
