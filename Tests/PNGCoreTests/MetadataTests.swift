@@ -32,11 +32,14 @@ struct MetadataTests {
 
     /// A host whose allocator reports to `ledger`.
     ///
-    /// The ledger must outlive the host, which the caller arranges by holding it for the
-    /// duration of the test.
+    /// The ledger is retained and never released, deliberately.  A host holds its owner as a raw
+    /// pointer and cannot keep anything alive, so an unretained ledger is dangling the moment the
+    /// caller stops holding it — and a caller that only wants the host, not the counts, has no reason
+    /// to hold it. Leaking one small object per host is the price of removing that trap; the test
+    /// process is short-lived and the alternative was silently reading freed memory.
     static func makeHost(reportingTo ledger: Ledger) -> Host {
         Host(
-            owner: Unmanaged.passUnretained(ledger).toOpaque(),
+            owner: Unmanaged.passRetained(ledger).toOpaque(),
             allocate: { owner, size in
                 owner!.ledger.allocations += 1
                 return malloc(Int(size))
