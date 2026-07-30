@@ -63,6 +63,32 @@ public struct GammaState: Sendable {
         return FixedPoint(reciprocal)
     }
 
+    /// The exponent that takes a file's samples to linear light.
+    ///
+    /// A file's samples are not light levels: they are encoded with the file's own curve, and undoing
+    /// that is the reciprocal of it.  Anything that has to *average* samples — discarding colour,
+    /// compositing against a background — has to do it here rather than on the encoded values, because
+    /// a weighted sum of encoded samples is not the encoding of the weighted sum.
+    var toLinearExponent: FixedPoint? {
+        Self.reciprocal(of: self.fileGamma)
+    }
+
+    /// The exponent that takes linear light back to what the display expects.
+    var fromLinearExponent: FixedPoint? {
+        Self.reciprocal(of: self.screenGamma)
+    }
+
+    /// One over an exponent, in the same fixed-point scale.
+    private static func reciprocal(of gamma: FixedPoint) -> FixedPoint? {
+        guard gamma > 0 else { return nil }
+
+        let value = (1e10 / Double(gamma)).rounded()
+
+        guard value.magnitude <= Double(FixedPoint.max) else { return nil }
+
+        return FixedPoint(value)
+    }
+
     /// Whether a correction would change anything.
     var isWorthApplying: Bool {
         guard let exponent = self.correctionExponent else { return false }
