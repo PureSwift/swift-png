@@ -17,9 +17,9 @@ the control structure lifecycle, the allocator and stream callbacks, and every m
 chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
 embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
 range signalling, and all three text chunks. Interlaced images decode too, both ways a client can
-ask for them, and twenty of the read transforms work — the expansions, the depth conversions, the
-channel rearrangements, the filler and the shift. Gamma, compositing and the remaining transforms
-are still to come, as is writing.
+ask for them, and twenty-two of the read transforms work — the expansions, the depth conversions, the
+channel rearrangements, the filler, the shift and gamma correction. Compositing, alpha mode, the
+greyscale conversion and quantisation are still to come, as is writing.
 
 ## Building
 
@@ -87,6 +87,15 @@ combinations rather than one transform at a time, and drives several of them twi
 reversed — the result has to be identical, and checking that against the reference proves it for the
 reference too rather than only for us. That is 2640 decodes over 22 images in both read modes.
 
+Gamma is the one place where agreeing to the last bit is both the point and straightforwardly
+reachable, because the reference build computes it in double precision rather than through its
+fixed-point logarithm path — so the arithmetic is reproducible rather than a reimplementation of an
+approximation. The comparison then found the parts that are not arithmetic at all: an indexed image is
+corrected in its palette, once, and its rows expanded from the corrected entries, so correcting the
+rows as well double-corrects them; the palette a client reads back afterwards is the corrected one;
+and samples narrower than a byte are corrected without being widened, by repeating each sample across
+a byte, looking it up in the eight bit table, and keeping the top bits.
+
 Almost every rule it found was one that could not have been guessed. The shift moves samples *down*
 rather than up: it recovers the narrower values an image was made from rather than filling the depth,
 so five significant bits in eight means shifting right by three. Asking for colour from a greyscale
@@ -133,10 +142,16 @@ Where the reference does something this library should not copy, the case is lis
 and the comparison reports it without failing: `Conformance/known-differences.txt` for decoding, and
 `Conformance/known-transform-differences.txt` for the transforms. The decoding file has one entry, a
 chunk the reference build refuses to read wherever it appears. The transform file has two kinds of
-entry and keeps them apart on purpose — the reference accepting a filler it cannot honour and then
-failing mid-decode, and one gap of this library's own, where reversing sub-byte samples within a byte
-is applied to an interlaced pass row rather than to the full-width row it is spread into. Unfinished
-work is labelled as unfinished rather than filed alongside a decision.
+entry and keeps them apart on purpose. On the reference's side, it accepts a filler channel it cannot
+honour on sub-byte samples, reports a row shape that cannot exist, and then fails mid-decode. On this
+library's side there are two gaps: reversing sub-byte samples within a byte is applied to an interlaced
+pass row rather than to the full-width row it is spread into, and sixteen bit gamma is computed exactly
+where the reference deliberately uses a coarser table. Unfinished work is labelled as unfinished rather
+than filed alongside a decision.
+
+The comparison also refuses to carry a recorded difference that no longer differs. An exemption that
+has stopped applying is worse than none at all, because it sits in the file looking considered while
+silently covering whatever regresses into its place — so the file has to earn every line it holds.
 
 ## Licensing
 
