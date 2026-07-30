@@ -674,9 +674,17 @@ public final class PngContext {
     /// Only for an indexed image: a palette is meaningful for others as a suggestion, and this library
     /// does not invent one the client did not ask for.
     public func writePalette(_ info: InfoStore) throws {
-        guard let header = self.header, header.colorType.isIndexed else { return }
+        guard let header = self.header else { return }
 
-        try self.writer.writePalette(info, context: self)
+        try self.writer.writeBeforePalette(info, context: self)
+
+        // Only for an indexed image: a palette is meaningful for others as a suggestion, and this
+        // library does not invent one the client did not ask for.
+        if header.colorType.isIndexed {
+            try self.writer.writePalette(info, context: self)
+        }
+
+        try self.writer.writeAfterPalette(info, context: self)
     }
 
     public func writeRow(_ row: UnsafePointer<UInt8>?) throws {
