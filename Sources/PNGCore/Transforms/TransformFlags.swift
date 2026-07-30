@@ -73,6 +73,9 @@ public struct TransformFlags: OptionSet, Sendable {
     /// Three colour channels are collapsed into one.
     public static let rgbToGray = Self(rawValue: 1 << 19)
 
+    /// The image is laid over a background colour and loses its alpha channel.
+    public static let compose = Self(rawValue: 1 << 20)
+
     /// Resolves the requests against the image, adding what one request implies.
     ///
     /// This exists because the requests are not independent.  Asking for the transparency to
@@ -110,6 +113,17 @@ public struct TransformFlags: OptionSet, Sendable {
         // set would add an opaque channel the client did not ask for.
         if !hasTransparency, !header.colorType.isIndexed {
             flags.remove(.expandTransparency)
+        }
+
+        // Compositing needs somewhere to read coverage from, so an image whose transparency is still a
+        // chunk has to have it turned into a channel first.  Without that there is nothing to blend and
+        // the request would silently do nothing.
+        // Only when the image actually carries transparency.  Without it there is nothing for the
+        // background to show through, the request is dropped, and the expansion has to be dropped with
+        // it — an indexed image handed a background it cannot use comes back untouched, still holding
+        // indices, rather than expanded for a blend that never happens.
+        if flags.contains(.compose), hasTransparency, !header.colorType.isIndexed {
+            flags.insert([.expand, .expandTransparency])
         }
 
         // Discarding colour from an indexed image means expanding the palette first: the colour is in
