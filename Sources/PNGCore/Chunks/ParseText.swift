@@ -12,6 +12,8 @@
 
 /// One text entry, in the shape the API reports.
 public struct TextEntry {
+    public init() {}
+
     /// Which chunk this came from, as the API's own compression codes: -1 for
     /// uncompressed text, 0 for compressed text, 1 and 2 for the international form
     /// uncompressed and compressed.
@@ -22,7 +24,7 @@ public struct TextEntry {
     public var language = TextStorage()
     public var translatedKeyword = TextStorage()
 
-    func deallocate(host: Host) {
+    public func deallocate(host: Host) {
         self.keyword.deallocate(host: host)
         self.text.deallocate(host: host)
         self.language.deallocate(host: host)
@@ -39,7 +41,7 @@ extension InfoStore {
     /// The entry is passed in fully built: every string it holds is already allocated, so
     /// there is nothing here that can fail part way and leave a half-formed entry in the
     /// array.
-    func appendText(_ entry: TextEntry) throws {
+    public func appendText(_ entry: TextEntry) throws {
         self.textEntries.append(entry)
     }
 
