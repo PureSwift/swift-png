@@ -162,6 +162,9 @@ png_set_text
 # Sources/PNGABI/TransformAPI.swift
 png_set_alpha_mode
 png_set_alpha_mode_fixed
+png_set_read_user_transform_fn
+png_set_user_transform_info
+png_get_user_transform_ptr
 png_set_background
 png_set_background_fixed
 png_get_rgb_to_gray_status

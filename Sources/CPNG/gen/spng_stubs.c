@@ -177,12 +177,6 @@ png_get_user_height_max(png_const_structrp png_ptr)
    png_error(png_ptr, "png_get_user_height_max is not implemented");
 }
 
-png_voidp PNGAPI
-png_get_user_transform_ptr(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_user_transform_ptr is not implemented");
-}
-
 png_uint_32 PNGAPI
 png_get_user_width_max(png_const_structrp png_ptr)
 {
@@ -437,12 +431,6 @@ png_set_read_user_chunk_fn(png_structrp png_ptr, png_voidp user_chunk_ptr, png_u
 }
 
 void PNGAPI
-png_set_read_user_transform_fn(png_structrp png_ptr, png_user_transform_ptr read_user_transform_fn)
-{
-   png_error(png_ptr, "png_set_read_user_transform_fn is not implemented");
-}
-
-void PNGAPI
 png_set_rows(png_const_structrp png_ptr, png_inforp info_ptr, png_bytepp row_pointers)
 {
    png_error(png_ptr, "png_set_rows is not implemented");
@@ -518,12 +506,6 @@ void PNGAPI
 png_set_user_limits(png_structrp png_ptr, png_uint_32 user_width_max, png_uint_32 user_height_max)
 {
    png_error(png_ptr, "png_set_user_limits is not implemented");
-}
-
-void PNGAPI
-png_set_user_transform_info(png_structrp png_ptr, png_voidp user_transform_ptr, int user_transform_depth, int user_transform_channels)
-{
-   png_error(png_ptr, "png_set_user_transform_info is not implemented");
 }
 
 void PNGAPI
