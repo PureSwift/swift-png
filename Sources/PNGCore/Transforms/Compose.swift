@@ -117,6 +117,74 @@ extension Transform {
         }
     }
 
+    /// Lays a row that has no alpha channel over a background, using the transparent colour.
+    ///
+    /// The other shape compositing takes, and the one that only shows up with the alpha arrangements:
+    /// asking for a background expands the transparency into a channel first, so the general path
+    /// above handles it, while asking for an arrangement does not — the row still holds the colour the
+    /// file called transparent, and it is compared rather than blended.
+    ///
+    /// There is nothing partial here.  A pixel either is that colour, in which case none of it survives
+    /// and the background stands in its place, or it is not, in which case it is simply corrected.  So
+    /// this is also where the correction happens for such a row, which is why it takes the table.
+    static func composeTransparentColor(
+        _ row: UnsafeMutableBufferPointer<UInt8>,
+        _ info: RowInfo,
+        transparent: Rgb16,
+        background: ComposeBackground,
+        corrected: GammaTable? = nil
+    ) {
+        guard !info.colorType.hasAlpha, !info.colorType.isIndexed, info.bitDepth >= 8 else { return }
+
+        let isColor = info.colorType.hasColor
+
+        func samples(of color: Rgb16) -> [Int] {
+            isColor
+                ? [Int(color.red), Int(color.green), Int(color.blue)]
+                : [Int(color.gray)]
+        }
+
+        let transparentSamples = samples(of: transparent)
+        let backgroundSamples = samples(of: background.screen)
+        let channels = info.channels
+
+        if info.bitDepth == 8 {
+            for pixel in 0 ..< info.width {
+                let base = pixel * channels
+                let matches = (0 ..< channels).allSatisfy {
+                    Int(row[base + $0]) == transparentSamples[$0] & 0xFF
+                }
+
+                for channel in 0 ..< channels {
+                    if matches {
+                        row[base + channel] =
+                            UInt8(truncatingIfNeeded: backgroundSamples[channel])
+                    } else if let corrected {
+                        row[base + channel] = corrected.values[Int(row[base + channel])]
+                    }
+                }
+            }
+
+            return
+        }
+
+        for pixel in 0 ..< info.width {
+            let base = pixel * channels * 2
+            let matches = (0 ..< channels).allSatisfy {
+                (Int(row[base + $0 * 2]) << 8 | Int(row[base + $0 * 2 + 1])) == transparentSamples[$0]
+            }
+
+            guard matches else { continue }
+
+            for channel in 0 ..< channels {
+                row[base + channel * 2] =
+                    UInt8(truncatingIfNeeded: backgroundSamples[channel] >> 8)
+                row[base + channel * 2 + 1] =
+                    UInt8(truncatingIfNeeded: backgroundSamples[channel])
+            }
+        }
+    }
+
     /// Blends one sample over a background.
     ///
     /// Divided by 255 rather than shifted by eight: coverage runs from nothing to fully opaque
