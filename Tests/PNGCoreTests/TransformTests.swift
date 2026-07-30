@@ -604,3 +604,89 @@ struct RgbToGrayTests {
         #expect(shape.colorType == .grayscale)
     }
 }
+
+/// Averaging samples is only meaningful on light levels, so anything that averages has to go through
+/// linear first. These check that the round trip is a round trip, and that the two ends of the range
+/// survive it.
+@Suite("Linear light")
+struct LinearLightTests {
+    private func state(screen: Double, file: Double) -> GammaState {
+        var state = GammaState()
+        state.screenGamma = FixedPoint((screen * 100_000).rounded())
+        state.fileGamma = FixedPoint((file * 100_000).rounded())
+        return state
+    }
+
+    /// Decoding to linear and re-encoding for the same curve has to come back where it started, or
+    /// every average would drift.
+    @Test("Round trips through linear")
+    func roundTripsThroughLinear() {
+        // A file and a display with the same curve: to linear and back is the identity.
+        let state = self.state(screen: 2.2, file: 1.0 / 2.2)
+
+        let toLinear = GammaTable(exponent: state.toLinearExponent ?? 0)
+        let fromLinear = GammaTable(exponent: state.fromLinearExponent ?? 0)
+
+        // Not every value survives exactly — the intermediate is eight bits, so the curve loses
+        // resolution at the dark end — but the ends must, and the middle must stay close.
+        #expect(fromLinear.values[Int(toLinear.values[0])] == 0)
+        #expect(fromLinear.values[Int(toLinear.values[255])] == 255)
+
+        for value in [64, 128, 192, 254] {
+            let round = Int(fromLinear.values[Int(toLinear.values[value])])
+            #expect(abs(round - value) <= 2, "\(value) came back as \(round)")
+        }
+    }
+
+    /// The two exponents are reciprocals of the two gammas, not of their product — that is the whole
+    /// difference between correcting once and decomposing the correction into two halves.
+    @Test("Derives the two halves of the correction")
+    func derivesBothHalves() {
+        let state = self.state(screen: 2.2, file: 1.0 / 2.2)
+
+        // A file encoded at 1/2.2 decodes to linear by raising to 2.2.
+        #expect(abs((state.toLinearExponent ?? 0) - 220_000) <= 5)
+
+        // And a display expecting 2.2 wants the result raised to 1/2.2.
+        #expect(abs((state.fromLinearExponent ?? 0) - 45_455) <= 5)
+
+        // The two composed are the single correction, which for this pair is nothing at all.
+        #expect(!state.isWorthApplying)
+    }
+
+    @Test("Reports no halves when there is no correction to decompose")
+    func needsBothGammas() {
+        var onlyFile = GammaState()
+        onlyFile.fileGamma = 45455
+
+        #expect(onlyFile.toLinearExponent != nil)
+        #expect(onlyFile.fromLinearExponent == nil, "no display curve was given")
+    }
+
+    /// An already grey pixel takes the combined correction directly rather than making the trip
+    /// through linear, and the two are not the same: the trip loses precision at eight bits.
+    @Test("Sends a grey pixel by the direct path")
+    func greyTakesTheDirectPath() {
+        let state = self.state(screen: 2.2, file: 1.0)
+
+        let toLinear = GammaTable(exponent: state.toLinearExponent ?? 0)
+        let fromLinear = GammaTable(exponent: state.fromLinearExponent ?? 0)
+        let corrected = GammaTable(exponent: state.correctionExponent ?? 0)
+
+        var bytes: [UInt8] = [40, 40, 40] + [UInt8](repeating: 0, count: 8)
+        var shape = RowInfo(width: 1, bitDepth: 8, colorType: .rgb, channels: 3)
+
+        _ = bytes.withUnsafeMutableBufferPointer { row in
+            Transform.rgbToGray(
+                row,
+                &shape,
+                weights: RgbToGrayState(),
+                toLinear: toLinear,
+                fromLinear: fromLinear,
+                corrected: corrected
+            )
+        }
+
+        #expect(bytes[0] == corrected.values[40], "the direct correction, not the round trip")
+    }
+}
