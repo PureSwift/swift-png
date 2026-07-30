@@ -26,12 +26,6 @@ spng_unimplemented_fatal(const char *name)
    abort();
 }
 
-png_voidp PNGAPI
-png_calloc(png_const_structrp png_ptr, png_alloc_size_t size)
-{
-   png_error(png_ptr, "png_calloc is not implemented");
-}
-
 void PNGAPI
 png_convert_from_struct_tm(png_timep ptime, const struct tm * ttime)
 {
@@ -57,40 +51,6 @@ png_convert_to_rfc1123_buffer(char out[29], png_const_timep ptime)
    return (int)0;
 }
 
-png_infop PNGAPI
-png_create_info_struct(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_create_info_struct is not implemented");
-}
-
-png_structp PNGAPI
-png_create_read_struct(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn)
-{
-   spng_unimplemented_fatal("png_create_read_struct");
-   return (png_structp)0;
-}
-
-png_structp PNGAPI
-png_create_read_struct_2(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr, png_malloc_ptr malloc_fn, png_free_ptr free_fn)
-{
-   spng_unimplemented_fatal("png_create_read_struct_2");
-   return (png_structp)0;
-}
-
-png_structp PNGAPI
-png_create_write_struct(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn)
-{
-   spng_unimplemented_fatal("png_create_write_struct");
-   return (png_structp)0;
-}
-
-png_structp PNGAPI
-png_create_write_struct_2(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr, png_malloc_ptr malloc_fn, png_free_ptr free_fn)
-{
-   spng_unimplemented_fatal("png_create_write_struct_2");
-   return (png_structp)0;
-}
-
 void PNGAPI
 png_data_freer(png_const_structrp png_ptr, png_inforp info_ptr, int freer, png_uint_32 mask)
 {
@@ -98,45 +58,9 @@ png_data_freer(png_const_structrp png_ptr, png_inforp info_ptr, int freer, png_u
 }
 
 void PNGAPI
-png_destroy_info_struct(png_const_structrp png_ptr, png_infopp info_ptr_ptr)
-{
-   png_error(png_ptr, "png_destroy_info_struct is not implemented");
-}
-
-void PNGAPI
-png_destroy_read_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr, png_infopp end_info_ptr_ptr)
-{
-   spng_unimplemented_fatal("png_destroy_read_struct");
-}
-
-void PNGAPI
-png_destroy_write_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr)
-{
-   spng_unimplemented_fatal("png_destroy_write_struct");
-}
-
-void PNGAPI
-png_free(png_const_structrp png_ptr, png_voidp ptr)
-{
-   png_error(png_ptr, "png_free is not implemented");
-}
-
-void PNGAPI
 png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_me, int num)
 {
    png_error(png_ptr, "png_free_data is not implemented");
-}
-
-void PNGAPI
-png_free_default(png_const_structrp png_ptr, png_voidp ptr)
-{
-   png_error(png_ptr, "png_free_default is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_IHDR(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *width, png_uint_32 *height, int *bit_depth, int *color_type, int *interlace_method, int *compression_method, int *filter_method)
-{
-   png_error(png_ptr, "png_get_IHDR is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -149,12 +73,6 @@ png_uint_32 PNGAPI
 png_get_bKGD(png_const_structrp png_ptr, png_inforp info_ptr, png_color_16p *background)
 {
    png_error(png_ptr, "png_get_bKGD is not implemented");
-}
-
-png_byte PNGAPI
-png_get_bit_depth(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_bit_depth is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -199,12 +117,6 @@ png_get_cLLI_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_ui
    png_error(png_ptr, "png_get_cLLI_fixed is not implemented");
 }
 
-png_byte PNGAPI
-png_get_channels(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_channels is not implemented");
-}
-
 png_uint_32 PNGAPI
 png_get_chunk_cache_max(png_const_structrp png_ptr)
 {
@@ -217,12 +129,6 @@ png_get_chunk_malloc_max(png_const_structrp png_ptr)
    png_error(png_ptr, "png_get_chunk_malloc_max is not implemented");
 }
 
-png_byte PNGAPI
-png_get_color_type(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_color_type is not implemented");
-}
-
 size_t PNGAPI
 png_get_compression_buffer_size(png_const_structrp png_ptr)
 {
@@ -230,21 +136,9 @@ png_get_compression_buffer_size(png_const_structrp png_ptr)
 }
 
 png_byte PNGAPI
-png_get_compression_type(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_compression_type is not implemented");
-}
-
-png_byte PNGAPI
 png_get_current_pass_number(png_const_structrp spng_arg0)
 {
    png_error(spng_arg0, "png_get_current_pass_number is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_current_row_number(png_const_structrp spng_arg0)
-{
-   png_error(spng_arg0, "png_get_current_row_number is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -257,18 +151,6 @@ png_uint_32 PNGAPI
 png_get_eXIf_1(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 *num_exif, png_bytep *exif)
 {
    png_error(png_ptr, "png_get_eXIf_1 is not implemented");
-}
-
-png_voidp PNGAPI
-png_get_error_ptr(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_error_ptr is not implemented");
-}
-
-png_byte PNGAPI
-png_get_filter_type(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_filter_type is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -296,33 +178,9 @@ png_get_iCCP(png_const_structrp png_ptr, png_inforp info_ptr, png_charpp name, i
 }
 
 png_uint_32 PNGAPI
-png_get_image_height(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_image_height is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_image_width(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_image_width is not implemented");
-}
-
-png_byte PNGAPI
-png_get_interlace_type(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_interlace_type is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_io_chunk_type(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_io_chunk_type is not implemented");
-}
-
-png_voidp PNGAPI
-png_get_io_ptr(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_io_ptr is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -341,12 +199,6 @@ png_uint_32 PNGAPI
 png_get_mDCV_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_white_x, png_fixed_point *int_white_y, png_fixed_point *int_red_x, png_fixed_point *int_red_y, png_fixed_point *int_green_x, png_fixed_point *int_green_y, png_fixed_point *int_blue_x, png_fixed_point *int_blue_y, png_uint_32p mastering_display_maximum_luminance_scaled_by_10000, png_uint_32p mastering_display_minimum_luminance_scaled_by_10000)
 {
    png_error(png_ptr, "png_get_mDCV_fixed is not implemented");
-}
-
-png_voidp PNGAPI
-png_get_mem_ptr(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_mem_ptr is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -413,12 +265,6 @@ png_byte PNGAPI
 png_get_rgb_to_gray_status(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_rgb_to_gray_status is not implemented");
-}
-
-size_t PNGAPI
-png_get_rowbytes(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_rowbytes is not implemented");
 }
 
 png_bytepp PNGAPI
@@ -515,12 +361,6 @@ png_uint_32 PNGAPI
 png_get_user_width_max(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_user_width_max is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_valid(png_const_structrp png_ptr, png_const_inforp info_ptr, png_uint_32 flag)
-{
-   png_error(png_ptr, "png_get_valid is not implemented");
 }
 
 float PNGAPI
@@ -656,36 +496,6 @@ png_image_write_to_stdio(png_imagep image, FILE *file, int convert_to_8_bit, con
    return (int)0;
 }
 
-void PNGAPI
-png_info_init_3(png_infopp info_ptr, size_t png_info_struct_size)
-{
-   spng_unimplemented_fatal("png_info_init_3");
-}
-
-void PNGAPI
-png_init_io(png_structrp png_ptr, FILE *fp)
-{
-   png_error(png_ptr, "png_init_io is not implemented");
-}
-
-png_voidp PNGAPI
-png_malloc(png_const_structrp png_ptr, png_alloc_size_t size)
-{
-   png_error(png_ptr, "png_malloc is not implemented");
-}
-
-png_voidp PNGAPI
-png_malloc_default(png_const_structrp png_ptr, png_alloc_size_t size)
-{
-   png_error(png_ptr, "png_malloc_default is not implemented");
-}
-
-png_voidp PNGAPI
-png_malloc_warn(png_const_structrp png_ptr, png_alloc_size_t size)
-{
-   png_error(png_ptr, "png_malloc_warn is not implemented");
-}
-
 png_uint_32 PNGAPI
 png_permit_mng_features(png_structrp png_ptr, png_uint_32 mng_features_permitted)
 {
@@ -717,39 +527,9 @@ png_progressive_combine_row(png_const_structrp png_ptr, png_bytep old_row, png_c
 }
 
 void PNGAPI
-png_read_end(png_structrp png_ptr, png_inforp info_ptr)
-{
-   png_error(png_ptr, "png_read_end is not implemented");
-}
-
-void PNGAPI
-png_read_image(png_structrp png_ptr, png_bytepp image)
-{
-   png_error(png_ptr, "png_read_image is not implemented");
-}
-
-void PNGAPI
-png_read_info(png_structrp png_ptr, png_inforp info_ptr)
-{
-   png_error(png_ptr, "png_read_info is not implemented");
-}
-
-void PNGAPI
 png_read_png(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)
 {
    png_error(png_ptr, "png_read_png is not implemented");
-}
-
-void PNGAPI
-png_read_row(png_structrp png_ptr, png_bytep row, png_bytep display_row)
-{
-   png_error(png_ptr, "png_read_row is not implemented");
-}
-
-void PNGAPI
-png_read_rows(png_structrp png_ptr, png_bytepp row, png_bytepp display_row, png_uint_32 num_rows)
-{
-   png_error(png_ptr, "png_read_rows is not implemented");
 }
 
 void PNGAPI
@@ -810,12 +590,6 @@ void PNGAPI
 png_set_background_fixed(png_structrp png_ptr, png_const_color_16p background_color, int background_gamma_code, int need_expand, png_fixed_point background_gamma)
 {
    png_error(png_ptr, "png_set_background_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_benign_errors(png_structrp png_ptr, int allowed)
-{
-   png_error(png_ptr, "png_set_benign_errors is not implemented");
 }
 
 void PNGAPI
@@ -936,12 +710,6 @@ void PNGAPI
 png_set_eXIf_1(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 num_exif, png_bytep exif)
 {
    png_error(png_ptr, "png_set_eXIf_1 is not implemented");
-}
-
-void PNGAPI
-png_set_error_fn(png_structrp png_ptr, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warning_fn)
-{
-   png_error(png_ptr, "png_set_error_fn is not implemented");
 }
 
 void PNGAPI
@@ -1077,12 +845,6 @@ png_set_mDCV_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_po
 }
 
 void PNGAPI
-png_set_mem_fn(png_structrp png_ptr, png_voidp mem_ptr, png_malloc_ptr malloc_fn, png_free_ptr free_fn)
-{
-   png_error(png_ptr, "png_set_mem_fn is not implemented");
-}
-
-void PNGAPI
 png_set_oFFs(png_const_structrp png_ptr, png_inforp info_ptr, png_int_32 offset_x, png_int_32 offset_y, int unit_type)
 {
    png_error(png_ptr, "png_set_oFFs is not implemented");
@@ -1134,18 +896,6 @@ void PNGAPI
 png_set_quantize(png_structrp png_ptr, png_colorp palette, int num_palette, int maximum_colors, png_const_uint_16p histogram, int full_quantize)
 {
    png_error(png_ptr, "png_set_quantize is not implemented");
-}
-
-void PNGAPI
-png_set_read_fn(png_structrp png_ptr, png_voidp io_ptr, png_rw_ptr read_data_fn)
-{
-   png_error(png_ptr, "png_set_read_fn is not implemented");
-}
-
-void PNGAPI
-png_set_read_status_fn(png_structrp png_ptr, png_read_status_ptr read_row_fn)
-{
-   png_error(png_ptr, "png_set_read_status_fn is not implemented");
 }
 
 void PNGAPI
@@ -1230,12 +980,6 @@ void PNGAPI
 png_set_shift(png_structrp png_ptr, png_const_color_8p true_bits)
 {
    png_error(png_ptr, "png_set_shift is not implemented");
-}
-
-void PNGAPI
-png_set_sig_bytes(png_structrp png_ptr, int num_bytes)
-{
-   png_error(png_ptr, "png_set_sig_bytes is not implemented");
 }
 
 void PNGAPI
@@ -1341,27 +1085,9 @@ png_set_user_transform_info(png_structrp png_ptr, png_voidp user_transform_ptr, 
 }
 
 void PNGAPI
-png_set_write_fn(png_structrp png_ptr, png_voidp io_ptr, png_rw_ptr write_data_fn, png_flush_ptr output_flush_fn)
-{
-   png_error(png_ptr, "png_set_write_fn is not implemented");
-}
-
-void PNGAPI
-png_set_write_status_fn(png_structrp png_ptr, png_write_status_ptr write_row_fn)
-{
-   png_error(png_ptr, "png_set_write_status_fn is not implemented");
-}
-
-void PNGAPI
 png_set_write_user_transform_fn(png_structrp png_ptr, png_user_transform_ptr write_user_transform_fn)
 {
    png_error(png_ptr, "png_set_write_user_transform_fn is not implemented");
-}
-
-void PNGAPI
-png_start_read_image(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_start_read_image is not implemented");
 }
 
 void PNGAPI
