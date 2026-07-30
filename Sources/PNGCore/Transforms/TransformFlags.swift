@@ -76,6 +76,9 @@ public struct TransformFlags: OptionSet, Sendable {
     /// The image is laid over a background colour and loses its alpha channel.
     public static let compose = Self(rawValue: 1 << 20)
 
+    /// The colour and the coverage are rearranged into what the client asked for.
+    public static let alphaMode = Self(rawValue: 1 << 21)
+
     /// Resolves the requests against the image, adding what one request implies.
     ///
     /// This exists because the requests are not independent.  Asking for the transparency to
