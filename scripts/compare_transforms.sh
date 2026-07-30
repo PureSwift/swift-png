@@ -93,6 +93,16 @@ rgb_to_gray,gray_to_rgb
 rgb_to_gray,gamma_bright
 rgb_to_gray,packing
 rgb_to_gray,add_alpha
+background
+background_black
+background_white
+background_file
+background,expand
+background,strip_16
+background,gray_to_rgb
+background,bgr
+background,gamma_bright
+background,rgb_to_gray
 gamma_bright,expand
 gamma_bright,gray_to_rgb
 gamma_bright,strip_alpha
@@ -129,6 +139,11 @@ expand,expand_16,swap,swap_alpha
 palette_to_rgb,strip_alpha,bgr,filler
 "
 
+# Deliberately absent: background with expand_16.  The background has to be given at the depth the
+# blend happens at, and a client asking to widen to sixteen bits has to supply a sixteen bit
+# background.  This harness supplies eight bit values, so that pairing would compare a client mistake
+# rather than a library behaviour — and the reference's answer to a mistake is not a specification.
+
 # The same requests in the opposite order.  The result has to be identical to the forward form, and
 # comparing both against the reference is what proves it for the reference too rather than only for
 # us.
@@ -143,6 +158,9 @@ packswap,packing
 invert_mono,packing
 expand,rgb_to_gray
 gray_to_rgb,rgb_to_gray
+expand,background
+gray_to_rgb,background
+gamma_bright,background
 expand,gamma_bright
 gray_to_rgb,gamma_bright
 strip_16,gamma_dark
