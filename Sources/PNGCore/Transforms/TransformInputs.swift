@@ -56,7 +56,10 @@ struct TransformInputs {
             self.palette = Array(info.palette.elements)
         }
 
-        if info.isValid(InfoStore.Valid.trns), !info.transparentAlpha.isEmpty {
+        // The count rather than the validity bit: a transparency that has already been dealt with —
+        // folded into a channel, or blended into the palette — leaves the bit set and the count at
+        // zero, and using it again would apply it twice.
+        if info.transparentCount > 0, !info.transparentAlpha.isEmpty {
             self.paletteAlpha = Array(info.transparentAlpha.elements)
         }
 
