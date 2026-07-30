@@ -83,10 +83,23 @@ void spng_c_call_progressive_info(png_structrp png_ptr, png_inforp info_ptr);
 void spng_c_call_progressive_row(png_structrp png_ptr, png_bytep new_row,
     png_uint_32 row_number, int pass);
 void spng_c_call_progressive_end(png_structrp png_ptr, png_inforp info_ptr);
-void spng_c_call_read_user_transform(png_structrp png_ptr,
-    png_row_infop row_info, png_bytep row);
-void spng_c_call_write_user_transform(png_structrp png_ptr,
-    png_row_infop row_info, png_bytep row);
+/* Hands one row to a transform the client installed.
+ *
+ * The row's description is built here rather than passed in, and for the usual
+ * reason: the client may jump out of its own transform, and a description owned
+ * by a Swift frame would be abandoned along with whatever kept it alive.  So the
+ * shape goes in as plain numbers and comes back as one — the bit depth in the low
+ * byte and the channel count in the next.
+ *
+ * What the client declared through png_set_user_transform_info wins over what it
+ * left in the description, which is what the reference does.
+ */
+png_uint_32 spng_c_call_read_user_transform(png_structrp png_ptr, png_bytep row,
+    png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
+    png_uint_32 color_type);
+png_uint_32 spng_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
+    png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
+    png_uint_32 color_type);
 int spng_c_call_user_chunk(png_structrp png_ptr, png_unknown_chunkp chunk);
 
 /* Non-zero when a client callback is on the stack; debug re-entrancy checks
