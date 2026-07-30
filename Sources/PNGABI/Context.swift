@@ -40,6 +40,16 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
                 size_t(length),
                 packed
             )
+        },
+        userTransform: { owner, row, width, depth, channels, colorType in
+            spng_c_call_read_user_transform(
+                owner?.pngStruct,
+                row,
+                width,
+                depth,
+                channels,
+                colorType
+            )
         }
     )
 }
