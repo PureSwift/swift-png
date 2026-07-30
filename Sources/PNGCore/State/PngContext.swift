@@ -83,6 +83,9 @@ public final class PngContext {
     /// The background to lay the image over, and how to read its samples.
     public var compose = ComposeState()
 
+    /// How the client wants colour and coverage arranged in the rows it receives.
+    public var alphaMode: AlphaMode = .png
+
     /// Records that a pixel with colour reached the conversion.
     ///
     /// The running record, which `png_get_rgb_to_gray_status` reports.  Telling the client is separate
@@ -220,10 +223,11 @@ public final class PngContext {
 
         guard !self.compose.needsExpanding else {
             return self.corrected(self.expanded(background, header: header, info: info),
-                                  gamma: gamma)
+                                  gamma: gamma,
+                                  bitDepth: header.bitDepth)
         }
 
-        return self.corrected(background, gamma: gamma)
+        return self.corrected(background, gamma: gamma, bitDepth: header.bitDepth)
     }
 
     /// Takes the background into the two spaces a blend needs it in.
@@ -233,7 +237,11 @@ public final class PngContext {
     /// correction at all to be shown; one given in the file's terms is corrected exactly as the image
     /// is.  Using the image's exponent for a colour that was never in the file's space is the mistake
     /// this exists to avoid.
-    private func corrected(_ color: Rgb16, gamma: GammaState) -> ComposeBackground {
+    private func corrected(
+        _ color: Rgb16,
+        gamma: GammaState,
+        bitDepth: Int
+    ) -> ComposeBackground {
         // Without a correction in force there is one space, and the colour is already in it.
         guard gamma.screenGamma > 0, gamma.fileGamma > 0 else {
             return ComposeBackground(screen: color, linear: color)
@@ -260,11 +268,26 @@ public final class PngContext {
             toScreen = GammaState.one
         }
 
+        // The background is in the image's own scale, so the curve has to be applied in that scale
+        // too: a sixteen bit background put through the eight bit table would come back a two hundred
+        // and fifty fifth of itself, which is not a darker colour but a different one.
         func apply(_ exponent: FixedPoint?, to color: Rgb16) -> Rgb16 {
             guard let exponent, GammaState.isSignificant(exponent) else { return color }
 
-            let table = GammaTable(exponent: exponent)
             var result = color
+
+            guard bitDepth < 16 else {
+                let gamma = Double(exponent) * 1e-5
+
+                result.red = GammaTable.correct16(color.red, gamma: gamma)
+                result.green = GammaTable.correct16(color.green, gamma: gamma)
+                result.blue = GammaTable.correct16(color.blue, gamma: gamma)
+                result.gray = GammaTable.correct16(color.gray, gamma: gamma)
+
+                return result
+            }
+
+            let table = GammaTable(exponent: exponent)
 
             result.red = UInt16(table.values[Int(color.red & 0xFF)])
             result.green = UInt16(table.values[Int(color.green & 0xFF)])
@@ -352,7 +375,8 @@ public final class PngContext {
             fillerValue: self.fillerValue,
             fillerAfterColor: self.fillerAfterColor,
             gamma: gamma,
-            background: background
+            background: background,
+            alphaMode: self.alphaMode
         )
 
         // The correction table is built before the snapshot, because for an indexed image it changes
@@ -361,6 +385,27 @@ public final class PngContext {
 
         if let exponent = gamma.correctionExponent, GammaState.isSignificant(exponent) {
             gammaTable = GammaTable(exponent: exponent)
+        }
+
+        // The pair that take a sample to light and bring it back, together with the correction that is
+        // the two composed.  Built whenever something is going to average or blend samples, and — unlike
+        // the correction above — not gated on whether that correction does anything: a curve that undoes
+        // itself over the round trip still has to be undone before the blend, because a blend of encoded
+        // samples is not the encoding of the blend.
+        //
+        // The three are built together or not at all.  Having one without the others would leave samples
+        // in a space nothing else agreed to.
+        var blend: (toLinear: GammaTable, fromLinear: GammaTable, corrected: GammaTable)?
+
+        if self.transformFlags.contains(.rgbToGray) || self.transformFlags.contains(.compose)
+            || self.transformFlags.contains(.alphaMode),
+           let toLinear = gamma.toLinearExponent,
+           let fromLinear = gamma.fromLinearExponent {
+            blend = (
+                GammaTable(exponent: toLinear),
+                GammaTable(exponent: fromLinear),
+                GammaTable(exponent: gamma.correctionExponent ?? GammaState.one)
+            )
         }
 
         // An indexed image is corrected in its palette rather than in its rows, since that is where
@@ -379,12 +424,25 @@ public final class PngContext {
         // Read before anything below consumes it, since the pipeline was built against this answer.
         let hadTransparency = info.isValid(InfoStore.Valid.trns)
 
+        // Rearranging the alpha of an indexed image is the same operation against black, and differs in
+        // one way only: the transparency is not consumed.  Compositing removes coverage from the image,
+        // so the table has nothing left to say; this arrangement keeps it, and a client that goes on to
+        // expand the palette gets the coverage as a channel alongside the colour it has been applied to.
+        if program.arrangesAlpha, header.colorType.isIndexed, hadTransparency {
+            info.composePalette(
+                background: ComposeBackground(),
+                toLinear: blend?.toLinear,
+                fromLinear: blend?.fromLinear,
+                corrected: blend?.corrected
+            )
+        }
+
         if program.composes, header.colorType.isIndexed, hadTransparency {
             info.composePalette(
                 background: background,
-                toLinear: gammaTable == nil ? nil : GammaTable(exponent: gamma.toLinearExponent ?? 0),
-                fromLinear: gammaTable == nil ? nil : GammaTable(exponent: gamma.fromLinearExponent ?? 0),
-                corrected: gammaTable
+                toLinear: blend?.toLinear,
+                fromLinear: blend?.fromLinear,
+                corrected: blend?.corrected
             )
             info.consumeTransparency()
         }
@@ -401,13 +459,13 @@ public final class PngContext {
         // The pair that map to linear light and back, built only when something needs to average
         // samples and there is a curve to undo first.  They are built together: converting one way
         // without the other would leave the samples in the wrong space.
-        if self.transformFlags.contains(.rgbToGray) || self.transformFlags.contains(.compose),
-           let toLinear = gamma.toLinearExponent,
-           let fromLinear = gamma.fromLinearExponent {
-            self.transformInputs.toLinear = GammaTable(exponent: toLinear)
-            self.transformInputs.fromLinear = GammaTable(exponent: fromLinear)
+        if let blend {
+            self.transformInputs.toLinear = blend.toLinear
+            self.transformInputs.fromLinear = blend.fromLinear
+            self.transformInputs.blendCorrected = blend.corrected
 
-            if let combined = gamma.correctionExponent {
+            if let toLinear = gamma.toLinearExponent, let fromLinear = gamma.fromLinearExponent,
+               let combined = gamma.correctionExponent {
                 self.transformInputs.linearExponents = (
                     toLinear: Double(toLinear) * 1e-5,
                     fromLinear: Double(fromLinear) * 1e-5,
@@ -447,6 +505,10 @@ public final class PngContext {
                 info.background = self.compose.color
             }
 
+        } else if program.arrangesAlpha, !header.colorType.isIndexed {
+            // The same replacement, for the same reason: multiplying colour by coverage is blending
+            // against black, and the image now describes itself as laid over that.
+            info.background = Rgb16()
         }
 
         // The transparency has become a channel, so there is no longer a table to report.  A client
