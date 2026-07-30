@@ -25,6 +25,7 @@ struct TransformProgram {
         case expandGrayTo8
         case expandTransparency
         case stripAlpha
+        case rgbToGray
         case grayToRgb
         case scale16
         case strip16
@@ -95,6 +96,12 @@ struct TransformProgram {
         if flags.contains(.stripAlpha) {
             self.steps.append(.stripAlpha)
 
+        }
+
+        // Before the reverse conversion, so that a client asking for both ends up with colour: the
+        // two are not opposites that cancel, they are stages that compose.
+        if flags.contains(.rgbToGray) {
+            self.steps.append(.rgbToGray)
         }
 
         if flags.contains(.grayToRgb) {
@@ -212,12 +219,24 @@ struct TransformProgram {
         }
     }
 
+    /// What the pipeline noticed while running, which the caller may want to report.
+    struct Observations {
+        /// Whether a pixel with colour reached the conversion to greyscale.
+        var sawColor = false
+    }
+
     /// Runs the pipeline over one row.
+    ///
+    /// Returns what it noticed rather than recording it anywhere: this runs per row and per pass, and
+    /// what to do about an observation — warn, fail, or keep count — belongs to the caller.
+    @discardableResult
     func apply(
         to row: UnsafeMutableBufferPointer<UInt8>,
         info: inout RowInfo,
         inputs: TransformInputs
-    ) {
+    ) -> Observations {
+        var observations = Observations()
+
         for step in self.steps {
             switch step {
             case .expandPalette:
@@ -235,6 +254,11 @@ struct TransformProgram {
 
             case .stripAlpha:
                 Transform.stripAlpha(row, &info)
+
+            case .rgbToGray:
+                if Transform.rgbToGray(row, &info, weights: inputs.rgbToGray) {
+                    observations.sawColor = true
+                }
 
             case .grayToRgb:
                 Transform.grayToRgb(row, &info)
@@ -285,6 +309,8 @@ struct TransformProgram {
                 Transform.swapBytes(row, info)
             }
         }
+
+        return observations
     }
 
     /// The shape a row ends up with, worked out without decoding anything.
@@ -353,6 +379,15 @@ struct TransformProgram {
             guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
             info.colorType = info.colorType.hasColor ? .rgb : .grayscale
             info.channels -= 1
+            info.resize()
+
+        case .rgbToGray:
+            guard info.colorType.hasColor, !info.colorType.isIndexed, info.bitDepth >= 8 else {
+                return
+            }
+            let hadAlpha = info.colorType.hasAlpha
+            info.colorType = hadAlpha ? .grayscaleAlpha : .grayscale
+            info.channels = hadAlpha ? 2 : 1
             info.resize()
 
         case .grayToRgb:
