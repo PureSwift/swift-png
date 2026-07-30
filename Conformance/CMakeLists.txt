@@ -3,7 +3,7 @@
 # These are C programs, deliberately.  The claim being tested is that a C client
 # built for libpng works against this library, and only a C client can test that.
 
-set(SPNG_SCRIPTS ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts)
+set(SPNG_SCRIPTS ${CMAKE_CURRENT_SOURCE_DIR}/../scripts)
 
 # Asserts the dynamic symbol table matches the published API exactly: nothing
 # missing, and nothing internal exposed.
@@ -50,7 +50,7 @@ else()
         "Reference libpng headers not found; conformance programs compile against the vendored copy")
 endif()
 
-add_test(NAME version_probe COMMAND version_probe)
+add_test(NAME version_probe COMMAND $<TARGET_FILE:version_probe>)
 
 # The same program, linked against the reference library instead of ours.
 #
@@ -66,8 +66,48 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
     target_link_libraries(version_probe_reference PRIVATE
         ${SPNG_REFERENCE_LINK_LIBRARIES})
 
-    add_test(NAME version_probe_reference COMMAND version_probe_reference)
+    add_test(NAME version_probe_reference COMMAND $<TARGET_FILE:version_probe_reference>)
 else()
     message(STATUS
         "Reference libpng library not found; probe expectations will not be cross-checked")
+endif()
+
+# -- the differential decode ------------------------------------------------
+#
+# The primary correctness check.  One program, compiled twice, run over the corpus;
+# any difference in what the two libraries report is a defect here.  It needs both
+# libraries, so it is skipped when the reference is absent.
+
+add_executable(pngdump pngdump.c)
+target_link_libraries(pngdump PRIVATE png16)
+
+if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+    target_include_directories(pngdump BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+endif()
+
+if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
+    add_executable(pngdump_reference pngdump.c)
+    target_include_directories(pngdump_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngdump_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    # Generated into the build tree rather than checked in, so the awkward cases
+    # are described by the script that makes them rather than by opaque binaries.
+    set(SPNG_CORPUS ${CMAKE_CURRENT_BINARY_DIR}/corpus)
+
+    add_custom_command(
+        OUTPUT ${SPNG_CORPUS}/.stamp
+        COMMAND ${Python3_EXECUTABLE} ${SPNG_SCRIPTS}/make_corpus.py ${SPNG_CORPUS}
+        COMMAND ${CMAKE_COMMAND} -E touch ${SPNG_CORPUS}/.stamp
+        DEPENDS ${SPNG_SCRIPTS}/make_corpus.py
+        COMMENT "Generating the test corpus")
+
+    add_custom_target(spng_corpus DEPENDS ${SPNG_CORPUS}/.stamp)
+    add_dependencies(pngdump spng_corpus)
+
+    add_test(NAME differential_decode
+        COMMAND ${SPNG_SCRIPTS}/compare_decode.sh
+                $<TARGET_FILE:pngdump>
+                $<TARGET_FILE:pngdump_reference>
+                ${SPNG_CORPUS})
 endif()
