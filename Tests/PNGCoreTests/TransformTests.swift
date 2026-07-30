@@ -479,3 +479,128 @@ struct GammaTests {
         #expect(table.values[0x55] >> 6 >= 1)
     }
 }
+
+/// The weighted sum is integer arithmetic, and the two depths round it differently — which is the
+/// kind of detail that is invisible until something compares byte for byte.
+@Suite("Discarding colour")
+struct RgbToGrayTests {
+    private func convert(
+        _ pixels: [UInt8],
+        width: Int,
+        colorType: ColorType,
+        channels: Int,
+        weights: RgbToGrayState = RgbToGrayState()
+    ) -> (bytes: [UInt8], shape: RowInfo, sawColor: Bool) {
+        var bytes = pixels + [UInt8](repeating: 0, count: 16)
+        var shape = RowInfo(width: width, bitDepth: 8, colorType: colorType, channels: channels)
+        var sawColor = false
+
+        bytes.withUnsafeMutableBufferPointer { row in
+            sawColor = Transform.rgbToGray(row, &shape, weights: weights)
+        }
+
+        return (bytes, shape, sawColor)
+    }
+
+    /// The weights are not an even split, and using one would be visibly wrong: green carries most of
+    /// the brightness a viewer perceives.
+    @Test("Weights green most heavily")
+    func weightsGreenMost() {
+        let weights = RgbToGrayState()
+
+        #expect(weights.green > weights.red)
+        #expect(weights.red > weights.blue)
+        // The three have to account for the whole, or the conversion would change the brightness.
+        #expect(weights.red + weights.green + weights.blue == 32768)
+
+        // Pure green is brighter than pure red, which is brighter than pure blue.
+        let green = self.convert([0, 255, 0], width: 1, colorType: .rgb, channels: 3)
+        let red = self.convert([255, 0, 0], width: 1, colorType: .rgb, channels: 3)
+        let blue = self.convert([0, 0, 255], width: 1, colorType: .rgb, channels: 3)
+
+        #expect(green.bytes[0] > red.bytes[0])
+        #expect(red.bytes[0] > blue.bytes[0])
+    }
+
+    /// A grey pixel has to survive the conversion unchanged, or a greyscale image passed through it
+    /// would drift.
+    @Test("Leaves an already grey pixel alone")
+    func greyIsAFixedPoint() {
+        for value in [0, 1, 64, 127, 128, 200, 254, 255] as [UInt8] {
+            let result = self.convert([value, value, value], width: 1,
+                                      colorType: .rgb, channels: 3)
+
+            #expect(result.bytes[0] == value, "grey \(value)")
+            #expect(!result.sawColor, "and is not reported as coloured")
+        }
+    }
+
+    @Test("Notices a pixel that had colour")
+    func noticesColor() {
+        #expect(self.convert([10, 20, 30], width: 1, colorType: .rgb, channels: 3).sawColor)
+        #expect(self.convert([10, 10, 11], width: 1, colorType: .rgb, channels: 3).sawColor)
+        #expect(!self.convert([10, 10, 10], width: 1, colorType: .rgb, channels: 3).sawColor)
+
+        // Across a row: one coloured pixel among grey ones is enough.
+        let row = self.convert([5, 5, 5, 9, 9, 9, 1, 2, 3], width: 3,
+                               colorType: .rgb, channels: 3)
+        #expect(row.sawColor)
+    }
+
+    @Test("Keeps the alpha channel and drops the colour")
+    func keepsAlpha() {
+        let result = self.convert([10, 20, 30, 200], width: 1, colorType: .rgba, channels: 4)
+
+        #expect(result.shape.colorType == .grayscaleAlpha)
+        #expect(result.shape.channels == 2)
+        #expect(result.bytes[1] == 200, "alpha carried through untouched")
+    }
+
+    /// The eight bit path truncates.  It is checked against a sum computed here rather than against a
+    /// value the implementation produced, since the rounding is the whole point.
+    @Test("Truncates the eight bit sum")
+    func truncatesAtEightBits() {
+        let weights = RgbToGrayState()
+
+        for (r, g, b) in [(0, 50, 100), (150, 148, 198), (248, 42, 40), (1, 1, 2)] {
+            let expected = (Int(weights.red) * r + Int(weights.green) * g
+                + Int(weights.blue) * b) >> 15
+
+            let result = self.convert([UInt8(r), UInt8(g), UInt8(b)], width: 1,
+                                      colorType: .rgb, channels: 3)
+
+            #expect(result.bytes[0] == UInt8(expected), "(\(r),\(g),\(b))")
+        }
+    }
+
+    /// A weight of zero for two channels makes the third the whole answer, which is the clearest
+    /// possible check that the weights are applied where they are meant to be.
+    @Test("Applies the client's own weights")
+    func honoursCustomWeights() {
+        var onlyRed = RgbToGrayState()
+        onlyRed.red = 32768
+        onlyRed.green = 0
+
+        let result = self.convert([200, 10, 20], width: 1, colorType: .rgb, channels: 3,
+                                  weights: onlyRed)
+
+        #expect(onlyRed.blue == 0)
+        #expect(result.bytes[0] == 200)
+    }
+
+    /// Nothing to convert means nothing changed, including the shape a client was promised.
+    @Test("Declines a row with no colour to discard")
+    func declinesGreyscaleRows() {
+        var bytes: [UInt8] = [1, 2, 3, 4]
+        var shape = RowInfo(width: 4, bitDepth: 8, colorType: .grayscale, channels: 1)
+
+        let sawColor = bytes.withUnsafeMutableBufferPointer { row in
+            Transform.rgbToGray(row, &shape, weights: RgbToGrayState())
+        }
+
+        #expect(!sawColor)
+        #expect(bytes == [1, 2, 3, 4])
+        #expect(shape.channels == 1)
+        #expect(shape.colorType == .grayscale)
+    }
+}
