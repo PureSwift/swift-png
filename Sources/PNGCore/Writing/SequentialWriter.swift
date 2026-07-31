@@ -222,9 +222,36 @@ final class SequentialWriter {
 
         working.baseAddress!.update(from: row.baseAddress!, count: supplied)
 
+        // The client's own transform runs before everything the library does, which is the mirror of
+        // where it runs on the way in — and it is shown the row as the client is handing it over
+        // rather than as the file will store it.  For a client that packs its samples those are
+        // different shapes, and the difference is visible: a transform told the file's depth would
+        // touch bits that are about to be discarded.
+        //
+        // What the client declared through png_set_user_transform_info has no effect here.  That call
+        // says what a row will look like *after* a transform, which on the way out is the shape the
+        // file already fixes.
+        if context.transformFlags.contains(.userTransform), let transform = host(context) {
+            let shape = program.suppliedShape
+
+            _ = transform(
+                context.host.owner,
+                working.baseAddress,
+                UInt32(shape.width),
+                UInt32(shape.bitDepth),
+                UInt32(shape.channels),
+                UInt32(shape.colorType.rawValue)
+            )
+        }
+
         let shape = program.apply(to: working, significant: context.shiftBits)
 
         return UnsafeBufferPointer(start: working.baseAddress, count: shape.rowBytes)
+    }
+
+    /// The client's own transform, when one is installed.
+    private func host(_ context: PngContext) -> Host.UserTransform? {
+        context.host.writeUserTransform
     }
 
     /// Pushes the output when the client asked for that every so many rows.
@@ -412,7 +439,9 @@ final class SequentialWriter {
             fillerAfterColor: context.fillerAfterColor
         )
 
-        if !program.isEmpty {
+        // A transform of the client's own forces the copy even when nothing else would, since the
+        // client's row is the client's and this one writes into it.
+        if !program.isEmpty || context.transformFlags.contains(.userTransform) {
             self.transforms = program
 
             // The client's row is wider than the file's when it is supplying a channel the file has
