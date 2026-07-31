@@ -123,3 +123,27 @@ public func png_get_io_chunk_type(_ png_ptr: png_const_structrp?) -> png_uint_32
 
     return context.ioChunkName.packed
 }
+
+/// Says what a checksum that does not match should mean.
+///
+/// The two halves are asked separately because the answers differ: a critical chunk with a bad
+/// checksum is a file to give up on, and an ancillary one is a chunk to drop.  A client that knows
+/// its files are damaged in a particular way can say otherwise for either.
+@c @implementation
+public func png_set_crc_action(
+    _ png_ptr: png_structrp?,
+    _ crit_action: Int32,
+    _ ancil_action: Int32
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    // "No change" means what it says: the setting stays as it was, which is how a client asks about
+    // one half without disturbing the other.
+    if crit_action != PNG_CRC_NO_CHANGE, let action = CrcAction(rawValue: crit_action) {
+        context.criticalCrcAction = action
+    }
+
+    if ancil_action != PNG_CRC_NO_CHANGE, let action = CrcAction(rawValue: ancil_action) {
+        context.ancillaryCrcAction = action
+    }
+}

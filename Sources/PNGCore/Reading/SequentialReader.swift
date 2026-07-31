@@ -890,7 +890,7 @@ final class SequentialReader {
 
         // The checksum is verified before the contents are trusted, so that a damaged
         // payload is reported as damaged rather than as malformed.
-        try self.finishChunk(context: context)
+        guard try self.finishChunk(context: context) else { return }
 
         try self.parseOptional(
             chunk.name,
@@ -927,15 +927,36 @@ final class SequentialReader {
         try self.finishChunk(context: context)
     }
 
-    /// Reads the trailing checksum of the current chunk.
-    private func finishChunk(context: PngContext) throws {
-        guard self.lexer.current != nil else { return }
+    /// Reads the trailing checksum of the current chunk, and says whether what it covered can be
+    /// trusted.
+    @discardableResult
+    private func finishChunk(context: PngContext) throws -> Bool {
+        guard self.lexer.current != nil else { return true }
 
-        if !self.lexer.readAndCheckCrc(host: context.host, context: context) {
-            // Recorded as well as raised: png_set_crc_action lets a client decide what
-            // a mismatch means, and that handling arrives with it.
-            self.sawBadChecksum = true
-            throw Diagnostic("CRC error", chunk: self.lexer.current?.name)
+        guard !self.lexer.readAndCheckCrc(host: context.host, context: context) else { return true }
+
+        // Recorded whatever is decided below: a client can ask what happened even when it asked for
+        // the failure to be passed over in silence.
+        self.sawBadChecksum = true
+
+        let name = self.lexer.current?.name
+        let isCritical = !(name?.isAncillary ?? false)
+        let action = (isCritical ? context.criticalCrcAction : context.ancillaryCrcAction)
+            .resolved(isCritical: isCritical)
+
+        // Fatal for a chunk the file cannot be read without, unless the client said otherwise.
+        if action == .errorQuit {
+            throw Diagnostic("CRC error", chunk: name)
         }
+
+        if action.warns {
+            context.host.warn(Diagnostic("CRC error", severity: .warning, chunk: name))
+        }
+
+        // Dropped unless the client asked for it to be used anyway, which is occasionally the only
+        // way to get anything at all out of a damaged file.  Reported by returning rather than by
+        // throwing: an ancillary chunk that cannot be trusted is a chunk to skip, not a file to
+        // abandon, and the caller is the one that knows the difference.
+        return action.usesData
     }
 }
