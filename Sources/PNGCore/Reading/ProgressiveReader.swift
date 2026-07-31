@@ -37,6 +37,12 @@ final class ProgressiveReader {
     /// Bytes of the current unit that have arrived, when it is one being gathered whole.
     private(set) var gathered = 0
 
+    /// Whether the file has already been said to hold more image data than the image needs.
+    ///
+    /// Only the first such remark is worded that way; the rest are worded differently, so this says
+    /// which of the two to use rather than whether to speak at all.
+    private var saidExtraImageData = false
+
     /// Whether the client asked to be left alone until it asks again.
     ///
     /// A client that pauses inside a callback means the call that delivered it to stop and return, so
@@ -545,6 +551,53 @@ final class ProgressiveReader {
 
             try self.deliverRow(stored: stored, header: header, context: context)
         }
+
+        self.noteExtraImageData(bytes, context: context, inflater: inflater)
+    }
+
+    /// Says that image data has arrived which the image has no use for.
+    ///
+    /// Twice over, in two different forms, which is the reference's and worth reproducing exactly
+    /// because a client sees both: the first says that the file holds more than the image needs, and
+    /// every push after it that still carries any says so again in its own words.  Which means what a
+    /// client is told depends on how the bytes happened to be divided — a whole file handed over at
+    /// once produces one remark, and the same file pushed a byte at a time produces several.
+    private func noteExtraImageData(
+        _ bytes: UnsafeBufferPointer<UInt8>,
+        context: PngContext,
+        inflater: InflateStream
+    ) {
+        guard self.pass >= Adam7.passCount else { return }
+
+        // Already said once, so anything further that arrives is remarked on as it arrives, without
+        // asking what it decompresses to: it is image data reaching an image that is over.
+        if self.saidExtraImageData {
+            guard !bytes.isEmpty else { return }
+            context.host.warn("Extra compression data in IDAT")
+            return
+        }
+
+        // Every well-formed stream has a tail the last row did not need — the marks that say the
+        // stream ended and arrived intact.  Those are consumed here rather than counted as spare,
+        // which is the whole difficulty: what is left after them is the file having more to say
+        // than the image had room for.
+        var produced = false
+
+        while !inflater.needsInput, !inflater.isFinished {
+            let made = (try? inflater.inflate(
+                into: context.rowBuffer.bytes.baseAddress!,
+                count: context.rowBuffer.count
+            )) ?? 0
+
+            if made == 0 { break }
+            produced = true
+        }
+
+        guard produced || !inflater.needsInput else { return }
+
+        // Set before the report, which runs the client's handler and may not come back.
+        self.saidExtraImageData = true
+        context.host.warn("Extra compressed data in IDAT")
     }
 
     /// How many bytes the row being gathered occupies in the stream.
