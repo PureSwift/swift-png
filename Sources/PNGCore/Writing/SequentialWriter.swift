@@ -148,6 +148,15 @@ final class SequentialWriter {
             try self.startImageData(context: context)
         }
 
+        // The indices as the client is handing them over, which is what it will be told about.  A row
+        // naming an entry the palette has not got is not a row this library can write meaningfully,
+        // but it is written anyway and the complaint is made once the image is done — which is the
+        // reference's arrangement, and the kinder one: a client learns about all of its rows rather
+        // than about the first one that went wrong.
+        if header.colorType.isIndexed {
+            context.notePaletteIndices(row, width: header.width, bitDepth: header.bitDepth)
+        }
+
         // An interlaced image the library is placing rows into: the client hands over every row of
         // the image once per pass, and the ones this pass does not contain are counted and dropped.
         // That is the reference's arrangement, and it is what lets a client write the seven passes
@@ -372,6 +381,17 @@ final class SequentialWriter {
 
     /// Finishes the compressed stream and writes the chunk that ends the file.
     func writeEnd(_ info: InfoStore?, context: PngContext) throws {
+        // Said once, about the image rather than about a row, and said as a fault rather than as a
+        // remark: a file whose rows name entries its palette has not got is a file nothing can read
+        // properly, so writing one is refused unless the client has said it can live with it.
+        //
+        // Reported by calling rather than by throwing, because a client that said it can live with
+        // this expects the file to be finished regardless, and a throw would abandon it here.
+        if let info, !info.palette.elements.isEmpty,
+           context.highestPaletteIndex >= info.palette.elements.count {
+            context.host.benignError("Wrote palette index exceeding num_palette")
+        }
+
         guard self.stage < .ended else { return }
 
         if self.startedImageData {
