@@ -110,6 +110,14 @@ public struct Host {
 
     public let userChunk: UserChunk?
 
+    /// Reports something the client may have said it can live with.
+    ///
+    /// Returns when it can and does not return when it cannot, which is why this is called rather
+    /// than thrown: a caller that carries on has to be able to carry on from the same place.
+    public typealias Benign = @convention(c) (Owner?, UnsafePointer<UInt8>?, UInt) -> Void
+
+    public let benign: Benign?
+
     public let progressiveInfoFn: ProgressiveInfo?
     public let progressiveRowFn: ProgressiveRow?
     public let progressiveEndFn: ProgressiveInfo?
@@ -126,6 +134,7 @@ public struct Host {
         flushBytes: Flush? = nil,
         writeUserTransform: UserTransform? = nil,
         userChunk: UserChunk? = nil,
+        benign: Benign? = nil,
         progressiveInfoFn: ProgressiveInfo? = nil,
         progressiveRowFn: ProgressiveRow? = nil,
         progressiveEndFn: ProgressiveInfo? = nil
@@ -141,6 +150,7 @@ public struct Host {
         self.flushBytes = flushBytes
         self.writeUserTransform = writeUserTransform
         self.userChunk = userChunk
+        self.benign = benign
         self.progressiveInfoFn = progressiveInfoFn
         self.progressiveRowFn = progressiveRowFn
         self.progressiveEndFn = progressiveEndFn
@@ -170,6 +180,21 @@ extension Host {
     /// client's callback, and the client may jump out of it.
     func readExactly(into destination: UnsafeMutablePointer<UInt8>, count: Int) {
         self.read(self.owner, destination, UInt(count))
+    }
+
+    /// Reports a fault the client may have said it can live with.
+    ///
+    /// Falls back to a warning where there is no way to ask: a caller with no benign channel is a
+    /// caller in a test, and losing the report entirely would be worse than reporting it too gently.
+    func benignError(_ message: StaticString) {
+        guard message.hasPointerRepresentation else { return }
+
+        guard let benign = self.benign else {
+            self.warn(message)
+            return
+        }
+
+        benign(self.owner, message.utf8Start, UInt(message.utf8CodeUnitCount))
     }
 
     func warn(_ message: StaticString) {
