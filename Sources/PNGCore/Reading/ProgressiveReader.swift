@@ -37,6 +37,9 @@ final class ProgressiveReader {
     /// Bytes of the current unit that have arrived, when it is one being gathered whole.
     private(set) var gathered = 0
 
+    /// Whether the image data has already been said to have stopped without finishing.
+    private var saidTruncatedImageData = false
+
     /// Whether the file has already been said to hold more image data than the image needs.
     ///
     /// Only the first such remark is worded that way; the rest are worded differently, so this says
@@ -257,6 +260,13 @@ final class ProgressiveReader {
             try self.beginImageData(context: context, info: info)
             self.enter(.imageData(remaining: length))
         } else {
+            // The first chunk that is not image data is where the image data ended, and both of
+            // these are questions about the whole of it.  They cannot be asked as each image data
+            // chunk runs out: a file may divide its stream across as many as it likes, and every one
+            // but the last leaves the stream rightly unfinished with its closing marks still to come.
+            self.noteUnfinishedImageData(context: context)
+            try self.noteImageDataEnded(context: context)
+
             try context.reserve(\.scratch, max(length, 8))
             self.enter(.chunkData(name, length: length))
         }
@@ -508,8 +518,15 @@ final class ProgressiveReader {
         context: PngContext,
         info: InfoStore?
     ) throws {
-        guard let header = context.header, let inflater = context.inflater,
-              !self.imageDataFailed else { return }
+        guard let header = context.header, let inflater = context.inflater else { return }
+
+        // Nothing more can be decompressed, but the chunk is still delivering — and what it delivers
+        // is still remarked on, because from the client's side data is arriving at an image that
+        // stopped.
+        if self.imageDataFailed {
+            self.noteExtraImageData(bytes, context: context, inflater: inflater)
+            return
+        }
 
         // The buffer is not copied, so it has to stay valid while the decompressor is working through
         // it — which it does, because this returns before the caller's buffer goes anywhere.
@@ -530,13 +547,33 @@ final class ProgressiveReader {
                     into: context.rowBuffer.bytes.baseAddress! + self.gatheredRow,
                     count: wanted
                 )
-            } catch let diagnostic as Diagnostic {
+            } catch is Diagnostic {
                 // A stream that cannot be decompressed stops the image without stopping the file: the
                 // client is told, no more rows are produced, and the walk carries on to the end.  That
                 // is what the reference does here and it is not what it does reading in one go, where
                 // the same fault is fatal — a client pushing bytes has nowhere to put an exception.
-                context.host.warn(diagnostic.asWarning)
+                //
+                // What the decompressor said is not passed on.  The reference says the same sentence
+                // about every way a stream can fail — a block type that does not exist, a byte
+                // changed in the middle, a header that was never a compressed stream at all — and it
+                // names a check that none of those reached.  Reproduced rather than corrected,
+                // including the chunk name appearing twice, because this is the text a client
+                // matches on.
+                //
+                // The state is settled before the report, which runs the client's handler and is
+                // entitled not to come back.  Nothing more will be produced, and whatever else the
+                // chunk still has to deliver is data arriving at an image that is over.
                 self.imageDataFailed = true
+                self.pass = Adam7.passCount
+                self.saidExtraImageData = true
+
+                context.host.warn(
+                    Diagnostic(
+                        "IDAT: ADLER32 checksum mismatch",
+                        severity: .warning,
+                        chunk: .idat
+                    )
+                )
                 return
             }
 
@@ -555,6 +592,43 @@ final class ProgressiveReader {
         self.noteExtraImageData(bytes, context: context, inflater: inflater)
     }
 
+    /// Stops the decode where the file ran out part way through the image.
+    ///
+    /// Rows still owed and a stream that never finished: that is a file which cannot be read rather
+    /// than one that reads oddly, so it ends here.
+    ///
+    /// Not the same as a stream that finished early.  One that ends properly having produced too few
+    /// rows is a complete stream describing less than the header promised — every row it did carry
+    /// is delivered and the client is left to notice the shortfall, which is what both libraries do.
+    private func noteImageDataEnded(context: PngContext) throws {
+        guard self.announcedInfo, !self.imageDataFailed, self.pass < Adam7.passCount,
+              let inflater = context.inflater, !inflater.isFinished else {
+            return
+        }
+
+        throw Diagnostic("Not enough compressed data")
+    }
+
+    /// Says that the image data stopped without saying it was over.
+    ///
+    /// Which is not the same as saying it was short: every row may have arrived and this still
+    /// stands, because what is missing is the mark at the end saying the stream finished and arrived
+    /// intact.  A file whose rows are all present and whose closing mark is wrong is exactly that.
+    ///
+    /// Answered only once the rows are all in.  A stream still owing rows has not stopped short of
+    /// its closing marks — it has stopped short of the image, which is a different complaint and is
+    /// made elsewhere.
+    private func noteUnfinishedImageData(context: PngContext) {
+        guard !self.saidTruncatedImageData, !self.imageDataFailed,
+              self.pass >= Adam7.passCount,
+              let inflater = context.inflater, !inflater.isFinished else {
+            return
+        }
+
+        self.saidTruncatedImageData = true
+        context.host.warn("Truncated compressed data in IDAT")
+    }
+
     /// Says that image data has arrived which the image has no use for.
     ///
     /// Twice over, in two different forms, which is the reference's and worth reproducing exactly
@@ -569,18 +643,14 @@ final class ProgressiveReader {
     ) {
         guard self.pass >= Adam7.passCount else { return }
 
-        // Already said once, so anything further that arrives is remarked on as it arrives, without
-        // asking what it decompresses to: it is image data reaching an image that is over.
-        if self.saidExtraImageData {
-            guard !bytes.isEmpty else { return }
-            context.host.warn("Extra compression data in IDAT")
-            return
-        }
-
         // Every well-formed stream has a tail the last row did not need — the marks that say the
         // stream ended and arrived intact.  Those are consumed here rather than counted as spare,
-        // which is the whole difficulty: what is left after them is the file having more to say
-        // than the image had room for.
+        // which is the whole difficulty: what is left after them is the file having more to say than
+        // the image had room for.
+        //
+        // Drained on every push and not merely the first, because a stream is only ever finished by
+        // being read to its end: leaving the tail sitting there would make a file with a few spare
+        // scanlines look like one that stopped in the middle.
         var produced = false
 
         while !inflater.needsInput, !inflater.isFinished {
@@ -591,6 +661,14 @@ final class ProgressiveReader {
 
             if made == 0 { break }
             produced = true
+        }
+
+        // Already said once, so anything further that arrives is remarked on as it arrives, without
+        // asking what it decompresses to: it is image data reaching an image that is over.
+        if self.saidExtraImageData {
+            guard !bytes.isEmpty else { return }
+            context.host.warn("Extra compression data in IDAT")
+            return
         }
 
         guard produced || !inflater.needsInput else { return }
