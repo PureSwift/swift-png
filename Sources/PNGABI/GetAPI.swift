@@ -222,8 +222,11 @@ public func png_get_palette_max(
     _ png_ptr: png_const_structrp?,
     _ info_ptr: png_const_inforp?
 ) -> Int32 {
-    guard let png_ptr, let context = PngContext.from(png_structp(mutating: png_ptr)) else {
-        return 0
+    // Minus one rather than nought when there is nothing to answer from, which distinguishes "no
+    // answer" from "the rows only ever named the first entry".
+    guard let png_ptr, info_ptr != nil,
+          let context = PngContext.from(png_structp(mutating: png_ptr)) else {
+        return -1
     }
 
     return Int32(context.highestPaletteIndex)
