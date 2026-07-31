@@ -230,3 +230,9 @@ png_set_sCAL_fixed
 png_get_eXIf
 png_set_eXIf
 png_set_write_user_transform_fn
+png_set_progressive_read_fn
+png_get_progressive_ptr
+png_process_data
+png_process_data_pause
+png_process_data_skip
+png_progressive_combine_row

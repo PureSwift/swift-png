@@ -116,3 +116,100 @@ public func png_set_sig_bytes(_ png_ptr: png_structrp?, _ num_bytes: Int32) {
         context.signatureBytesConsumed = Int(num_bytes)
     }
 }
+
+// -- reading what has arrived so far -----------------------------------------
+//
+// The other way round from the calls above.  A client that cannot promise to produce bytes on demand —
+// one reading from a network, or from a file it is still receiving — hands over whatever it has and is
+// called back with whatever that completes.
+//
+// Which makes the client's callbacks the whole of the interface: there is no row to return, because
+// the call that would have returned it may end half way through a chunk.
+
+/// Installs the three callbacks a progressive read reports through.
+@c @implementation
+public func png_set_progressive_read_fn(
+    _ png_ptr: png_structrp?,
+    _ progressive_ptr: png_voidp?,
+    _ info_fn: png_progressive_info_ptr?,
+    _ row_fn: png_progressive_row_ptr?,
+    _ end_fn: png_progressive_end_ptr?
+) {
+    guard let png_ptr else { return }
+
+    png_ptr.pointee.info_fn = info_fn
+    png_ptr.pointee.row_fn = row_fn
+    png_ptr.pointee.end_fn = end_fn
+    png_ptr.pointee.progressive_ptr = progressive_ptr
+}
+
+@c @implementation
+public func png_get_progressive_ptr(_ png_ptr: png_const_structrp?) -> png_voidp? {
+    png_ptr?.pointee.progressive_ptr
+}
+
+/// Hands over bytes that have arrived.
+///
+/// Everything given is consumed unless the client pauses, which it does from inside one of its own
+/// callbacks; what is left then is the client's to hand over again.
+@c @implementation
+public func png_process_data(
+    _ png_ptr: png_structrp?,
+    _ info_ptr: png_inforp?,
+    _ buffer: png_bytep?,
+    _ buffer_size: size_t
+) {
+    attempt(png_ptr) { context in
+        guard let buffer else { return }
+
+        // Kept for the length of this push, so that the callbacks can be handed the structure the
+        // client named.  Borrowed rather than owned: it is the client's, and the machine does not
+        // outlive the call.
+        png_ptr?.pointee.progressive_info = info_ptr
+
+        defer { png_ptr?.pointee.progressive_info = nil }
+
+        try context.processData(
+            UnsafeBufferPointer(start: buffer, count: Int(buffer_size)),
+            info: info_ptr.flatMap { InfoStore.from($0) }
+        )
+    }
+}
+
+/// Stops the current call and says how much of what it was given is left over.
+///
+/// Called from inside a callback.  The count it returns is what the client must hand over again,
+/// which is why it is measured from the end rather than the beginning: the client knows what it gave.
+@c @implementation
+public func png_process_data_pause(_ png_ptr: png_structrp?, _ save: Int32) -> size_t {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return 0 }
+
+    return size_t(context.pauseProcessing(saving: save != 0))
+}
+
+/// Says the client has thrown away the rest of the chunk being read.
+///
+/// For a chunk a client wants nothing to do with: rather than pushing its bytes through only to have
+/// them ignored, it says how many it dropped and the machine counts them off.
+@c @implementation
+public func png_process_data_skip(_ png_ptr: png_structrp?) -> png_uint_32 {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return 0 }
+
+    return png_uint_32(context.skipRemainingChunk())
+}
+
+/// Places a row the client was just handed into the image it is assembling.
+///
+/// Only useful for an interlaced image, where a pass's rows are narrower than the image's and belong
+/// at every nth pixel.  For an image that is not interlaced it is a copy.
+@c @implementation
+public func png_progressive_combine_row(
+    _ png_ptr: png_const_structrp?,
+    _ old_row: png_bytep?,
+    _ new_row: png_const_bytep?
+) {
+    guard let png_ptr, let context = PngContext.from(png_structp(mutating: png_ptr)),
+          let old_row, let new_row else { return }
+
+    context.combineRow(into: old_row, from: new_row)
+}

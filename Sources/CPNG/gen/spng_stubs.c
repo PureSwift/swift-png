@@ -111,12 +111,6 @@ png_get_palette_max(png_const_structp png_ptr, png_const_infop info_ptr)
    png_error(png_ptr, "png_get_palette_max is not implemented");
 }
 
-png_voidp PNGAPI
-png_get_progressive_ptr(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_progressive_ptr is not implemented");
-}
-
 int PNGAPI
 png_get_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_sPLT_tpp entries)
 {
@@ -221,30 +215,6 @@ png_permit_mng_features(png_structrp png_ptr, png_uint_32 mng_features_permitted
 }
 
 void PNGAPI
-png_process_data(png_structrp png_ptr, png_inforp info_ptr, png_bytep buffer, size_t buffer_size)
-{
-   png_error(png_ptr, "png_process_data is not implemented");
-}
-
-size_t PNGAPI
-png_process_data_pause(png_structrp spng_arg0, int save)
-{
-   png_error(spng_arg0, "png_process_data_pause is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_process_data_skip(png_structrp spng_arg0)
-{
-   png_error(spng_arg0, "png_process_data_skip is not implemented");
-}
-
-void PNGAPI
-png_progressive_combine_row(png_const_structrp png_ptr, png_bytep old_row, png_const_bytep new_row)
-{
-   png_error(png_ptr, "png_progressive_combine_row is not implemented");
-}
-
-void PNGAPI
 png_read_png(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)
 {
    png_error(png_ptr, "png_read_png is not implemented");
@@ -326,12 +296,6 @@ void PNGAPI
 png_set_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp purpose, png_int_32 X0, png_int_32 X1, int type, int nparams, png_const_charp units, png_charpp params)
 {
    png_error(png_ptr, "png_set_pCAL is not implemented");
-}
-
-void PNGAPI
-png_set_progressive_read_fn(png_structrp png_ptr, png_voidp progressive_ptr, png_progressive_info_ptr info_fn, png_progressive_row_ptr row_fn, png_progressive_end_ptr end_fn)
-{
-   png_error(png_ptr, "png_set_progressive_read_fn is not implemented");
 }
 
 void PNGAPI

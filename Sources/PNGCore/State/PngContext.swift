@@ -53,6 +53,12 @@ public final class PngContext {
     let reader = SequentialReader()
     let writer = SequentialWriter()
 
+    /// The state machine a progressive read runs on, made only when one is started.
+    ///
+    /// Absent for a sequential read, which is the ordinary case: the two are alternatives, and a
+    /// structure that had both would be one that had not decided how it is being driven.
+    var progressive: ProgressiveReader?
+
     /// Which filters the client will allow the encoder to choose between.
     public var filters: FilterMask = .all
 
@@ -413,7 +419,9 @@ public final class PngContext {
     /// Resolves the pipeline without the client having asked, for a client that set transforms and
     /// went straight to reading rows.
     func resolveTransforms() throws {
-        guard let info = self.headerInfo else {
+        // A progressive read fills in the same structure by a different route, so either is the one
+        // to resolve against.
+        guard let info = self.headerInfo ?? self.headerInfoForProgressive else {
             throw Diagnostic("no image description to transform")
         }
 
@@ -748,6 +756,82 @@ public final class PngContext {
 
     public func writeEnd(_ info: InfoStore?) throws {
         try self.writer.writeEnd(info, context: self)
+    }
+
+    /// Takes the header a progressive read has just parsed.
+    ///
+    /// The sequential reader does this as part of its own walk; a progressive read has no walk, so the
+    /// state machine hands it over here.
+    func adoptProgressiveHeader(_ header: Header, info: InfoStore) {
+        self.header = header
+        self.headerInfoForProgressive = info
+    }
+
+    /// The info structure a progressive read is filling in, held for the point where the pipeline is
+    /// resolved.
+    var headerInfoForProgressive: InfoStore?
+
+    // -- reading what has arrived --------------------------------------------
+
+    /// Hands the state machine everything that has arrived, and reports what it did not take.
+    public func processData(_ bytes: UnsafeBufferPointer<UInt8>, info: InfoStore?) throws {
+        let machine = self.progressive ?? ProgressiveReader()
+
+        self.progressive = machine
+
+        let consumed = try machine.process(bytes, context: self, info: info)
+
+        self.unconsumedBytes = bytes.count - consumed
+    }
+
+    /// How much of the last push the client has to hand over again.
+    public private(set) var unconsumedBytes = 0
+
+    /// Stops the current push, from inside one of the client's own callbacks.
+    public func pauseProcessing(saving: Bool) -> Int {
+        self.progressive?.isPaused = true
+
+        // What is left is what the client hands over again.  Saving it is the library's business
+        // rather than the client's in the reference too, but the count is what the client is told.
+        return self.unconsumedBytes
+    }
+
+    /// Counts off the rest of a chunk the client says it has thrown away.
+    public func skipRemainingChunk() -> Int {
+        self.progressive?.skipRest() ?? 0
+    }
+
+    /// Places a pass row into the image a client is assembling.
+    public func combineRow(
+        into destination: UnsafeMutablePointer<UInt8>,
+        from source: UnsafePointer<UInt8>
+    ) {
+        guard let header = self.header else { return }
+
+        let shape = self.transformedShape ?? RowInfo(header)
+        let pass = self.progressive?.pass ?? 0
+
+        guard header.isInterlaced, self.spreadsInterlacedRows else {
+            // Nothing to place: the row is the image's own row, so this is a copy.
+            destination.update(from: source, count: shape.rowBytes)
+            return
+        }
+
+        // The pixels are placed at their transformed size rather than their stored one: by this point
+        // the pipeline may have widened them, and the row the client is assembling is sized for the
+        // result.
+        let full = UnsafeMutableBufferPointer(start: destination, count: shape.rowBytes)
+        let narrow = UnsafeBufferPointer(start: source, count: shape.rowBytes)
+
+        for column in 0 ..< Adam7.width(ofPass: pass, imageWidth: header.width) {
+            PixelCopy.copy(
+                from: narrow,
+                at: column,
+                to: full,
+                at: Adam7.imageColumn(ofPass: pass, passColumn: column),
+                pixelDepth: shape.pixelDepth
+            )
+        }
     }
 
     public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
