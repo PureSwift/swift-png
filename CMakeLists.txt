@@ -84,6 +84,13 @@ function(spng_add_swift_module name)
         POSITION_INDEPENDENT_CODE ON
         Swift_MODULE_NAME ${name}
         Swift_COMPILATION_MODE ${SPNG_COMPILATION_MODE})
+
+    # The API's own contract is one structure per thread, so the dynamic
+    # bookkeeping that catches overlapping exclusive accesses at run time has
+    # nothing to catch; what it costs is measurable on every row.  Debug builds
+    # keep the checking.
+    target_compile_options(${name} PRIVATE
+        $<$<CONFIG:Release>:-enforce-exclusivity=unchecked>)
 endfunction()
 
 spng_add_swift_module(LZ77)
