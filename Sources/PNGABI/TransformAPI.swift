@@ -443,6 +443,27 @@ public func png_set_read_user_transform_fn(
     }
 }
 
+/// Installs a transform the client runs itself on the way out, before anything the library does.
+///
+/// The mirror of the reading one, with one difference worth naming: what it declared through
+/// `png_set_user_transform_info` has no effect here.  The row it is handed is the one the file will
+/// store, and the row it leaves is written as it stands.
+@c @implementation
+public func png_set_write_user_transform_fn(
+    _ png_ptr: png_structrp?,
+    _ write_user_transform_fn: png_user_transform_ptr?
+) {
+    guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
+
+    png_ptr.pointee.write_user_transform_fn = write_user_transform_fn
+
+    if write_user_transform_fn == nil {
+        context.transformFlags.remove(.userTransform)
+    } else {
+        context.transformFlags.insert(.userTransform)
+    }
+}
+
 /// Says what the client's own transform will leave a row looking like, and gives it a pointer of its
 /// own to find its way back to whatever it needs.
 ///

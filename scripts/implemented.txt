@@ -229,3 +229,4 @@ png_set_sCAL
 png_set_sCAL_fixed
 png_get_eXIf
 png_set_eXIf
+png_set_write_user_transform_fn

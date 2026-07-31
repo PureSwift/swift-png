@@ -375,9 +375,3 @@ png_set_user_limits(png_structrp png_ptr, png_uint_32 user_width_max, png_uint_3
 {
    png_error(png_ptr, "png_set_user_limits is not implemented");
 }
-
-void PNGAPI
-png_set_write_user_transform_fn(png_structrp png_ptr, png_user_transform_ptr write_user_transform_fn)
-{
-   png_error(png_ptr, "png_set_write_user_transform_fn is not implemented");
-}
