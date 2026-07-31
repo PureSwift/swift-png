@@ -722,6 +722,10 @@ dump_file(const char *path, enum read_mode mode, const char *transform_names)
    png_init_io(png_ptr, file);
    png_read_info(png_ptr, info_ptr);
 
+   /* Where the library says it is, which a client watching from its own callback relies on. */
+   printf("iostate 0x%x chunk 0x%x\n", (unsigned)png_get_io_state(png_ptr),
+          (unsigned)png_get_io_chunk_type(png_ptr));
+
    dump_header(png_ptr, info_ptr);
    dump_metadata(png_ptr, info_ptr);
 

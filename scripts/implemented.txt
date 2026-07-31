@@ -266,3 +266,15 @@ png_set_cHRM_XYZ
 png_set_cHRM_XYZ_fixed
 png_get_signature
 png_get_palette_max
+
+# Sources/PNGABI/OptionsAPI.swift
+png_set_option
+png_permit_mng_features
+png_set_filter_heuristics
+png_set_filter_heuristics_fixed
+png_set_check_for_invalid_index
+png_reset_zstream
+png_set_sRGB_gAMA_and_cHRM
+png_set_invalid
+png_get_io_state
+png_get_io_chunk_type

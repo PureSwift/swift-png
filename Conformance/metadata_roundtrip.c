@@ -134,6 +134,50 @@ report_derived(png_structp png_ptr, png_infop info_ptr)
           (unsigned)png_get_chunk_malloc_max(png_ptr));
 
    printf("palette max %d\n", png_get_palette_max(png_ptr, info_ptr));
+
+   /* The switches that are not about the image.  Each is asked twice, because what these return is
+    * the setting they replaced rather than the one they took.
+    */
+   printf("option on %d again %d off %d unknown %d odd %d\n",
+          png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON),
+          png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON),
+          png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_OFF),
+          png_set_option(png_ptr, 99, PNG_OPTION_ON),
+          png_set_option(png_ptr, 3, PNG_OPTION_ON));
+
+   printf("mng one %u all %u none %u\n",
+          (unsigned)png_permit_mng_features(png_ptr, PNG_FLAG_MNG_FILTER_64),
+          (unsigned)png_permit_mng_features(png_ptr, 0xFFFFFFFF),
+          (unsigned)png_permit_mng_features(png_ptr, 0));
+
+   /* These do nothing and are here so that a change to that is noticed. */
+   png_set_filter_heuristics(png_ptr, 0, 0, NULL, NULL);
+   png_set_filter_heuristics_fixed(png_ptr, 0, 0, NULL, NULL);
+   png_set_check_for_invalid_index(png_ptr, 1);
+
+   /* The three chunks one statement writes, and then forgetting one of them. */
+   {
+      png_infop k = png_create_info_struct(png_ptr);
+      png_fixed_point g, wx, wy, rx, ry, gx, gy, bx, by;
+      int intent;
+
+      png_set_sRGB_gAMA_and_cHRM(png_ptr, k, PNG_sRGB_INTENT_PERCEPTUAL);
+
+      printf("srgb %d gama %d\n",
+             png_get_sRGB(png_ptr, k, &intent) ? intent : -1,
+             png_get_gAMA_fixed(png_ptr, k, &g) ? (int)g : -1);
+
+      if (png_get_cHRM_fixed(png_ptr, k, &wx, &wy, &rx, &ry, &gx, &gy, &bx, &by))
+         printf("srgb chrm %d %d %d %d %d %d %d %d\n", (int)wx, (int)wy, (int)rx, (int)ry,
+                (int)gx, (int)gy, (int)bx, (int)by);
+
+      png_set_invalid(png_ptr, k, PNG_INFO_gAMA);
+      printf("after invalid gama %d srgb %d\n",
+             png_get_gAMA_fixed(png_ptr, k, &g) ? 1 : 0,
+             png_get_sRGB(png_ptr, k, &intent) ? 1 : 0);
+
+      png_destroy_info_struct(png_ptr, &k);
+   }
 }
 
 static void PNGCBAPI

@@ -39,18 +39,6 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_
 }
 
 png_uint_32 PNGAPI
-png_get_io_chunk_type(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_io_chunk_type is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_io_state(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_io_state is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_charp *purpose, png_int_32 *X0, png_int_32 *X1, int *type, int *nparams, png_charp *units, png_charpp *params)
 {
    png_error(png_ptr, "png_get_pCAL is not implemented");
@@ -80,24 +68,6 @@ png_handle_as_unknown(png_const_structrp png_ptr, png_const_bytep chunk_name)
    png_error(png_ptr, "png_handle_as_unknown is not implemented");
 }
 
-png_uint_32 PNGAPI
-png_permit_mng_features(png_structrp png_ptr, png_uint_32 mng_features_permitted)
-{
-   png_error(png_ptr, "png_permit_mng_features is not implemented");
-}
-
-int PNGAPI
-png_reset_zstream(png_structrp png_ptr)
-{
-   png_error(png_ptr, "png_reset_zstream is not implemented");
-}
-
-void PNGAPI
-png_set_check_for_invalid_index(png_structrp png_ptr, int allowed)
-{
-   png_error(png_ptr, "png_set_check_for_invalid_index is not implemented");
-}
-
 void PNGAPI
 png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
 {
@@ -105,33 +75,9 @@ png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
 }
 
 void PNGAPI
-png_set_filter_heuristics(png_structrp png_ptr, int heuristic_method, int num_weights, png_const_doublep filter_weights, png_const_doublep filter_costs)
-{
-   png_error(png_ptr, "png_set_filter_heuristics is not implemented");
-}
-
-void PNGAPI
-png_set_filter_heuristics_fixed(png_structrp png_ptr, int heuristic_method, int num_weights, png_const_fixed_point_p filter_weights, png_const_fixed_point_p filter_costs)
-{
-   png_error(png_ptr, "png_set_filter_heuristics_fixed is not implemented");
-}
-
-void PNGAPI
-png_set_invalid(png_const_structrp png_ptr, png_inforp info_ptr, int mask)
-{
-   png_error(png_ptr, "png_set_invalid is not implemented");
-}
-
-void PNGAPI
 png_set_keep_unknown_chunks(png_structrp png_ptr, int keep, png_const_bytep chunk_list, int num_chunks)
 {
    png_error(png_ptr, "png_set_keep_unknown_chunks is not implemented");
-}
-
-int PNGAPI
-png_set_option(png_structrp png_ptr, int option, int onoff)
-{
-   png_error(png_ptr, "png_set_option is not implemented");
 }
 
 void PNGAPI
@@ -156,12 +102,6 @@ void PNGAPI
 png_set_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_const_sPLT_tp entries, int nentries)
 {
    png_error(png_ptr, "png_set_sPLT is not implemented");
-}
-
-void PNGAPI
-png_set_sRGB_gAMA_and_cHRM(png_const_structrp png_ptr, png_inforp info_ptr, int srgb_intent)
-{
-   png_error(png_ptr, "png_set_sRGB_gAMA_and_cHRM is not implemented");
 }
 
 void PNGAPI
