@@ -154,40 +154,6 @@ png_handle_as_unknown(png_const_structrp png_ptr, png_const_bytep chunk_name)
 }
 
 int PNGAPI
-png_image_begin_read_from_file(png_imagep image, const char *file_name)
-{
-   spng_unimplemented_fatal("png_image_begin_read_from_file");
-   return (int)0;
-}
-
-int PNGAPI
-png_image_begin_read_from_memory(png_imagep image, png_const_voidp memory, size_t size)
-{
-   spng_unimplemented_fatal("png_image_begin_read_from_memory");
-   return (int)0;
-}
-
-int PNGAPI
-png_image_begin_read_from_stdio(png_imagep image, FILE *file)
-{
-   spng_unimplemented_fatal("png_image_begin_read_from_stdio");
-   return (int)0;
-}
-
-int PNGAPI
-png_image_finish_read(png_imagep image, png_const_colorp background, void *buffer, png_int_32 row_stride, void *colormap)
-{
-   spng_unimplemented_fatal("png_image_finish_read");
-   return (int)0;
-}
-
-void PNGAPI
-png_image_free(png_imagep image)
-{
-   spng_unimplemented_fatal("png_image_free");
-}
-
-int PNGAPI
 png_image_write_to_file(png_imagep image, const char *file, int convert_to_8bit, const void *buffer, png_int_32 row_stride, const void *colormap)
 {
    spng_unimplemented_fatal("png_image_write_to_file");
