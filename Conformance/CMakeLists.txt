@@ -147,6 +147,25 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
         target_include_directories(pngwrite BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
     endif()
 
+    # The one chunk that stores numbers as text: two libraries that format the same value differently
+    # write different files, so the formatting is compared directly rather than through an image.
+    add_executable(scaleprobe scaleprobe.c)
+    target_link_libraries(scaleprobe PRIVATE png16)
+
+    add_executable(scaleprobe_reference scaleprobe.c)
+    target_include_directories(scaleprobe_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(scaleprobe_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(scaleprobe BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_test(NAME scale_formatting
+        COMMAND ${SPNG_SCRIPTS}/compare_output.sh
+                $<TARGET_FILE:scaleprobe>
+                $<TARGET_FILE:scaleprobe_reference>)
+
     add_executable(pngroundtrip pngroundtrip.c)
     target_link_libraries(pngroundtrip PRIVATE png16)
 
