@@ -48,6 +48,10 @@ public final class PngContext {
     /// Where a client's row is copied to be transformed, so that its own is left alone.
     var writeRowBuffer = RawBuffer.empty
 
+    /// Where the deprecated timestamp accessor writes, since it returns a pointer rather than filling
+    /// a caller's buffer.
+    var timeText = RawBuffer.empty
+
     var inflater: InflateStream?
 
     let reader = SequentialReader()
@@ -86,6 +90,20 @@ public final class PngContext {
             )
         )
     }
+
+    /// The largest palette index the rows actually used.
+    ///
+    /// Tracked while the rows are read rather than worked out afterwards, because afterwards the rows
+    /// are the client's and this library no longer has them.
+    public private(set) var highestPaletteIndex = 0
+
+    /// Records an index the decode has seen.
+    public func notePaletteIndex(_ index: Int) {
+        if index > self.highestPaletteIndex { self.highestPaletteIndex = index }
+    }
+
+    /// The ceilings a decoder will not go past.
+    public var limits = DecodeLimits()
 
     /// What the client declared through `png_set_sig_bytes`.
     public var signatureBytesConsumed = 0
@@ -222,7 +240,8 @@ public final class PngContext {
         self.writer.deflater = nil
 
         for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch,
-                       self.writeStaging, self.filterScratch, self.writeRowBuffer] {
+                       self.writeStaging, self.filterScratch, self.writeRowBuffer,
+                       self.timeText] {
             buffer.deallocate(host: self.host)
         }
 
@@ -233,6 +252,7 @@ public final class PngContext {
         self.writeStaging = .empty
         self.filterScratch = .empty
         self.writeRowBuffer = .empty
+        self.timeText = .empty
     }
 
     /// Ensures `buffer` holds at least `count` bytes, replacing it if not.
@@ -752,6 +772,17 @@ public final class PngContext {
     /// Empties the compressor and asks the caller to push whatever it is holding.
     public func flushOutput() throws {
         try self.writer.flush(context: self)
+    }
+
+    /// Space for the deprecated timestamp accessor's answer, which it hands back as a pointer.
+    ///
+    /// On the context because the answer has to outlive the call, and a client is entitled to hold it
+    /// until the next one — which is exactly why the call is deprecated.
+    public func timestampBuffer() throws -> UnsafeMutablePointer<CChar> {
+        try self.reserve(\.timeText, 32)
+
+        return self.timeText.bytes.baseAddress!
+            .withMemoryRebound(to: CChar.self, capacity: 32) { $0 }
     }
 
     public func writeEnd(_ info: InfoStore?) throws {
