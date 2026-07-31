@@ -551,6 +551,23 @@ def write_damaged() -> list[pathlib.Path]:
          SIGNATURE + header + chunk(b"IDAT", b"\x78\x9c" + b"\xff" * 32)
          + chunk(b"IEND", b""))
 
+    # The three other ways a compressed stream can be wrong, which are worth having separately
+    # because a decoder can notice them at three different moments: one byte changed in the middle,
+    # a stream that stops before the image does, and one whose rows are all present but whose
+    # closing mark says they arrived damaged.
+    emit("flipped-zlib",
+         SIGNATURE + header
+         + chunk(b"IDAT", data[:6] + bytes([data[6] ^ 0xFF]) + data[7:])
+         + chunk(b"IEND", b""))
+
+    emit("truncated-zlib",
+         SIGNATURE + header + chunk(b"IDAT", data[: len(data) - 6]) + chunk(b"IEND", b""))
+
+    emit("wrong-adler",
+         SIGNATURE + header
+         + chunk(b"IDAT", data[: len(data) - 4] + b"\x00\x00\x00\x01")
+         + chunk(b"IEND", b""))
+
     # A scanline naming a filter that does not exist.
     bad_filter = bytearray()
     for row in rows:
