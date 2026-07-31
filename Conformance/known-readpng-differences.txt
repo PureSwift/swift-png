@@ -1,0 +1,16 @@
+# Whole-image reads the comparison reports but does not fail on.
+#
+# Format: <image> <transform-mask> <reason>
+
+meta-palette-hist.png 0x0000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x0001 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x0002 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x0004 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x0010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x2000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x4000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x8000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x0014 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x2010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x4010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+meta-palette-hist.png 0x00c0 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.

@@ -188,6 +188,26 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 ${SPNG_CORPUS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/known-progressive-differences.txt)
 
+    add_executable(pngreadpng pngreadpng.c)
+    target_link_libraries(pngreadpng PRIVATE png16)
+
+    add_executable(pngreadpng_reference pngreadpng.c)
+    target_include_directories(pngreadpng_reference BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngreadpng_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngreadpng BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(pngreadpng spng_corpus)
+
+    add_test(NAME differential_readpng
+        COMMAND ${SPNG_SCRIPTS}/compare_readpng.sh
+                $<TARGET_FILE:pngreadpng>
+                $<TARGET_FILE:pngreadpng_reference>
+                ${SPNG_CORPUS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-readpng-differences.txt)
+
     add_executable(pngroundtrip pngroundtrip.c)
     target_link_libraries(pngroundtrip PRIVATE png16)
 
