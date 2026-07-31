@@ -110,7 +110,8 @@ enum PixelCopy {
         at sourceIndex: Int,
         to destination: UnsafeMutableBufferPointer<UInt8>,
         at destinationIndex: Int,
-        pixelDepth: Int
+        pixelDepth: Int,
+        packSwapped: Bool = false
     ) {
         if pixelDepth >= 8 {
             let width = pixelDepth / 8
@@ -126,13 +127,24 @@ enum PixelCopy {
 
         // Several pixels to a byte.  The first pixel of a byte occupies its high bits, which
         // is why the shift counts down from the top rather than up from the bottom.
+        //
+        // Unless the samples within a byte have been reversed, in which case it counts up.  That
+        // request is usually a matter of how a row is laid out and nothing else, but here it decides
+        // where a pixel *is*: a pass being spread into the image's row has to be read from and
+        // written to the places its pixels actually occupy, and reversal moves both.
         let perByte = 8 / pixelDepth
         let mask = UInt8((1 << pixelDepth) - 1)
 
-        let sourceShift = (perByte - 1 - sourceIndex % perByte) * pixelDepth
+        func shift(for index: Int) -> Int {
+            packSwapped
+                ? (index % perByte) * pixelDepth
+                : (perByte - 1 - index % perByte) * pixelDepth
+        }
+
+        let sourceShift = shift(for: sourceIndex)
         let value = (source[sourceIndex / perByte] >> sourceShift) & mask
 
-        let destinationShift = (perByte - 1 - destinationIndex % perByte) * pixelDepth
+        let destinationShift = shift(for: destinationIndex)
         let byte = destinationIndex / perByte
 
         destination[byte] &= ~(mask << destinationShift)
