@@ -197,5 +197,3 @@ meta-rgb16-sbit-bkgd.png gamma_bright,user_invert As above, seen through a trans
 #
 # Closing it means adopting the reference's arrangement: expand the pass to full width, transform, then
 # merge under a mask that accounts for the reversal.
-
-interlaced-gray2-9x9.png packswap Not implemented here: the sample reversal is applied to the narrow pass row rather than to the full-width row it is spread into, so sub-byte interlaced images disagree.
