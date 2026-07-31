@@ -366,11 +366,24 @@ public func png_set_background(
 public func png_set_alpha_mode_fixed(
     _ png_ptr: png_structrp?,
     _ mode: Int32,
-    _ output_gamma: png_fixed_point
+    _ output_gamma_requested: png_fixed_point
 ) {
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
 
     let alphaMode = AlphaMode(rawValue: mode) ?? .png
+
+    // Two of the values this takes are names rather than numbers, and they are negative so that they
+    // cannot be mistaken for one: the display the format assumes when a file says nothing, and the one
+    // an older generation of machines had.  The second is not the 1.8 its name suggests — it is 2.2
+    // divided by 1.45, which is what those machines actually did — and both were measured against the
+    // reference rather than taken from the name.
+    let output_gamma: png_fixed_point
+
+    switch output_gamma_requested {
+    case -1: output_gamma = 220_000
+    case -2: output_gamma = 151_724
+    default: output_gamma = output_gamma_requested
+    }
 
     // Every arrangement but the format's own is a blend against black, so it wants the compositing
     // machinery for itself — and refuses to share it.  A client that has already named a background,
