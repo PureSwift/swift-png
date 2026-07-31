@@ -874,3 +874,130 @@ public func png_set_mDCV(
         png_uint_32((minLuminance * 10_000).rounded())
     )
 }
+
+// -- the chromaticities said as a matrix -------------------------------------
+//
+// The same information the pairs hold, in the form a client working in colour actually uses.  Both
+// directions are exact; what is not exact is the fixed point they are stored in, so a value written
+// one way and read the other can come back a count different.
+
+@c @implementation
+public func png_get_cHRM_XYZ_fixed(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?,
+    _ int_red_X: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_red_Y: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_red_Z: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_green_X: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_green_Y: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_green_Z: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_blue_X: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_blue_Y: UnsafeMutablePointer<png_fixed_point>?,
+    _ int_blue_Z: UnsafeMutablePointer<png_fixed_point>?
+) -> png_uint_32 {
+    query(png_inforp(mutating: info_ptr), 0) { info in
+        guard info.isValid(PNG_INFO_cHRM), let xyz = info.chromaticity.asXYZ else { return 0 }
+
+        func fixed(_ value: Double) -> png_fixed_point {
+            png_fixed_point((value * 100_000).rounded())
+        }
+
+        int_red_X?.pointee = fixed(xyz.red.x)
+        int_red_Y?.pointee = fixed(xyz.red.y)
+        int_red_Z?.pointee = fixed(xyz.red.z)
+        int_green_X?.pointee = fixed(xyz.green.x)
+        int_green_Y?.pointee = fixed(xyz.green.y)
+        int_green_Z?.pointee = fixed(xyz.green.z)
+        int_blue_X?.pointee = fixed(xyz.blue.x)
+        int_blue_Y?.pointee = fixed(xyz.blue.y)
+        int_blue_Z?.pointee = fixed(xyz.blue.z)
+
+        return png_uint_32(PNG_INFO_cHRM)
+    }
+}
+
+@c @implementation
+public func png_get_cHRM_XYZ(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?,
+    _ red_X: UnsafeMutablePointer<Double>?,
+    _ red_Y: UnsafeMutablePointer<Double>?,
+    _ red_Z: UnsafeMutablePointer<Double>?,
+    _ green_X: UnsafeMutablePointer<Double>?,
+    _ green_Y: UnsafeMutablePointer<Double>?,
+    _ green_Z: UnsafeMutablePointer<Double>?,
+    _ blue_X: UnsafeMutablePointer<Double>?,
+    _ blue_Y: UnsafeMutablePointer<Double>?,
+    _ blue_Z: UnsafeMutablePointer<Double>?
+) -> png_uint_32 {
+    query(png_inforp(mutating: info_ptr), 0) { info in
+        guard info.isValid(PNG_INFO_cHRM), let xyz = info.chromaticity.asXYZ else { return 0 }
+
+        red_X?.pointee = xyz.red.x
+        red_Y?.pointee = xyz.red.y
+        red_Z?.pointee = xyz.red.z
+        green_X?.pointee = xyz.green.x
+        green_Y?.pointee = xyz.green.y
+        green_Z?.pointee = xyz.green.z
+        blue_X?.pointee = xyz.blue.x
+        blue_Y?.pointee = xyz.blue.y
+        blue_Z?.pointee = xyz.blue.z
+
+        return png_uint_32(PNG_INFO_cHRM)
+    }
+}
+
+@c @implementation
+public func png_set_cHRM_XYZ_fixed(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ int_red_X: png_fixed_point,
+    _ int_red_Y: png_fixed_point,
+    _ int_red_Z: png_fixed_point,
+    _ int_green_X: png_fixed_point,
+    _ int_green_Y: png_fixed_point,
+    _ int_green_Z: png_fixed_point,
+    _ int_blue_X: png_fixed_point,
+    _ int_blue_Y: png_fixed_point,
+    _ int_blue_Z: png_fixed_point
+) {
+    png_set_cHRM_XYZ(
+        png_ptr,
+        info_ptr,
+        Double(int_red_X) * 1e-5, Double(int_red_Y) * 1e-5, Double(int_red_Z) * 1e-5,
+        Double(int_green_X) * 1e-5, Double(int_green_Y) * 1e-5, Double(int_green_Z) * 1e-5,
+        Double(int_blue_X) * 1e-5, Double(int_blue_Y) * 1e-5, Double(int_blue_Z) * 1e-5
+    )
+}
+
+@c @implementation
+public func png_set_cHRM_XYZ(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ red_X: Double,
+    _ red_Y: Double,
+    _ red_Z: Double,
+    _ green_X: Double,
+    _ green_Y: Double,
+    _ green_Z: Double,
+    _ blue_X: Double,
+    _ blue_Y: Double,
+    _ blue_Z: Double
+) {
+    guard let chromaticity = Chromaticity.from(
+        red: (red_X, red_Y, red_Z),
+        green: (green_X, green_Y, green_Z),
+        blue: (blue_X, blue_Y, blue_Z)
+    ) else {
+        return
+    }
+
+    png_set_cHRM_fixed(
+        png_ptr,
+        info_ptr,
+        chromaticity.whiteX, chromaticity.whiteY,
+        chromaticity.redX, chromaticity.redY,
+        chromaticity.greenX, chromaticity.greenY,
+        chromaticity.blueX, chromaticity.blueY
+    )
+}
