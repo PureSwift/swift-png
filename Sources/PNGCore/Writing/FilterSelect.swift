@@ -69,13 +69,22 @@ enum FilterSelect {
         var best = candidates[0]
         var bestCost = Int.max
 
-        // Each candidate is encoded into the scratch row and kept only if it beats what is there, so
-        // the destination always holds the best seen so far.  Ties go to the first tried, which is why
-        // the candidates are walked in the order the format numbers them: that is the reference's
-        // order, and a tie broken the other way would produce a different file.
+        // Ties go to the first tried, which is why the candidates are walked in the order the format
+        // numbers them: that is the reference's order, and a tie broken the other way would produce a
+        // different file.
+        //
+        // Each candidate is encoded into whichever of the two rows does not hold the best so far,
+        // so a winner is a note of where it lies rather than a copy of it, and at most one copy
+        // happens at the end.  Where the row lands cannot change the choice, only what it costs.
+        let straight = UnsafeMutableBufferPointer(
+            start: destination.baseAddress! + 1,
+            count: count
+        )
+        var bestInScratch = false
+
         for filter in candidates {
             let encoded = UnsafeMutableBufferPointer(
-                start: scratch.baseAddress!,
+                start: bestInScratch ? straight.baseAddress! : scratch.baseAddress!,
                 count: count
             )
 
@@ -84,16 +93,19 @@ enum FilterSelect {
                 row,
                 previous: previous,
                 stride: stride,
-                into: encoded
+                into: encoded,
+                abandonAbove: bestCost
             )
 
             guard cost < bestCost else { continue }
 
             bestCost = cost
             best = filter
+            bestInScratch = encoded.baseAddress == scratch.baseAddress
+        }
 
-            destination.baseAddress!.advanced(by: 1)
-                .update(from: encoded.baseAddress!, count: count)
+        if bestInScratch {
+            straight.baseAddress!.update(from: scratch.baseAddress!, count: count)
         }
 
         destination[0] = best.rawValue
@@ -105,15 +117,20 @@ enum FilterSelect {
     ///
     /// The measure is the sum of the differences read as signed bytes and taken as distances from
     /// zero, which is what the reference sums and what its choice therefore depends on.
+    /// Gives up once `cost` passes `abandonAbove`, leaving the rest of `destination` unwritten: a
+    /// candidate that has already lost is not worth finishing.  The check sits between blocks of the
+    /// row rather than between bytes, so the loops inside a block stay straight enough to vectorise.
     private static func apply(
         _ filter: Filter,
         _ row: UnsafeBufferPointer<UInt8>,
         previous: UnsafeBufferPointer<UInt8>,
         stride: Int,
-        into destination: UnsafeMutableBufferPointer<UInt8>
+        into destination: UnsafeMutableBufferPointer<UInt8>,
+        abandonAbove: Int
     ) -> Int {
         let count = row.count
         var cost = 0
+        let block = 256
 
         @inline(__always)
         func record(_ index: Int, _ value: UInt8) {
@@ -121,49 +138,80 @@ enum FilterSelect {
             cost += value < 128 ? Int(value) : 256 - Int(value)
         }
 
-        // The bytes before the start of the row are taken as zero, which is what the format says and
-        // what makes the first pixel of every row decodable on its own.
-        @inline(__always)
-        func left(_ index: Int) -> Int {
-            index >= stride ? Int(row[index - stride]) : 0
-        }
-
-        @inline(__always)
-        func upLeft(_ index: Int) -> Int {
-            index >= stride ? Int(previous[index - stride]) : 0
-        }
+        // Each filter is two loops rather than one with a branch in it: the first `stride` bytes are
+        // the ones whose left-hand neighbours the format defines as zero, and once they are done the
+        // test for them has nothing left to catch.
+        let prefix = min(stride, count)
 
         switch filter {
         case .none:
-            for index in 0 ..< count {
-                record(index, row[index])
+            var start = 0
+            while start < count, cost <= abandonAbove {
+                for index in start ..< min(start + block, count) {
+                    record(index, row[index])
+                }
+                start += block
             }
 
         case .sub:
-            for index in 0 ..< count {
-                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - left(index)))
+            for index in 0 ..< prefix {
+                record(index, row[index])
+            }
+
+            var start = prefix
+            while start < count, cost <= abandonAbove {
+                for index in start ..< min(start + block, count) {
+                    record(
+                        index,
+                        UInt8(truncatingIfNeeded: Int(row[index]) - Int(row[index - stride]))
+                    )
+                }
+                start += block
             }
 
         case .up:
-            for index in 0 ..< count {
-                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index])))
+            var start = 0
+            while start < count, cost <= abandonAbove {
+                for index in start ..< min(start + block, count) {
+                    record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index])))
+                }
+                start += block
             }
 
         case .average:
-            for index in 0 ..< count {
-                let predicted = (left(index) + Int(previous[index])) / 2
-                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - predicted))
+            for index in 0 ..< prefix {
+                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index]) / 2))
+            }
+
+            var start = prefix
+            while start < count, cost <= abandonAbove {
+                for index in start ..< min(start + block, count) {
+                    let predicted = (Int(row[index - stride]) + Int(previous[index])) / 2
+                    record(index, UInt8(truncatingIfNeeded: Int(row[index]) - predicted))
+                }
+                start += block
             }
 
         case .paeth:
-            for index in 0 ..< count {
-                let predicted = Self.paeth(
-                    left: left(index),
-                    above: Int(previous[index]),
-                    aboveLeft: upLeft(index)
-                )
+            // For the first pixel the prediction collapses to the byte above: with nothing to the
+            // left both other candidates are zero, and the tie-breaking picks the same value either
+            // way.
+            for index in 0 ..< prefix {
+                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index])))
+            }
 
-                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - predicted))
+            var start = prefix
+            while start < count, cost <= abandonAbove {
+                for index in start ..< min(start + block, count) {
+                    let predicted = Self.paeth(
+                        left: Int(row[index - stride]),
+                        above: Int(previous[index]),
+                        aboveLeft: Int(previous[index - stride])
+                    )
+
+                    record(index, UInt8(truncatingIfNeeded: Int(row[index]) - predicted))
+                }
+                start += block
             }
         }
 
