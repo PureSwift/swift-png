@@ -35,6 +35,15 @@ spng_stage_message(png_const_structrp png_ptr, png_const_charp message)
    if (mutable_ptr == NULL)
       return message;
 
+   /* Already staged, which happens whenever a message was given a chunk name
+    * first: that assembles the text into this same buffer and hands back a
+    * pointer to it.  Copying it over itself is a copy whose source and
+    * destination overlap exactly, which the C library is entitled to refuse and
+    * on some systems does.
+    */
+   if (message == mutable_ptr->message)
+      return message;
+
    strncpy(mutable_ptr->message, message, SPNG_MESSAGE_MAX - 1);
    mutable_ptr->message[SPNG_MESSAGE_MAX - 1] = '\0';
 
@@ -273,6 +282,29 @@ void
 spng_c_benign_error(png_const_structrp png_ptr, png_const_charp message)
 {
    png_benign_error(png_ptr, message);
+}
+
+void
+spng_c_benign_error_bytes(png_const_structrp png_ptr, const char *message,
+    size_t length)
+{
+   png_structp mutable_ptr = (png_structp)png_ptr;
+   size_t count = length;
+
+   if (mutable_ptr == NULL || message == NULL)
+      return;
+
+   if (count > SPNG_MESSAGE_MAX - 1)
+      count = SPNG_MESSAGE_MAX - 1;
+
+   memcpy(mutable_ptr->message, message, count);
+   mutable_ptr->message[count] = '\0';
+
+   /* Returns when the client has said these are warnings, and does not when it
+    * has not, which is the whole point of reporting it this way rather than by
+    * unwinding: the caller carries on in the one case and never sees the other.
+    */
+   png_benign_error(png_ptr, mutable_ptr->message);
 }
 
 void
