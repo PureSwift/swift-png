@@ -20,7 +20,8 @@ if [ ! -x "$ours" ] || [ ! -x "$reference" ] || [ ! -d "$corpus" ]; then
 fi
 
 # The header alone, then every format the API defines that is not colour-mapped.
-formats="header 0x00 0x01 0x02 0x03 0x11 0x12 0x13 0x21 0x23 0x04 0x05 0x06 0x07"
+formats="header 0x00 0x01 0x02 0x03 0x11 0x12 0x13 0x21 0x23 0x04 0x05 0x06 0x07
+0x02:bg 0x12:bg 0x00:bg 0x11:bg 0x02:bg0 0x12:bg0"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -35,16 +36,26 @@ for path in "$corpus"/*.png; do
 
     case "$image" in damaged-*|bad-*) continue ;; esac
 
-    for format in $formats; do
+    for spec in $formats; do
+        format=${spec%%:*}
+        bg=""
+
+        # A trailing marker asks for a background to blend coverage away against.  Both ways round are
+        # driven, because they are different operations rather than the same one with a default.
+        case "$spec" in
+            *:bg) bg=bg ;;
+            *:bg0) bg=bg0 ;;
+        esac
+
         count=$((count + 1))
 
         if [ "$format" = header ]; then
             "$reference" "$path" > "$work/reference" 2>&1 || echo "exit $?" >> "$work/reference"
             "$ours" "$path" > "$work/ours" 2>&1 || echo "exit $?" >> "$work/ours"
         else
-            "$reference" "$path" "$format" > "$work/reference" 2>&1 \
+            "$reference" "$path" "$format" $bg > "$work/reference" 2>&1 \
                 || echo "exit $?" >> "$work/reference"
-            "$ours" "$path" "$format" > "$work/ours" 2>&1 || echo "exit $?" >> "$work/ours"
+            "$ours" "$path" "$format" $bg > "$work/ours" 2>&1 || echo "exit $?" >> "$work/ours"
         fi
 
         if diff -q "$work/reference" "$work/ours" > /dev/null; then
@@ -62,19 +73,19 @@ for path in "$corpus"/*.png; do
             continue
         fi
 
-        if [ -n "$known" ] && [ -f "$known" ] && grep -q "^$image $format " "$known"; then
+        if [ -n "$known" ] && [ -f "$known" ] && grep -q "^$image $spec " "$known"; then
             exempt=$((exempt + 1))
-            used="$used $image:$format"
+            used="$used $image:$spec"
             continue
         fi
 
         failures=$((failures + 1))
 
         if [ "$failures" -le 4 ]; then
-            echo "--- $image as $format ---"
+            echo "--- $image as $spec ---"
             diff "$work/reference" "$work/ours" | head -6
         else
-            echo "--- $image as $format differs ---"
+            echo "--- $image as $spec differs ---"
         fi
     done
 done
@@ -87,7 +98,7 @@ fi
 stale=0
 
 if [ -n "$known" ] && [ -f "$known" ]; then
-    while read -r image format rest; do
+    while read -r image spec rest; do
         case "$image" in ''|\#*) continue ;; esac
 
         if [ "$image" = unimplemented ]; then
@@ -99,8 +110,8 @@ if [ -n "$known" ] && [ -f "$known" ]; then
             continue
         fi
 
-        if ! echo "$used" | grep -q " $image:$format"; then
-            echo "stale exemption: $image $format now matches the reference" >&2
+        if ! echo "$used" | grep -q " $image:$spec"; then
+            echo "stale exemption: $image $spec now matches the reference" >&2
             stale=$((stale + 1))
         fi
     done < "$known"

@@ -41,15 +41,37 @@ int main(int argc, char **argv)
 
    if (argc > 2)
    {
+      png_color background;
+      png_colorp background_ptr = NULL;
       png_bytep buffer;
       size_t size;
       size_t k;
 
       image.format = (png_uint_32)strtol(argv[2], NULL, 0);
-      size = PNG_IMAGE_SIZE(image);
-      buffer = malloc(size != 0 ? size : 1);
 
-      if (png_image_finish_read(&image, NULL, buffer, 0, NULL) == 0)
+      /* A colour to blend coverage away against, when the caller asks for one.  Without it the
+       * library blends against whatever the buffer holds, which is a different operation.
+       */
+      if (argc > 3)
+      {
+         /* Black is worth driving on its own: it is the one colour that is the same number in every
+          * space, so a difference against it is a difference in the blend rather than in the
+          * conversion of the colour being blended against.
+          */
+         int black = argv[3][strlen(argv[3]) - 1] == '0';
+
+         background.red = black ? 0 : 0x40;
+         background.green = black ? 0 : 0x80;
+         background.blue = black ? 0 : 0xc0;
+         background_ptr = &background;
+      }
+      size = PNG_IMAGE_SIZE(image);
+      /* Cleared, because with no background the library blends onto what is already here: a buffer
+       * full of whatever the allocator had would make the comparison meaningless.
+       */
+      buffer = calloc(1, size != 0 ? size : 1);
+
+      if (png_image_finish_read(&image, background_ptr, buffer, 0, NULL) == 0)
       {
          printf("finish failed: %s\n", image.message);
          free(buffer);

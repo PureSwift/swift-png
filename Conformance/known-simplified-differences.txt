@@ -18,3 +18,9 @@ unimplemented Every conversion this library refuses is recorded here as one thin
 # assembling it out of the public calls.
 #
 # This line goes stale, and the build fails, as soon as nothing is refused any more.
+
+# Removing coverage against a colour the client named is implemented and agrees with the reference
+# exactly when that colour is black.  Against any other colour it differs in the low bits, and for the
+# same reason: the reference takes the colour to light at sixteen bits and this library does it at
+# eight, so the two disagree about the colour rather than about the blend.  Driven both ways round
+# above so that the line between them stays visible.
