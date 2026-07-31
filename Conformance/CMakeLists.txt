@@ -167,6 +167,21 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:scaleprobe>
                 $<TARGET_FILE:scaleprobe_reference>)
 
+    # Leaving a decode part way, from every point a client is allowed to leave from.  Not a
+    # comparison: the two libraries allocate different numbers of times in a different order, so what
+    # is checked is that this library gives back everything it took, whenever it is abandoned.
+    add_executable(pngfaults pngfaults.c)
+    target_link_libraries(pngfaults PRIVATE png16)
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngfaults BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(pngfaults spng_corpus)
+
+    add_test(NAME faults
+        COMMAND ${SPNG_SCRIPTS}/run_faults.sh $<TARGET_FILE:pngfaults> ${SPNG_CORPUS})
+
     # Fitting an image into fewer colours than it has.  Generated palettes rather than corpus images:
     # what the reduction does depends on how the colours are spread, not on what the picture is of.
     add_executable(pngquantize pngquantize.c)
