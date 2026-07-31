@@ -82,6 +82,9 @@ public struct TransformFlags: OptionSet, Sendable {
     /// A transform of the client's own, run after everything the library does.
     public static let userTransform = Self(rawValue: 1 << 22)
 
+    /// The image is fitted into a palette no longer than the client's display can show.
+    public static let quantize = Self(rawValue: 1 << 23)
+
     /// Resolves the requests against the image, adding what one request implies.
     ///
     /// This exists because the requests are not independent.  Asking for the transparency to
