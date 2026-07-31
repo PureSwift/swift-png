@@ -48,6 +48,10 @@ def preprocess() -> str:
 
 
 def normalize(text: str) -> str:
+    # Compilers spell the restrict qualifier differently once the preprocessor has
+    # run — clang leaves `restrict`, gcc writes `__restrict` — and the recorded API
+    # must not change with the machine that regenerated it.
+    text = re.sub(r"\b__restrict\b", "restrict", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
