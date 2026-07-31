@@ -72,6 +72,51 @@ extension SequentialWriter {
         }
     }
 
+    /// Writes the chunks a client kept or added, for one part of the file.
+    ///
+    /// Where each goes is what its location says.  A chunk that was after the image data has to stay
+    /// after it: that is what its being there meant, and moving it would change what the file says
+    /// about when it applies.
+    func writeUnknown(_ info: InfoStore, afterImageData: Bool, context: PngContext) throws {
+        for chunk in info.unknownChunks {
+            let wasAfterImageData = chunk.location & 0x08 != 0
+
+            guard wasAfterImageData == afterImageData else { continue }
+
+            // What a client asked for on *this* structure, which is the one doing the writing.  A
+            // client that said nothing gets the chunks the format says are safe to copy forward and
+            // not the others: copying one of those into a file it may no longer suit is the mistake
+            // the safe-to-copy bit exists to prevent.
+            guard context.unknownChunks.keeps(
+                chunk.name,
+                isSafeToCopy: chunk.name.isSafeToCopy,
+                hasUserCallback: false
+            ) || context.unknownChunks.named(chunk.name) == .asDefault
+                && context.unknownChunks.default == .asDefault
+                && chunk.name.isSafeToCopy else {
+                continue
+            }
+
+            let bytes = chunk.data.elements
+
+            guard bytes.count > 0 else {
+                // A chunk with nothing in it is still a chunk, and the general path below declines to
+                // write a zero-length one.
+                var writer = context.chunkWriter
+
+                writer.begin(chunk.name, length: 0)
+                writer.end()
+                continue
+            }
+
+            try self.write(chunk.name, context: context, count: bytes.count) { destination in
+                for index in 0 ..< bytes.count {
+                    destination[index] = bytes[index]
+                }
+            }
+        }
+    }
+
     /// The chunks that must follow the palette and precede the image data.
     func writeAfterPalette(_ info: InfoStore, context: PngContext) throws {
         guard let header = context.header else { return }
