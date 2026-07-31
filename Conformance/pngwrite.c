@@ -96,6 +96,32 @@ static const struct image_case cases[] = {
     */
    { "flushed",      13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 4 },
 
+   /* Rows the client holds in a shape the format does not store: the write transforms.  Each is
+    * numbered so the harness can ask for it, and the numbers carry on from the metadata cases.
+    */
+   { "w_bgr",        13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 10 },
+   { "w_bgr_alpha",  13,  7, 8, PNG_COLOR_TYPE_RGB_ALPHA,  0, -1, -1, -1, 10 },
+   { "w_swap",       11,  5, 16, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 11 },
+   { "w_swap_alpha", 13,  7, 8, PNG_COLOR_TYPE_RGB_ALPHA,  0, -1, -1, -1, 12 },
+   { "w_invert_alpha", 13, 7, 8, PNG_COLOR_TYPE_RGB_ALPHA, 0, -1, -1, -1, 13 },
+   { "w_invert_mono", 13, 7, 8, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 14 },
+   { "w_invert_mono1", 13, 5, 1, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1, 14 },
+   { "w_packing1",   13,  5, 1, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 15 },
+   { "w_packing2",   13,  5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 15 },
+   { "w_packing4",   13,  5, 4, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 15 },
+   { "w_packswap",   13,  5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 16 },
+   { "w_pack_swap",  13,  5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 17 },
+   { "w_filler",     13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 18 },
+   { "w_filler_before", 13, 7, 8, PNG_COLOR_TYPE_RGB,      0, -1, -1, -1, 19 },
+   { "w_shift",      13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 20 },
+   { "w_shift16",    11,  5, 16, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 20 },
+   { "w_shift_gray", 13,  7, 8, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 20 },
+   { "w_bgr_swap_alpha", 13, 7, 8, PNG_COLOR_TYPE_RGB_ALPHA, 0, -1, -1, -1, 21 },
+   { "w_filler_bgr", 13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 22 },
+   { "w_shift_bgr",  13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 23 },
+   { "w_pack_invert", 13, 5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 24 },
+   { "w_interlaced_bgr", 9, 9, 8, PNG_COLOR_TYPE_RGB,      1, -1, -1, -1, 10 },
+
    { "meta_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 1 },
    { "meta_gray",    13,  7, 8, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1, 1 },
    { "meta_palette",  9,  3, 8, PNG_COLOR_TYPE_PALETTE,   0, -1, -1, -1, 1 },
@@ -195,6 +221,15 @@ static void fill(png_bytep row, png_uint_32 y, const struct image_case *c)
    size_t rowbytes = ((size_t)width * channels * c->bit_depth + 7) / 8;
    size_t k;
 
+   /* A client that packs its samples supplies one to a byte; one that supplies a filler channel
+    * supplies a channel more.  Either way it hands over more than the file stores, so the row is
+    * filled to whatever it is about to hand over rather than to what the file will hold.
+    */
+   if (c->metadata == 15 || c->metadata == 17 || c->metadata == 24)
+      rowbytes = (size_t)width * channels;
+   else if (c->metadata == 18 || c->metadata == 19 || c->metadata == 22)
+      rowbytes = (size_t)width * (channels + 1) * c->bit_depth / 8;
+
    for (k = 0; k < rowbytes; k++)
       row[k] = (png_byte)((k * 37 + y * 101 + (k & 3) * 17) & 0xFF);
 }
@@ -277,7 +312,7 @@ static int write_file(const char *path, const struct image_case *c)
 
       png_set_text(p, i, texts, 3);
    }
-   else if (c->metadata) set_metadata(p, i, c);
+   else if (c->metadata == 1 || c->metadata == 2) set_metadata(p, i, c);
 
    if (c->filters >= 0) png_set_filter(p, PNG_FILTER_TYPE_BASE, c->filters);
    if (c->level >= 0) png_set_compression_level(p, c->level);
@@ -285,7 +320,42 @@ static int write_file(const char *path, const struct image_case *c)
 
    png_write_info(p, i);
 
-   row = malloc(png_get_rowbytes(p, i) + 8);
+   /* The write transforms, asked for after the header is written, which is where a client asks for
+    * them and where the library has to be ready for them.
+    */
+   if (c->metadata >= 10)
+   {
+      png_color_8 sig;
+
+      memset(&sig, 0, sizeof sig);
+      sig.red = 5; sig.green = 6; sig.blue = 5; sig.alpha = 7;
+      sig.gray = c->bit_depth >= 8 ? 5 : c->bit_depth;
+
+      switch (c->metadata)
+      {
+         case 10: png_set_bgr(p); break;
+         case 11: png_set_swap(p); break;
+         case 12: png_set_swap_alpha(p); break;
+         case 13: png_set_invert_alpha(p); break;
+         case 14: png_set_invert_mono(p); break;
+         case 15: png_set_packing(p); break;
+         case 16: png_set_packswap(p); break;
+         case 17: png_set_packing(p); png_set_packswap(p); break;
+         case 18: png_set_filler(p, 0, PNG_FILLER_AFTER); break;
+         case 19: png_set_filler(p, 0, PNG_FILLER_BEFORE); break;
+         case 20: png_set_shift(p, &sig); break;
+         case 21: png_set_bgr(p); png_set_swap_alpha(p); break;
+         case 22: png_set_filler(p, 0, PNG_FILLER_BEFORE); png_set_bgr(p); break;
+         case 23: png_set_shift(p, &sig); png_set_bgr(p); break;
+         case 24: png_set_packing(p); png_set_invert_mono(p); break;
+      }
+   }
+
+
+   /* Generous: a client that packs its samples, or supplies a filler channel, hands over more bytes
+    * than the file will store.
+    */
+   row = malloc(png_get_rowbytes(p, i) * 8 + 64);
 
    {
       /* Every row of the image, once per pass.  For an image that is not interlaced that is one
