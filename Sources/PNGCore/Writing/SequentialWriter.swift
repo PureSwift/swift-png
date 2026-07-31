@@ -382,6 +382,7 @@ final class SequentialWriter {
         // at the call site: a chunk written between two pieces of the image data ends the image as far
         // as a decoder is concerned, and everything after it is lost.
         if let info {
+            try self.writeUnknown(info, afterImageData: true, context: context)
             try self.writeTextAfterRows(info, context: context)
         }
 
