@@ -120,6 +120,7 @@ add_library(png16 SHARED
     Sources/CPNG/spng_memory.c
     Sources/CPNG/spng_lifecycle.c
     Sources/CPNG/spng_callbacks.c
+    Sources/CPNG/spng_simplified.c
     Sources/CPNG/gen/spng_stubs.c)
 
 add_dependencies(png16 spng_export_lists)

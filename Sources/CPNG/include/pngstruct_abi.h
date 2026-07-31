@@ -110,6 +110,29 @@ struct png_control
 
    unsigned int for_write : 1;
    unsigned int owned_file : 1;
+
+   /* Where the simplified API catches what the rest of the library throws.
+    *
+    * The whole difference between this API and the one underneath is that a
+    * client of this one never installs an error handler: it calls a function
+    * that returns zero and leaves a message behind.  So every call sets a jump
+    * here first, and the error handler below jumps to it rather than to the
+    * client.
+    */
+   jmp_buf jmpbuf;
+
+   /* The image being worked on, so the handler can record into its message. */
+   png_imagep image;
+
+   /* The file being read or written, when this API opened it. */
+   FILE *file;
+
+   /* For writing to memory: where to put it, how much room there is, and how
+    * much was needed.
+    */
+   png_bytep out_memory;
+   size_t out_size;
+   size_t out_used;
 };
 
 #endif /* SPNG_PNGSTRUCT_ABI_H */
