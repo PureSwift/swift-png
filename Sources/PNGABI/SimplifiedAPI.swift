@@ -125,8 +125,12 @@ public func spng_swift_image_finish_read(
     // saying so.
     let fileHasAlpha = header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)
 
-    if !format.hasAlpha, fileHasAlpha {
-        spng_c_error(png_ptr, "png_image: removing alpha not implemented")
+    // Removing coverage means compositing, and what onto is the client's answer.  A colour it named
+    // is a colour to blend against; nothing named means blending against whatever its buffer already
+    // holds, which the reference does with machinery of its own rather than through the ordinary
+    // requests — so that one is refused and the other is not.
+    if !format.hasAlpha, fileHasAlpha, background == nil {
+        spng_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
     }
 
     if !format.hasColor, header.colorType.hasColor || header.colorType.isIndexed {
@@ -223,6 +227,26 @@ private func requestConversion(
 
     let fileHasAlpha = header.colorType.hasAlpha
         || (info_ptr.flatMap { InfoStore.from($0)?.isValid(PNG_INFO_tRNS) } ?? false)
+
+    if !format.hasAlpha, fileHasAlpha, let background {
+        // Named in the sRGB the API speaks, and handed on at the depth the blend will happen at —
+        // which is the row's, and the row's is eight bits here because a file with more is refused
+        // above.  A colour widened for sixteen bits and given to an eight bit blend is not a darker
+        // colour, it is out of range.
+        var colour = png_color_16()
+
+        colour.red = png_uint_16(background.pointee.red)
+        colour.green = png_uint_16(background.pointee.green)
+        colour.blue = png_uint_16(background.pointee.blue)
+
+        // Grey output takes the green channel, which is the API's own rule and not an arbitrary one:
+        // green is most of what a viewer sees as brightness.
+        colour.gray = colour.green
+
+        withUnsafePointer(to: &colour) {
+            png_set_background_fixed(png_ptr, $0, PNG_BACKGROUND_GAMMA_SCREEN, 0, 0)
+        }
+    }
 
     if format.hasAlpha, !fileHasAlpha {
         // Opaque, since a file with nothing to say about coverage is a file with nothing hidden — and
