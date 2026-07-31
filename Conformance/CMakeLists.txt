@@ -208,6 +208,23 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 ${SPNG_CORPUS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/known-simplified-differences.txt)
 
+    add_executable(pngsimplewrite pngsimplewrite.c)
+    target_link_libraries(pngsimplewrite PRIVATE png16)
+
+    add_executable(pngsimplewrite_reference pngsimplewrite.c)
+    target_include_directories(pngsimplewrite_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngsimplewrite_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngsimplewrite BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_test(NAME differential_simplified_write
+        COMMAND ${SPNG_SCRIPTS}/compare_simple_write.sh
+                $<TARGET_FILE:pngsimplewrite>
+                $<TARGET_FILE:pngsimplewrite_reference>)
+
     add_executable(pngreadpng pngreadpng.c)
     target_link_libraries(pngreadpng PRIVATE png16)
 
