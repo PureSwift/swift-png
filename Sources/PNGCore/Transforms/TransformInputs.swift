@@ -50,6 +50,12 @@ struct TransformInputs {
     /// space as the pixels it does.
     var blendCorrected: GammaTable?
 
+    /// The tables a request to fit the image into fewer colours left behind.
+    ///
+    /// Built when the request was made rather than when the pipeline was resolved, because the client
+    /// hands over the palette to work from at that moment and is free to change it afterwards.
+    var quantization = Quantization()
+
     /// The same three curves as exponents, for sixteen bit samples.
     ///
     /// Computed rather than tabulated: a table over sixteen bits would be 65536 entries an image.
