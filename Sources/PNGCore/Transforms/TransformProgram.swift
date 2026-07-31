@@ -34,6 +34,7 @@ struct TransformProgram {
         case scale16
         case strip16
         case expand16
+        case quantize
         case invertMono
         case invertAlpha
         case shift
@@ -79,6 +80,13 @@ struct TransformProgram {
     /// described as laid over black, which is what the client is told when it asks for the background.
     private(set) var arrangesAlpha = false
 
+    /// Whether the fitting will turn rows of colour into rows of indices.
+    ///
+    /// Which the shape depends on, and which the request alone does not settle: a client that asked
+    /// only for the palette to be shortened has no table to fit colours with, so its rows of colour
+    /// stay colour.
+    private let quantizesToIndices: Bool
+
     /// Whether the samples within a byte have been reversed.
     ///
     /// Which matters to one thing outside the pipeline: the bits past the end of a row are at the top
@@ -107,8 +115,11 @@ struct TransformProgram {
         fillerAfterColor: Bool,
         gamma: GammaState = GammaState(),
         background: ComposeBackground = ComposeBackground(),
-        alphaMode: AlphaMode = .png
+        alphaMode: AlphaMode = .png,
+        quantization: Quantization = Quantization()
     ) {
+        self.quantizesToIndices = !quantization.lookup.isEmpty
+
         let hasTransparency = info.isValid(InfoStore.Valid.trns)
         let flags = requested.resolved(for: header, hasTransparency: hasTransparency)
 
@@ -244,6 +255,14 @@ struct TransformProgram {
 
         if flags.contains(.strip16) {
             self.steps.append(.strip16)
+        }
+
+        // After the narrowing, because the fitting works on eight bit samples and a sixteen bit row
+        // that has not been narrowed is a row it will leave alone; and before the widening, for the
+        // same reason from the other side.  A client that asks for both gets indices widened back out
+        // to sixteen bits, which is peculiar and is what the reference does.
+        if flags.contains(.quantize) {
+            self.steps.append(.quantize)
         }
 
         if flags.contains(.expand16) {
@@ -431,6 +450,9 @@ struct TransformProgram {
             case .expand16:
                 Transform.expand16(row, &info)
 
+            case .quantize:
+                Transform.quantize(row, &info, inputs.quantization)
+
             case .invertMono:
                 Transform.invertMono(row, info)
 
@@ -482,7 +504,7 @@ struct TransformProgram {
         var info = start
 
         for step in self.steps {
-            Self.advance(&info, through: step, hasTransparency: hasTransparency)
+            self.advance(&info, through: step, hasTransparency: hasTransparency)
         }
 
         return info
@@ -497,7 +519,7 @@ struct TransformProgram {
         var largest = info.rowBytes
 
         for step in self.steps {
-            Self.advance(&info, through: step, hasTransparency: hasTransparency)
+            self.advance(&info, through: step, hasTransparency: hasTransparency)
             largest = max(largest, info.rowBytes)
         }
 
@@ -508,7 +530,7 @@ struct TransformProgram {
     ///
     /// The conditions here mirror the guards in the kernels, because a step that declines to run
     /// must not be reported as having changed the shape.
-    private static func advance(
+    private func advance(
         _ info: inout RowInfo,
         through step: Step,
         hasTransparency: Bool
@@ -570,6 +592,13 @@ struct TransformProgram {
         case .expand16:
             guard info.bitDepth == 8 else { return }
             info.bitDepth = 16
+            info.resize()
+
+        case .quantize:
+            guard self.quantizesToIndices, info.bitDepth == 8,
+                  info.colorType == .rgb || info.colorType == .rgba else { return }
+            info.colorType = .palette
+            info.channels = 1
             info.resize()
 
         case .packing:
