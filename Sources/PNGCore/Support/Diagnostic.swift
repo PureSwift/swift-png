@@ -72,4 +72,18 @@ public struct Diagnostic: Error, @unchecked Sendable {
         self.chunk = chunk
         self.borrowedMessage = borrowedMessage
     }
+
+    /// The same condition, reported as something the decode survived.
+    ///
+    /// For the places where whether a fault is fatal depends on who is asking rather than on what
+    /// went wrong: the same corrupt stream stops a sequential read and only stops the rows of a
+    /// progressive one.
+    public var asWarning: Self {
+        Self(
+            borrowing: self.borrowedMessage,
+            or: self.message,
+            severity: .warning,
+            chunk: self.chunk
+        )
+    }
 }

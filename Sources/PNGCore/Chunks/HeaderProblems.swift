@@ -36,7 +36,7 @@ extension Header {
         /// Nothing is owned across a call here: a client may jump out of its warning
         /// handler at any of them, and the caller has already gathered everything it
         /// needs into this value.
-        public func report(to host: Host) {
+        public func report(to host: Host, repeatingFilterMethod: Bool = true) {
             if self.contains(.zeroWidth) {
                 host.warn("Image width is zero in IHDR")
             }
@@ -59,10 +59,15 @@ extension Header {
                 host.warn("Unknown compression method in IHDR")
             }
             if self.contains(.badFilterMethod) {
-                // Two warnings for the one fault, matching the reference, which
-                // checks the field twice on the way through.
                 host.warn("Unknown filter method in IHDR")
-                host.warn("Invalid filter method in IHDR")
+
+                // Twice for the one fault when the file is being read in one go, because the
+                // reference checks the field twice on the way through — and once when it is being
+                // pushed in, because that reader checks it once.  A difference between the
+                // reference's own two readers rather than a rule about the format.
+                if repeatingFilterMethod {
+                    host.warn("Invalid filter method in IHDR")
+                }
             }
             if self.contains(.badInterlaceMethod) {
                 host.warn("Unknown interlace method in IHDR")
