@@ -78,7 +78,7 @@ final class SequentialReader {
         var sawHeader = false
 
         while true {
-            let chunk = try self.lexer.readHeader(host: context.host)
+            let chunk = try self.lexer.readHeader(host: context.host, context: context)
 
             if chunk.name == .ihdr {
                 guard !sawHeader else {
@@ -706,7 +706,7 @@ final class SequentialReader {
         while self.lexer.remainingInChunk == 0 {
             try self.finishChunk(context: context)
 
-            let chunk = try self.lexer.readHeader(host: context.host)
+            let chunk = try self.lexer.readHeader(host: context.host, context: context)
 
             if chunk.name != .idat {
                 // The image data has ended.  Leave this chunk current so that the
@@ -738,7 +738,7 @@ final class SequentialReader {
         // it as well.
         while self.lexer.current?.name == .idat {
             try self.skipChunk(context: context)
-            _ = try self.lexer.readHeader(host: context.host)
+            _ = try self.lexer.readHeader(host: context.host, context: context)
         }
 
         // Metadata is allowed after the image data as well as before it, and is reported
@@ -753,7 +753,7 @@ final class SequentialReader {
             }
 
             try self.handleOptional(current, info: info, context: context)
-            _ = try self.lexer.readHeader(host: context.host)
+            _ = try self.lexer.readHeader(host: context.host, context: context)
         }
     }
 
@@ -829,7 +829,7 @@ final class SequentialReader {
     private func finishChunk(context: PngContext) throws {
         guard self.lexer.current != nil else { return }
 
-        if !self.lexer.readAndCheckCrc(host: context.host) {
+        if !self.lexer.readAndCheckCrc(host: context.host, context: context) {
             // Recorded as well as raised: png_set_crc_action lets a client decide what
             // a mismatch means, and that handling arrives with it.
             self.sawBadChecksum = true

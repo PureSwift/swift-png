@@ -71,7 +71,9 @@ final class ChunkLexer {
     }
 
     /// Reads the next chunk's length and type.
-    func readHeader(host: Host) throws -> ChunkHeader {
+    func readHeader(host: Host, context: PngContext? = nil) throws -> ChunkHeader {
+        context?.noteIO(0x0020)
+
         var raw = (UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0))
 
         withUnsafeMutableBytes(of: &raw) { bytes in
@@ -91,6 +93,10 @@ final class ChunkLexer {
         }
 
         let name = ChunkName(raw.4, raw.5, raw.6, raw.7)
+
+        // Past the header and into the contents, which is where a client watching from its own
+        // callback will see the library while a chunk is being consumed.
+        context?.noteIO(0x0040, chunk: name)
 
         // The checksum covers the type code as well as the payload.
         self.crc.reset()
@@ -163,7 +169,9 @@ final class ChunkLexer {
     ///
     /// Returns whether it matched, rather than throwing, because what to do about
     /// a mismatch is the client's choice to make through `png_set_crc_action`.
-    func readAndCheckCrc(host: Host) -> Bool {
+    func readAndCheckCrc(host: Host, context: PngContext? = nil) -> Bool {
+        context?.noteIO(0x0080)
+
         var raw = (UInt8(0), UInt8(0), UInt8(0), UInt8(0))
 
         withUnsafeMutableBytes(of: &raw) { bytes in
