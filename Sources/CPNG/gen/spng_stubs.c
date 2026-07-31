@@ -27,24 +27,6 @@ spng_unimplemented_fatal(const char *name)
 }
 
 void PNGAPI
-png_data_freer(png_const_structrp png_ptr, png_inforp info_ptr, int freer, png_uint_32 mask)
-{
-   png_error(png_ptr, "png_data_freer is not implemented");
-}
-
-void PNGAPI
-png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_me, int num)
-{
-   png_error(png_ptr, "png_free_data is not implemented");
-}
-
-void PNGAPI
-png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
-{
-   png_error(png_ptr, "png_set_crc_action is not implemented");
-}
-
-void PNGAPI
 png_set_quantize(png_structrp png_ptr, png_colorp palette, int num_palette, int maximum_colors, png_const_uint_16p histogram, int full_quantize)
 {
    png_error(png_ptr, "png_set_quantize is not implemented");

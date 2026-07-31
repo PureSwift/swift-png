@@ -135,6 +135,49 @@ report_derived(png_structp png_ptr, png_infop info_ptr)
 
    printf("palette max %d\n", png_get_palette_max(png_ptr, info_ptr));
 
+   /* Who frees what.  Both directions, and freeing twice, which a client is entitled to do. */
+   {
+      png_infop k = png_create_info_struct(png_ptr);
+      png_color palette[4];
+      png_byte alphas[4];
+      png_colorp back;
+      png_bytep back_alphas;
+      png_color_16p transparent;
+      int entries, num_alphas, n;
+
+      for (n = 0; n < 4; n++)
+      {
+         palette[n].red = (png_byte)n;
+         palette[n].green = (png_byte)(n * 2);
+         palette[n].blue = (png_byte)(n * 3);
+         alphas[n] = (png_byte)(n * 60);
+      }
+
+      png_set_PLTE(png_ptr, k, palette, 4);
+      png_set_tRNS(png_ptr, k, alphas, 4, NULL);
+
+      png_free_data(png_ptr, k, PNG_FREE_PLTE, -1);
+      printf("after free plte: plte=%d trns=%d\n",
+             png_get_PLTE(png_ptr, k, &back, &entries) ? entries : -1,
+             png_get_tRNS(png_ptr, k, &back_alphas, &num_alphas, &transparent) ? num_alphas : -1);
+
+      /* Handed to the client, then freed: the library should let go rather than free. */
+      png_set_PLTE(png_ptr, k, palette, 4);
+      png_data_freer(png_ptr, k, PNG_USER_WILL_FREE_DATA, PNG_FREE_PLTE);
+      png_free_data(png_ptr, k, PNG_FREE_PLTE, -1);
+      printf("after user-owned free: plte=%d\n",
+             png_get_PLTE(png_ptr, k, &back, &entries) ? entries : -1);
+
+      /* And taken back, after which freeing is the library's job again. */
+      png_data_freer(png_ptr, k, PNG_DESTROY_WILL_FREE_DATA, PNG_FREE_PLTE);
+      png_free_data(png_ptr, k, PNG_FREE_ALL, -1);
+      png_free_data(png_ptr, k, PNG_FREE_ALL, -1);
+      printf("after free all twice: plte=%d\n",
+             png_get_PLTE(png_ptr, k, &back, &entries) ? entries : -1);
+
+      png_destroy_info_struct(png_ptr, &k);
+   }
+
    /* The switches that are not about the image.  Each is asked twice, because what these return is
     * the setting they replaced rather than the one they took.
     */

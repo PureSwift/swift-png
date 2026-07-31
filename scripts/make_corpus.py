@@ -358,6 +358,14 @@ def write_metadata() -> list[pathlib.Path]:
     # Chunks nothing here understands, which is an ordinary thing for a format built to be extended.
     # One safe to copy forward and one not, and one of each either side of the image data, since where
     # a chunk was is part of what it meant.
+    # A chunk whose check value does not match, which is what the actions for a failed checksum are
+    # about.  Ancillary, because a critical one would stop the file rather than exercise a choice.
+    bad_crc = (
+        struct.pack(">I", 4) + b"gAMA" + struct.pack(">I", 45455)
+        + struct.pack(">I", 0xDEADBEEF)
+    )
+    emit("bad-crc-gama", before=bad_crc)
+
     emit(
         "unknown",
         before=chunk(b"unSf", b"safe to copy") + chunk(b"unUN", b"not safe to copy"),
