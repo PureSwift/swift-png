@@ -192,6 +192,25 @@ static int write_file(const char *path, png_structp source, png_infop info, png_
          png_set_iCCP(p, i, name, compression_type, profile, profile_length);
    }
 
+   {
+      /* The scale, which is the one chunk holding its numbers as text.  Copied as text rather than as
+       * numbers, since that is what the file carries and what a client is entitled to get back.
+       */
+      int scale_unit;
+      png_charp scale_width, scale_height;
+
+      if (png_get_sCAL_s(source, info, &scale_unit, &scale_width, &scale_height))
+         png_set_sCAL_s(p, i, scale_unit, scale_width, scale_height);
+   }
+
+   {
+      png_uint_32 num_exif;
+      png_bytep exif;
+
+      if (png_get_eXIf_1(source, info, &num_exif, &exif))
+         png_set_eXIf_1(p, i, num_exif, exif);
+   }
+
    num_texts = png_get_text(source, info, &texts, NULL);
 
    if (num_texts > 0)
@@ -313,6 +332,37 @@ static int dump_file(const char *path)
          for (k = 0; k < (int)profile_length && k < 32; k++) printf(" %02x", profile[k]);
 
          printf("\n");
+      }
+
+      {
+         int scale_unit;
+         png_charp scale_width, scale_height;
+         double dw, dh;
+         png_fixed_point fw, fh;
+
+         if (png_get_sCAL_s(p, i, &scale_unit, &scale_width, &scale_height))
+            printf("scal unit=%d width=%s height=%s\n", scale_unit, scale_width, scale_height);
+
+         /* And as numbers, which is a different code path and can disagree with the strings. */
+         if (png_get_sCAL(p, i, &scale_unit, &dw, &dh))
+            printf("scal numbers %g %g\n", dw, dh);
+
+         if (png_get_sCAL_fixed(p, i, &scale_unit, &fw, &fh))
+            printf("scal fixed %d %d\n", (int)fw, (int)fh);
+      }
+
+      {
+         png_uint_32 num_exif;
+         png_bytep exif;
+
+         if (png_get_eXIf_1(p, i, &num_exif, &exif))
+         {
+            printf("exif length=%u:", (unsigned)num_exif);
+
+            for (k = 0; k < (int)num_exif && k < 32; k++) printf(" %02x", exif[k]);
+
+            printf("\n");
+         }
       }
 
       num_texts = png_get_text(p, i, &texts, NULL);
