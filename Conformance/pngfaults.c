@@ -10,6 +10,10 @@
  * and again once per warning, and once per read of the file — jumping out each time and destroying
  * the structure afterwards.
  *
+ * Three ways of using the library, because they abandon differently.  A sequential read holds the
+ * most state; a pushed-in read leaves from inside a callback with the library's own state machine
+ * part way through a chunk; and a write leaves with an image half written and a compressor open.
+ *
  * Nothing is compared against the reference here.  The two libraries do not allocate the same number
  * of times or in the same order, so the counts mean nothing between them; what this checks is that
  * every block this program handed out came back, which is a question about one library at a time.
@@ -38,6 +42,12 @@ struct tracker {
 
    long reads;
    long read_leave;       /* which read of the file to leave from, or zero */
+
+   long rows;
+   long row_leave;        /* which row handed back to leave from, or zero */
+
+   long writes;
+   long write_leave;      /* which write of the file to leave from, or zero */
 
    int left;              /* whether this run was abandoned */
    int armed;             /* whether there is yet anywhere to jump to */
@@ -140,6 +150,58 @@ static void PNGCBAPI supply(png_structp png_ptr, png_bytep into, size_t count)
       png_error(png_ptr, "ran out of file");
 }
 
+/* The three points a pushed-in read reports back at, any of which a client may leave from. */
+static void PNGCBAPI pushed_info(png_structp png_ptr, png_infop info_ptr)
+{
+   (void)info_ptr;
+   png_start_read_image(png_ptr);
+}
+
+static void PNGCBAPI pushed_row(png_structp png_ptr, png_bytep row, png_uint_32 number, int pass)
+{
+   struct tracker *t = png_get_progressive_ptr(png_ptr);
+
+   (void)row;
+   (void)number;
+   (void)pass;
+
+   t->rows++;
+
+   if (t->row_leave != 0 && t->rows == t->row_leave)
+   {
+      t->left = 1;
+      longjmp(png_jmpbuf(png_ptr), 1);
+   }
+}
+
+static void PNGCBAPI pushed_end(png_structp png_ptr, png_infop info_ptr)
+{
+   (void)png_ptr;
+   (void)info_ptr;
+}
+
+/* The other direction: a client that gives up rather than take the bytes being written. */
+static void PNGCBAPI accept(png_structp png_ptr, png_bytep data, size_t count)
+{
+   struct tracker *t = png_get_io_ptr(png_ptr);
+
+   (void)data;
+   (void)count;
+
+   t->writes++;
+
+   if (t->write_leave != 0 && t->writes == t->write_leave)
+   {
+      t->left = 1;
+      longjmp(png_jmpbuf(png_ptr), 1);
+   }
+}
+
+static void PNGCBAPI settle(png_structp png_ptr)
+{
+   (void)png_ptr;
+}
+
 /* One whole read, abandoned wherever the tracker says.  Returns the blocks left over. */
 static int run(const char *path, struct tracker *t)
 {
@@ -208,6 +270,143 @@ static int run(const char *path, struct tracker *t)
 
    png_destroy_read_struct(&p, &i, &end);
    fclose(t->file);
+
+   return t->overflowed ? -1 : t->live;
+}
+
+/* The same file pushed in rather than pulled, abandoned wherever the tracker says. */
+static int run_pushed(const char *path, struct tracker *t)
+{
+   png_structp p;
+   png_infop i;
+   unsigned char buffer[512];
+   size_t got;
+
+   t->live = 0;
+   t->overflowed = 0;
+   t->allocations = 0;
+   t->warnings = 0;
+   t->rows = 0;
+   t->left = 0;
+   t->armed = 0;
+   t->row = NULL;
+
+   t->file = fopen(path, "rb");
+
+   if (t->file == NULL)
+      return 0;
+
+   p = png_create_read_struct_2(PNG_LIBPNG_VER_STRING, t, leave, remark, t, take, give_back);
+
+   if (p == NULL)
+   {
+      fclose(t->file);
+      return t->live;
+   }
+
+   i = png_create_info_struct(p);
+
+   if (setjmp(png_jmpbuf(p)) == 0)
+   {
+      t->armed = 1;
+      png_set_progressive_read_fn(p, t, pushed_info, pushed_row, pushed_end);
+
+      while ((got = fread(buffer, 1, sizeof buffer, t->file)) > 0)
+         png_process_data(p, i, buffer, got);
+   }
+
+   png_destroy_read_struct(&p, &i, NULL);
+   fclose(t->file);
+
+   return t->overflowed ? -1 : t->live;
+}
+
+/* An image written out, abandoned wherever the tracker says.
+ *
+ * The rows are this program's own rather than the library's, and are written nowhere: what is being
+ * checked is what the library takes and gives back, not what comes out the other end.
+ */
+static int run_write(struct tracker *t, int colour, int depth, int interlaced)
+{
+   png_structp p;
+   png_infop i;
+   static unsigned char scanline[64 * 8];
+   static png_color palette[16];
+   static png_byte transparency[16];
+   int k;
+
+   t->live = 0;
+   t->overflowed = 0;
+   t->allocations = 0;
+   t->warnings = 0;
+   t->writes = 0;
+   t->left = 0;
+   t->armed = 0;
+   t->row = NULL;
+   t->file = NULL;
+
+   for (k = 0; k < (int)sizeof scanline; k++)
+      scanline[k] = (unsigned char)((k * 37) & 0xFF);
+
+   for (k = 0; k < 16; k++)
+   {
+      palette[k].red = (png_byte)(k * 17);
+      palette[k].green = (png_byte)(k * 15);
+      palette[k].blue = (png_byte)(k * 13);
+      transparency[k] = (png_byte)(k * 16);
+   }
+
+   p = png_create_write_struct_2(PNG_LIBPNG_VER_STRING, t, leave, remark, t, take, give_back);
+
+   if (p == NULL)
+      return t->live;
+
+   i = png_create_info_struct(p);
+
+   if (setjmp(png_jmpbuf(p)) == 0)
+   {
+      png_text text[2];
+      int y;
+
+      t->armed = 1;
+      png_set_write_fn(p, t, accept, settle);
+
+      png_set_IHDR(p, i, 16, 8, depth, colour,
+                   interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE,
+                   PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+      if (colour == PNG_COLOR_TYPE_PALETTE)
+      {
+         png_set_PLTE(p, i, palette, 16);
+         png_set_tRNS(p, i, transparency, 16, NULL);
+      }
+
+      /* Text, because it is the one thing on this side that compresses and so allocates most. */
+      memset(text, 0, sizeof text);
+      text[0].compression = PNG_TEXT_COMPRESSION_NONE;
+      text[0].key = (png_charp)"Title";
+      text[0].text = (png_charp)"a plain remark";
+      text[1].compression = PNG_TEXT_COMPRESSION_zTXt;
+      text[1].key = (png_charp)"Comment";
+      text[1].text = (png_charp)"a remark long enough to be worth compressing, over and over again";
+      png_set_text(p, i, text, 2);
+
+      png_set_gAMA(p, i, 0.45455);
+      png_write_info(p, i);
+
+      {
+         int passes = interlaced ? png_set_interlace_handling(p) : 1;
+         int pass;
+
+         for (pass = 0; pass < passes; pass++)
+            for (y = 0; y < 8; y++)
+               png_write_row(p, scanline);
+      }
+
+      png_write_end(p, i);
+   }
+
+   png_destroy_write_struct(&p, &i);
 
    return t->overflowed ? -1 : t->live;
 }
@@ -305,9 +504,128 @@ int main(int argc, char **argv)
             failures++;
          }
       }
+
+      /* The same file pushed in, which abandons from inside a callback rather than between calls. */
+      t.refuse = 0;
+      t.warn_leave = 0;
+      t.read_leave = 0;
+      t.row_leave = 0;
+      left = run_pushed(path, &t);
+      total = t.allocations;
+      runs++;
+
+      if (left != 0)
+      {
+         printf("%s: %ld blocks left after an ordinary pushed read\n", path, left);
+         failures++;
+      }
+
+      for (which = 1; which <= total; which++)
+      {
+         t.refuse = which;
+         t.row_leave = 0;
+         left = run_pushed(path, &t);
+         runs++;
+
+         if (left != 0)
+         {
+            printf("%s: %ld blocks left with allocation %ld refused while pushing\n",
+                   path, left, which);
+            failures++;
+         }
+      }
+
+      for (which = 1; which <= 8; which++)
+      {
+         t.refuse = 0;
+         t.row_leave = which;
+         left = run_pushed(path, &t);
+         runs++;
+
+         if (left != 0)
+         {
+            printf("%s: %ld blocks left leaving at pushed row %ld\n", path, left, which);
+            failures++;
+         }
+      }
+
+      t.row_leave = 0;
    }
 
-   printf("%ld images, %ld reads abandoned every way there was, %d left something behind\n",
+   /* And the other direction, which owes nothing to the corpus: the rows are made up here, so this
+    * runs once rather than once per file.
+    */
+   {
+      static const struct { int colour; int depth; int interlaced; const char *name; } shapes[] = {
+         { PNG_COLOR_TYPE_RGB, 8, 0, "colour" },
+         { PNG_COLOR_TYPE_RGB_ALPHA, 16, 0, "colour with alpha, sixteen bit" },
+         { PNG_COLOR_TYPE_PALETTE, 4, 0, "indexed at four bits" },
+         { PNG_COLOR_TYPE_GRAY, 8, 1, "grey, interlaced" },
+      };
+      unsigned shape;
+
+      for (shape = 0; shape < sizeof shapes / sizeof *shapes; shape++)
+      {
+         long total;
+         long which;
+         long left;
+
+         t.refuse = 0;
+         t.warn_leave = 0;
+         t.write_leave = 0;
+         left = run_write(&t, shapes[shape].colour, shapes[shape].depth, shapes[shape].interlaced);
+         total = t.allocations;
+         runs++;
+
+         if (left != 0)
+         {
+            printf("writing %s: %ld blocks left after an ordinary write\n",
+                   shapes[shape].name, left);
+            failures++;
+            continue;
+         }
+
+         for (which = 1; which <= total; which++)
+         {
+            t.refuse = which;
+            t.write_leave = 0;
+            left = run_write(&t, shapes[shape].colour, shapes[shape].depth,
+                             shapes[shape].interlaced);
+            runs++;
+
+            if (left != 0)
+            {
+               printf("writing %s: %ld blocks left with allocation %ld refused\n",
+                      shapes[shape].name, left, which);
+               failures++;
+            }
+         }
+
+         for (which = 1; which <= 12; which++)
+         {
+            t.refuse = 0;
+            t.write_leave = which;
+            left = run_write(&t, shapes[shape].colour, shapes[shape].depth,
+                             shapes[shape].interlaced);
+            runs++;
+
+            if (left != 0)
+            {
+               printf("writing %s: %ld blocks left leaving at write %ld, of",
+                      shapes[shape].name, left, which);
+               {
+                  int index;
+                  for (index = 0; index < t.live; index++)
+                     printf(" %lu", (unsigned long)t.sizes[index]);
+               }
+               printf(" bytes\n");
+               failures++;
+            }
+         }
+      }
+   }
+
+   printf("%ld images, %ld uses abandoned every way there was, %d left something behind\n",
           images, runs, failures);
 
    return failures != 0;
