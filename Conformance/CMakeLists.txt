@@ -188,6 +188,26 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 ${SPNG_CORPUS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/known-progressive-differences.txt)
 
+    add_executable(pngsimple pngsimple.c)
+    target_link_libraries(pngsimple PRIVATE png16)
+
+    add_executable(pngsimple_reference pngsimple.c)
+    target_include_directories(pngsimple_reference BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngsimple_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngsimple BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(pngsimple spng_corpus)
+
+    add_test(NAME differential_simplified
+        COMMAND ${SPNG_SCRIPTS}/compare_simple.sh
+                $<TARGET_FILE:pngsimple>
+                $<TARGET_FILE:pngsimple_reference>
+                ${SPNG_CORPUS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-simplified-differences.txt)
+
     add_executable(pngreadpng pngreadpng.c)
     target_link_libraries(pngreadpng PRIVATE png16)
 

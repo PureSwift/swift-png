@@ -1,0 +1,20 @@
+# Simplified reads the comparison reports but does not fail on.
+#
+# Format: <image> <format> <reason>, or the single marker below.
+
+# -- this library's own gaps, still to be closed ------------------------------
+
+unimplemented Every conversion this library refuses is recorded here as one thing rather than one file
+# at a time, because which files reach a refusal depends on what each one is and listing them would be
+# listing the corpus.  What is refused is the three conversions that change the light rather than the
+# arrangement of the samples: taking coverage away means compositing, taking colour away means
+# averaging, and moving between eight bits and sixteen means moving between an encoding and the light
+# it encodes.
+#
+# The reference does all three through an intermediate wider than the ordinary requests can be made to
+# use — it expands to sixteen bits, works there, and narrows afterwards — and doing the same work at
+# eight bits differs in the low bits.  So this library says so rather than producing something nearly
+# right, and closing the gap means giving the simplified reader its own wide path rather than
+# assembling it out of the public calls.
+#
+# This line goes stale, and the build fails, as soon as nothing is refused any more.
