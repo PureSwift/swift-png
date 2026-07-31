@@ -291,3 +291,107 @@ extension SimplifiedFormat {
         UInt16(1).littleEndian == 1
     }
 }
+
+// -- writing an image without deciding anything ------------------------------
+
+/// Writes the image a client is holding, in whatever format it says it holds it.
+///
+/// The mirror of the reader, and simpler, because there is only one file to choose: the format the
+/// client named decides the colour type and the depth, and nothing about the file is a judgement call.
+@c
+public func spng_swift_image_write(
+    _ image: png_imagep?,
+    _ control: png_controlp?,
+    _ buffer: UnsafeRawPointer?,
+    _ row_stride: png_int_32,
+    _ convert_to_8_bit: Int32,
+    _ colormap: UnsafeRawPointer?
+) -> Int32 {
+    guard let image, let control, let png_ptr = control.pointee.png_ptr,
+          let info_ptr = control.pointee.info_ptr, let buffer else {
+        return 0
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+
+    guard !format.isColormapped else {
+        spng_c_error(png_ptr, "png_image: colour-mapped input not implemented")
+    }
+
+    // Sixteen bit input is light and a file's samples are encoded, so writing one as the other is the
+    // same conversion the reader refuses — and asking for it to be narrowed on the way is that
+    // conversion by another name.
+    guard !format.isLinear else {
+        spng_c_error(png_ptr, "png_image: light conversion not implemented")
+    }
+
+    guard convert_to_8_bit == 0 || !format.isLinear else {
+        spng_c_error(png_ptr, "png_image: narrowing on write not implemented")
+    }
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+
+    guard width > 0, height > 0 else {
+        spng_c_error(png_ptr, "png_image: no image to write")
+    }
+
+    // The colour type the format implies.  There is no choosing here: a client that said its pixels
+    // have colour and coverage is describing exactly one of the format's types.
+    let colorType: Int32
+
+    switch (format.hasColor, format.hasAlpha) {
+    case (true, true): colorType = PNG_COLOR_TYPE_RGB_ALPHA
+    case (true, false): colorType = PNG_COLOR_TYPE_RGB
+    case (false, true): colorType = PNG_COLOR_TYPE_GRAY_ALPHA
+    case (false, false): colorType = PNG_COLOR_TYPE_GRAY
+    }
+
+    png_set_IHDR(
+        png_ptr,
+        info_ptr,
+        png_uint_32(width),
+        png_uint_32(height),
+        8,
+        colorType,
+        PNG_INTERLACE_NONE,
+        PNG_COMPRESSION_TYPE_DEFAULT,
+        PNG_FILTER_TYPE_DEFAULT
+    )
+
+    png_write_info(png_ptr, info_ptr)
+
+    // The client's rows are in the arrangement it named, and the file's are in the format's own.  Both
+    // of these are their own inverses, which is why the same calls serve here as when reading.
+    if format.isReversed {
+        png_set_bgr(png_ptr)
+    }
+
+    if format.alphaFirst {
+        png_set_swap_alpha(png_ptr)
+    }
+
+    let minimum = width * format.channels * format.bytesPerChannel
+    let stride = row_stride == 0 ? minimum : Int(row_stride) * format.bytesPerChannel
+
+    guard abs(stride) >= minimum else {
+        spng_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    // A negative stride says the client holds the image bottom-up, which is its business: the file is
+    // written top-down either way.
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    for row in 0 ..< height {
+        let source = first.advanced(by: stride * row)
+            .assumingMemoryBound(to: UInt8.self)
+
+        png_write_row(png_ptr, source)
+    }
+
+    png_write_end(png_ptr, info_ptr)
+
+    return 1
+}

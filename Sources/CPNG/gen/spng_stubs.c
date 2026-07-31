@@ -153,27 +153,6 @@ png_handle_as_unknown(png_const_structrp png_ptr, png_const_bytep chunk_name)
    png_error(png_ptr, "png_handle_as_unknown is not implemented");
 }
 
-int PNGAPI
-png_image_write_to_file(png_imagep image, const char *file, int convert_to_8bit, const void *buffer, png_int_32 row_stride, const void *colormap)
-{
-   spng_unimplemented_fatal("png_image_write_to_file");
-   return (int)0;
-}
-
-int PNGAPI
-png_image_write_to_memory(png_imagep image, void *memory, png_alloc_size_t * restrict memory_bytes, int convert_to_8_bit, const void *buffer, png_int_32 row_stride, const void *colormap)
-{
-   spng_unimplemented_fatal("png_image_write_to_memory");
-   return (int)0;
-}
-
-int PNGAPI
-png_image_write_to_stdio(png_imagep image, FILE *file, int convert_to_8_bit, const void *buffer, png_int_32 row_stride, const void *colormap)
-{
-   spng_unimplemented_fatal("png_image_write_to_stdio");
-   return (int)0;
-}
-
 png_uint_32 PNGAPI
 png_permit_mng_features(png_structrp png_ptr, png_uint_32 mng_features_permitted)
 {
