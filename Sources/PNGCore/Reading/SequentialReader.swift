@@ -126,10 +126,25 @@ final class SequentialReader {
                 continue
             }
 
-            // The header has to come first; anything before it means the stream is
-            // not laid out the way the format requires.
+            // The header has to come first, and what that means depends on what arrived instead.
+            //
+            // A chunk this library understands, arriving before the header, is a file laid out
+            // wrongly and is refused.  A chunk it does not understand is a different matter: an
+            // ancillary one may be ignored by anything that does not know it — that is what its
+            // name says — and ignoring it is exactly what a reader that has not reached the header
+            // yet should do.  A critical one may not be ignored, and there is nothing else to do
+            // with it.
             guard sawHeader else {
-                throw Self.missingHeader(before: chunk.name)
+                guard !Self.isRecognised(chunk.name) else {
+                    throw Self.missingHeader(before: chunk.name)
+                }
+
+                guard chunk.name.isAncillary else {
+                    throw Diagnostic("unhandled critical chunk", chunk: chunk.name)
+                }
+
+                try self.skipChunk(context: context)
+                continue
             }
 
             if chunk.name == .idat {
@@ -1003,14 +1018,14 @@ final class SequentialReader {
     /// that is how the reference words it and clients match on the text.
     private static func missingHeader(before name: ChunkName) -> Diagnostic {
         switch name {
+        // The image data is the one the reference names in the message, and it is the one worth
+        // naming: a file whose pixels arrive before anything has said what they are is a file with
+        // nothing to read them as, which is a different mistake from a stray chunk arriving early.
         case .idat:
             return Diagnostic("Missing IHDR before IDAT", chunk: .idat)
-        case .iend:
-            return Diagnostic("Missing IHDR before IEND", chunk: .iend)
-        case .plte:
-            return Diagnostic("Missing IHDR before PLTE", chunk: .plte)
+
         default:
-            return Diagnostic("Missing IHDR", chunk: name)
+            return Diagnostic("missing IHDR", chunk: name)
         }
     }
 
