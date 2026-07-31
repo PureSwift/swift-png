@@ -102,6 +102,39 @@ public final class PngContext {
         if index > self.highestPaletteIndex { self.highestPaletteIndex = index }
     }
 
+    /// What each of the library's own switches is set to, indexed by half the option number.
+    ///
+    /// Half, because only the even numbers are options: the odd ones are reserved for asking whether
+    /// the same option is supported at all.  Eight of them, which is what the API defines room for.
+    public var options = [Int32](repeating: 0, count: 8)
+
+    /// Which extensions of a related format are allowed.
+    public var mngFeatures: UInt32 = 0
+
+    /// Whether to watch for a palette index the palette does not have.
+    public var checksPaletteIndices = false
+
+    /// Where in the file the library currently is, and which chunk it is in.
+    ///
+    /// For a client watching from inside its own read callback: the callback is handed a count of
+    /// bytes and nothing else, so without this it cannot tell a chunk's header from its contents.
+    ///
+    /// Kept as the API's own bits rather than an enumeration of ours, because that is what a client
+    /// compares against.
+    public var ioState: UInt32 = 0
+    public var ioChunkName = ChunkName(packed: 0)
+
+    /// Records where the reader has got to.
+    public func noteIO(_ location: UInt32, chunk: ChunkName? = nil) {
+        // The operation half is settled once, by which way the structure was made; the location half
+        // changes as the walk goes on.
+        let operation: UInt32 = self.isReading ? 0x0001 : 0x0002
+
+        self.ioState = operation | location
+
+        if let chunk { self.ioChunkName = chunk }
+    }
+
     /// The ceilings a decoder will not go past.
     public var limits = DecodeLimits()
 
@@ -783,6 +816,22 @@ public final class PngContext {
 
         return self.timeText.bytes.baseAddress!
             .withMemoryRebound(to: CChar.self, capacity: 32) { $0 }
+    }
+
+    /// Starts the decompressor over, for a client reusing the structure.
+    ///
+    /// Reports what the decompressor thought of the request, since that is what the call is defined to
+    /// return; nothing else about the decode is disturbed.
+    public func resetDecompression() -> Int {
+        self.inflater?.release()
+        self.inflater = nil
+
+        do {
+            self.inflater = try InflateStream()
+            return 0
+        } catch {
+            return -4
+        }
     }
 
     public func writeEnd(_ info: InfoStore?) throws {
