@@ -101,7 +101,7 @@ final class SequentialReader {
                     )
                 }
 
-                try context.reserve(\.scratch, chunk.length)
+                try context.reserve(.scratch, chunk.length)
                 try self.lexer.readWholePayload(
                     into: context.scratch.bytes,
                     host: context.host
@@ -225,11 +225,11 @@ final class SequentialReader {
 
         // One extra byte because the reconstruction reads a filter byte ahead of
         // each scanline.
-        try context.reserve(\.rowBuffer, widest + 1)
+        try context.reserve(.rowBuffer, widest + 1)
 
         // The reference row only ever holds stored bytes, so it is sized for those alone.
-        try context.reserve(\.previousRow, widestStored)
-        try context.reserve(\.inputBuffer, Self.inputBufferSize)
+        try context.reserve(.previousRow, widestStored)
+        try context.reserve(.inputBuffer, Self.inputBufferSize)
 
         context.inflater = try InflateStream()
 
@@ -925,7 +925,7 @@ final class SequentialReader {
             return
         }
 
-        try context.reserve(\.scratch, max(chunk.length, 1))
+        try context.reserve(.scratch, max(chunk.length, 1))
         try self.lexer.readWholePayload(into: context.scratch.bytes, host: context.host)
         try self.finishChunk(context: context)
 
@@ -1008,7 +1008,7 @@ final class SequentialReader {
             return
         }
 
-        try context.reserve(\.scratch, max(chunk.length, 1))
+        try context.reserve(.scratch, max(chunk.length, 1))
         try self.lexer.readWholePayload(into: context.scratch.bytes, host: context.host)
 
         // The checksum is verified before the contents are trusted, so that a damaged
@@ -1051,7 +1051,7 @@ final class SequentialReader {
 
     /// Discards the current chunk's payload and checks its trailing checksum.
     private func skipChunk(context: PngContext) throws {
-        try context.reserve(\.scratch, Self.inputBufferSize)
+        try context.reserve(.scratch, Self.inputBufferSize)
         self.lexer.skipPayload(host: context.host, scratch: context.scratch.bytes)
         try self.finishChunk(context: context)
     }
