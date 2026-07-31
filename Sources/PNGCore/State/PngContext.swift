@@ -45,6 +45,9 @@ public final class PngContext {
     var writeStaging = RawBuffer.empty
     var filterScratch = RawBuffer.empty
 
+    /// Where a client's row is copied to be transformed, so that its own is left alone.
+    var writeRowBuffer = RawBuffer.empty
+
     var inflater: InflateStream?
 
     let reader = SequentialReader()
@@ -213,7 +216,7 @@ public final class PngContext {
         self.writer.deflater = nil
 
         for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch,
-                       self.writeStaging, self.filterScratch] {
+                       self.writeStaging, self.filterScratch, self.writeRowBuffer] {
             buffer.deallocate(host: self.host)
         }
 
@@ -223,6 +226,7 @@ public final class PngContext {
         self.scratch = .empty
         self.writeStaging = .empty
         self.filterScratch = .empty
+        self.writeRowBuffer = .empty
     }
 
     /// Ensures `buffer` holds at least `count` bytes, replacing it if not.
@@ -698,8 +702,14 @@ public final class PngContext {
     public func writeRow(_ row: UnsafePointer<UInt8>?) throws {
         guard let row else { throw Diagnostic("png_write_row given no row") }
 
+        // Sized for what the client is handing over rather than for what the file stores: a client
+        // that supplies a filler channel, or a byte per sample, hands over more than the row will be.
+        let supplied = self.writer.transforms?.suppliedShape.rowBytes
+            ?? self.header?.rowBytes
+            ?? 0
+
         try self.writer.writeRow(
-            UnsafeBufferPointer(start: row, count: self.header?.rowBytes ?? 0),
+            UnsafeBufferPointer(start: row, count: supplied),
             context: self
         )
     }

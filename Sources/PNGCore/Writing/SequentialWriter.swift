@@ -53,6 +53,12 @@ final class SequentialWriter {
     /// that does not must not have its text written twice.
     var textWritten = 0
 
+    /// What the client's rows have to go through before they are the file's.
+    ///
+    /// Built once, when the first row arrives, because it depends on requests a client may make right
+    /// up until then.
+    private(set) var transforms: WriteTransformProgram?
+
     /// How many rows have been written since the output was last pushed.
     private var rowsSinceFlush = 0
 
@@ -156,7 +162,18 @@ final class SequentialWriter {
             let imageRow = self.rowIndex
 
             if Self.pass(self.pass, contains: imageRow) {
-                try self.writePassRow(row, pass: self.pass, header: header, context: context)
+                // Transformed before the pass takes its pixels out of it, because the transforms are
+                // about what the client's row *is* and the gather is about which of its pixels this
+                // pass wants.  Reducing first would mean transforming a row that no longer has the
+                // shape the client described.
+                let transformed = try self.transformed(row, header: header, context: context)
+
+                try self.writePassRow(
+                    transformed,
+                    pass: self.pass,
+                    header: header,
+                    context: context
+                )
             }
 
             self.rowIndex += 1
@@ -174,10 +191,40 @@ final class SequentialWriter {
 
         guard stored > 0 else { return }
 
-        try self.encodeAndCompress(row, stored: stored, header: header, context: context)
+        // A client's rows are the client's: they are copied before anything is done to them, which is
+        // what lets a client hand over the same row twice, or a row it goes on using.
+        let transformed = try self.transformed(row, header: header, context: context)
+
+        try self.encodeAndCompress(transformed, stored: stored, header: header, context: context)
 
         self.rowIndex += 1
         try self.flushIfDue(context: context)
+    }
+
+    /// Puts a client's row into the shape the file stores, in a buffer of ours.
+    ///
+    /// Returns the row unchanged when there is nothing to do, so the ordinary case copies nothing.
+    private func transformed(
+        _ row: UnsafeBufferPointer<UInt8>,
+        header: Header,
+        context: PngContext
+    ) throws -> UnsafeBufferPointer<UInt8> {
+        guard let program = self.transforms else { return row }
+
+        let supplied = program.suppliedShape.rowBytes
+
+        try context.reserve(\.writeRowBuffer, max(supplied, RowInfo(header).rowBytes))
+
+        let working = UnsafeMutableBufferPointer(
+            start: context.writeRowBuffer.bytes.baseAddress!,
+            count: context.writeRowBuffer.count
+        )
+
+        working.baseAddress!.update(from: row.baseAddress!, count: supplied)
+
+        let shape = program.apply(to: working, significant: context.shiftBits)
+
+        return UnsafeBufferPointer(start: working.baseAddress, count: shape.rowBytes)
     }
 
     /// Pushes the output when the client asked for that every so many rows.
@@ -356,6 +403,22 @@ final class SequentialWriter {
         context.previousRow.bytes.baseAddress!.update(repeating: 0, count: widest)
 
         try context.reserve(\.inputBuffer, max(context.compression.bufferSize, 1024))
+
+        // Built here rather than when the header was written, because a client may ask for a
+        // transform right up until it hands over its first row.
+        let program = WriteTransformProgram(
+            flags: context.transformFlags,
+            header: header,
+            fillerAfterColor: context.fillerAfterColor
+        )
+
+        if !program.isEmpty {
+            self.transforms = program
+
+            // The client's row is wider than the file's when it is supplying a channel the file has
+            // no room for, or a byte per sample where the file packs several.
+            try context.reserve(\.writeRowBuffer, max(program.suppliedShape.rowBytes, widest))
+        }
 
         self.deflater = try DeflateStream(settings: context.compression)
         self.startedImageData = true
