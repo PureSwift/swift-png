@@ -123,6 +123,9 @@ public final class InfoStore {
     /// that asks the library to read a whole image at once does not.  Holding the two separately is
     /// what makes releasing the right ones possible.
     var ownedRows: RawBuffer = .empty
+
+    /// Whether the rows this library allocated are still this library's to free.
+    var ownedRowsAreOwned = true
     var ownedRowCount = 0
     var ownedRowBytes = 0
 
@@ -536,12 +539,155 @@ extension InfoStore {
         guard !self.ownedRows.isEmpty else { return }
 
         let buffer = self.ownedRows
+        let owned = self.ownedRowsAreOwned
 
         self.ownedRows = .empty
         self.ownedRowCount = 0
         self.ownedRowBytes = 0
         self.rows = nil
+        self.ownedRowsAreOwned = true
 
-        buffer.deallocate(host: self.host)
+        // A client that took them frees them; freeing here as well would free them twice.
+        if owned { buffer.deallocate(host: self.host) }
+    }
+}
+
+
+extension InfoStore {
+    /// The bits `png_free_data` names its data by.
+    ///
+    /// The API's own values, so that a client's expression built from its constants means here what
+    /// it means there.
+    public enum Free {
+        public static let hist: UInt32 = 0x0008
+        public static let iccp: UInt32 = 0x0010
+        public static let splt: UInt32 = 0x0020
+        public static let rows: UInt32 = 0x0040
+        public static let pcal: UInt32 = 0x0080
+        public static let scal: UInt32 = 0x0100
+        public static let unknown: UInt32 = 0x0200
+        public static let plte: UInt32 = 0x1000
+        public static let trns: UInt32 = 0x2000
+        public static let text: UInt32 = 0x4000
+        public static let exif: UInt32 = 0x8000
+    }
+
+    /// Stops tracking the named data, leaving it for the client to free.
+    public func relinquishOwnership(of mask: UInt32) {
+        if mask & Free.plte != 0 { self.palette.relinquish() }
+        if mask & Free.trns != 0 { self.transparentAlpha.relinquish() }
+        if mask & Free.hist != 0 { self.histogram.relinquish() }
+        if mask & Free.iccp != 0 { self.profile.relinquish() }
+        if mask & Free.exif != 0 { self.exif.relinquish() }
+        if mask & Free.rows != 0 { self.ownedRowsAreOwned = false }
+    }
+
+    /// Takes the named data back, so that destroying the structure frees it.
+    public func reclaimOwnership(of mask: UInt32) {
+        if mask & Free.plte != 0 { self.palette.reclaim() }
+        if mask & Free.trns != 0 { self.transparentAlpha.reclaim() }
+        if mask & Free.hist != 0 { self.histogram.reclaim() }
+        if mask & Free.iccp != 0 { self.profile.reclaim() }
+        if mask & Free.exif != 0 { self.exif.reclaim() }
+        if mask & Free.rows != 0 { self.ownedRowsAreOwned = true }
+    }
+
+    /// Frees the named data and forgets it.
+    ///
+    /// Forgetting is what makes a second call safe, and a client is entitled to make one: the whole
+    /// point of the call is that it can be made before the structure is destroyed, and the structure
+    /// is destroyed afterwards regardless.
+    ///
+    /// `index` names one entry of a list, or is negative for all of them.  Only the lists have
+    /// entries to choose between; for everything else it is ignored, which is what the reference does.
+    public func freeData(_ mask: UInt32, index: Int) {
+        // Data the client took responsibility for is left exactly as it is — not freed, and not
+        // forgotten either: it is still what the structure describes, and the client is still entitled
+        // to read it.  Being told who frees a block does not change what it holds.
+        if mask & Free.plte != 0, self.palette.isOwned {
+            self.palette.deallocate(host: self.host)
+            self.palette = EscapingBuffer()
+            self.clearValid(Valid.plte)
+        }
+
+        if mask & Free.trns != 0, self.transparentAlpha.isOwned {
+            self.transparentAlpha.deallocate(host: self.host)
+            self.transparentAlpha = EscapingBuffer()
+            self.transparentCount = 0
+            self.clearValid(Valid.trns)
+        }
+
+        if mask & Free.hist != 0, self.histogram.isOwned {
+            self.histogram.deallocate(host: self.host)
+            self.histogram = EscapingBuffer()
+            self.clearValid(Valid.hist)
+        }
+
+        if mask & Free.iccp != 0, self.profile.isOwned {
+            self.profile.deallocate(host: self.host)
+            self.profile = EscapingBuffer()
+            self.profileName.deallocate(host: self.host)
+            self.profileName = TextStorage()
+            self.clearValid(Valid.iccp)
+        }
+
+        if mask & Free.exif != 0, self.exif.isOwned {
+            self.exif.deallocate(host: self.host)
+            self.exif = EscapingBuffer()
+            self.clearValid(Valid.exif)
+        }
+
+        if mask & Free.pcal != 0 {
+            self.calibration.deallocate(host: self.host)
+            self.calibration = Calibration()
+            self.clearValid(Valid.pcal)
+        }
+
+        if mask & Free.scal != 0 {
+            self.scale.width.deallocate(host: self.host)
+            self.scale.height.deallocate(host: self.host)
+            self.scale = PhysicalScale()
+            self.clearValid(Valid.scal)
+        }
+
+        if mask & Free.splt != 0 {
+            self.freeList(&self.suggestedPalettes, index: index) { $0.deallocate(host: self.host) }
+            self.suggestedPaletteArray.deallocate(host: self.host)
+            self.suggestedPaletteArray = EscapingBuffer()
+
+            if self.suggestedPalettes.isEmpty { self.clearValid(Valid.splt) }
+        }
+
+        if mask & Free.unknown != 0 {
+            self.freeList(&self.unknownChunks, index: index) { $0.deallocate(host: self.host) }
+            self.unknownChunkArray.deallocate(host: self.host)
+            self.unknownChunkArray = EscapingBuffer()
+        }
+
+        if mask & Free.text != 0 {
+            self.freeList(&self.textEntries, index: index) { $0.deallocate(host: self.host) }
+        }
+
+        if mask & Free.rows != 0 {
+            self.releaseOwnedRows()
+        }
+    }
+
+    /// Frees one entry of a list, or all of them.
+    private func freeList<Element>(
+        _ list: inout [Element],
+        index: Int,
+        release: (Element) -> Void
+    ) {
+        guard index >= 0 else {
+            list.forEach(release)
+            list = []
+            return
+        }
+
+        guard index < list.count else { return }
+
+        release(list[index])
+        list.remove(at: index)
     }
 }
