@@ -144,18 +144,30 @@ meta-gray-sbit-trns.png gray_to_rgb,background As above.
 # significant-bits chunk, and the narrowing combinations on the others.
 #
 # Closing this means reproducing the coarse table rather than improving on it, since the goal is to
-# agree rather than to be more accurate.  It is deliberately not guessed at: the way the table is
-# built is not something to reconstruct from memory, and it can be recovered by probing the reference
-# with chosen sample values.
+# agree rather than to be more accurate.
+#
+# Part of it has been recovered.  Every one of the sixty five thousand sixteen bit values was put
+# through both libraries with a correction applied and the samples narrowed afterwards, which settles
+# two things.  The answer depends on the top eleven bits of the sample and nothing else — eleven being
+# the vendored configuration's PNG_MAX_GAMMA_8 — so the table has two thousand and forty eight entries
+# and a bucket spans thirty two values.  And all but sixty of those entries are the exact answer at the
+# bucket's lowest value, scaled to eight bits and rounded.
+#
+# The sixty are the difficulty.  Each of them lands within a few thousandths of a rounding boundary and
+# falls the other way, which is the reference's own fixed point arithmetic showing through rather than
+# anything a formula fits — every candidate tried, by sample point and by scaling and by index, stops
+# at the same one thousand nine hundred and eighty eight.  So what remains is to port the construction
+# rather than to fit it, and until that is done this library gives the exact answer, which is the
+# better one to hand a client as well as the easier one to write.
 
-rgba16-filter1.png gamma_dark,strip_16 Not implemented here: sixteen bit gamma is computed exactly, while the reference uses a coarser table when the samples are about to be narrowed to eight bits.
+rgba16-filter1.png gamma_dark,strip_16 Not implemented here: the reference's table is coarser than an exact computation, as set out above.
 rgba16-filter1.png strip_16,gamma_dark As above.
 rgba16-filter1.png background,strip_16 As above, reached through compositing.
 rgba16-filter1.png alpha_premultiplied,strip_16 As above, reached through the alpha arrangement.
 gray16-filter2.png alpha_premultiplied,strip_16 As above.
 rgb16-filter4.png alpha_premultiplied,strip_16 As above.
 interlaced-rgb16-11x7.png alpha_premultiplied,strip_16 As above.
-gray16-filter2.png gamma_dark,strip_16 Not implemented here: sixteen bit gamma is computed exactly, while the reference uses a coarser table when the samples are about to be narrowed to eight bits.
+gray16-filter2.png gamma_dark,strip_16 Not implemented here: the reference's table is coarser than an exact computation, as set out above.
 gray16-filter2.png strip_16,gamma_dark As above.
 rgb16-filter4.png gamma_dark,strip_16 As above.
 rgb16-filter4.png strip_16,gamma_dark As above.
