@@ -54,19 +54,17 @@ extension SequentialWriter {
             }
 
         case 0:
-            let compressed = try self.compressed(text, context: context)
-
-            defer { compressed.buffer.deallocate(host: context.host) }
+            let produced = try self.compressed(text, context: context)
 
             let body = UnsafeBufferPointer(
-                start: compressed.buffer.bytes.baseAddress,
-                count: compressed.count
+                start: context.textStaging.bytes.baseAddress,
+                count: produced
             )
 
             try self.write(
                 .ztxt,
                 context: context,
-                count: keyword.count + 2 + compressed.count
+                count: keyword.count + 2 + produced
             ) { bytes in
                 Self.copy(keyword, into: bytes, at: 0)
                 bytes[keyword.count] = 0
@@ -90,14 +88,10 @@ extension SequentialWriter {
         let text = entry.text.bytes
         let compresses = entry.compression == 2
 
-        let payload = compresses
-            ? try self.compressed(text, context: context)
-            : (buffer: RawBuffer.empty, count: 0)
-
-        defer { payload.buffer.deallocate(host: context.host) }
+        let produced = compresses ? try self.compressed(text, context: context) : 0
 
         let body = compresses
-            ? UnsafeBufferPointer(start: payload.buffer.bytes.baseAddress, count: payload.count)
+            ? UnsafeBufferPointer(start: context.textStaging.bytes.baseAddress, count: produced)
             : text
         let count = keyword.count + 1 + 2 + language.count + 1 + translated.count + 1 + body.count
 
@@ -129,15 +123,20 @@ extension SequentialWriter {
         }
     }
 
-    /// Deflates a run of bytes into a buffer the caller frees.
+    /// Deflates a run of bytes into the context's own buffer, and says how much came out.
     ///
     /// A buffer rather than a stream, because a chunk's length comes before its contents: the whole
     /// compressed form has to exist before any of it can be written.  That is unlike the image data,
     /// which is written a bufferful at a time precisely to avoid this.
+    ///
+    /// The context's buffer rather than one of this function's, because the caller hands what comes
+    /// out to the client, and a client may leave from there without returning.  Anything this frame
+    /// owned at that moment would be lost; the context's is reclaimed when the structure is.
+    @discardableResult
     func compressed(
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext
-    ) throws -> (buffer: RawBuffer, count: Int) {
+    ) throws -> Int {
         let stream = try DeflateStream(settings: context.textCompression)
 
         defer { stream.release() }
@@ -145,35 +144,52 @@ extension SequentialWriter {
         // Deflate never expands by more than a fraction plus a small header, and this is generous
         // about it: text is small, and growing the buffer mid-stream would mean a second pass.
         var capacity = bytes.count + bytes.count / 8 + 64
-        var buffer = try RawBuffer.allocate(capacity, host: context.host)
         var produced = 0
+
+        try context.reserve(\.textStaging, capacity)
 
         stream.setInput(bytes)
 
         while !stream.isFinished {
             if produced == capacity {
                 // The estimate was wrong, which for incompressible input it can be.  Rather than
-                // guess again, the buffer doubles.
-                let larger = try RawBuffer.allocate(capacity * 2, host: context.host)
+                // guess again, the buffer doubles — and since the context's buffer is replaced rather
+                // than grown, what has been produced so far is carried across by hand.
+                let carried = try RawBuffer.allocate(produced, host: context.host)
 
-                larger.bytes.baseAddress!.update(
-                    from: buffer.bytes.baseAddress!,
-                    count: produced
-                )
+                if produced > 0 {
+                    carried.bytes.baseAddress!.update(
+                        from: context.textStaging.bytes.baseAddress!,
+                        count: produced
+                    )
+                }
 
-                buffer.deallocate(host: context.host)
-                buffer = larger
+                do {
+                    try context.reserve(\.textStaging, capacity * 2)
+                } catch {
+                    carried.deallocate(host: context.host)
+                    throw error
+                }
+
+                if produced > 0 {
+                    context.textStaging.bytes.baseAddress!.update(
+                        from: carried.bytes.baseAddress!,
+                        count: produced
+                    )
+                }
+
+                carried.deallocate(host: context.host)
                 capacity *= 2
             }
 
             produced += try stream.deflate(
-                into: buffer.bytes.baseAddress! + produced,
+                into: context.textStaging.bytes.baseAddress! + produced,
                 count: capacity - produced,
                 ending: .finish
             )
         }
 
-        return (buffer, produced)
+        return produced
     }
 
     static func copy(
