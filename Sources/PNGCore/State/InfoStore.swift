@@ -93,6 +93,15 @@ public final class InfoStore {
         return (width, height)
     }
 
+    /// Rows this library allocated, which it therefore has to release.
+    ///
+    /// Distinct from the pointer below: a client that hands over its own rows keeps them, and a client
+    /// that asks the library to read a whole image at once does not.  Holding the two separately is
+    /// what makes releasing the right ones possible.
+    var ownedRows: RawBuffer = .empty
+    var ownedRowCount = 0
+    var ownedRowBytes = 0
+
     /// The rows a client has handed over, for the calls that write or read a whole image at once.
     ///
     /// Not owned: the client allocated them and the client frees them.  Held as the pointer it gave
@@ -126,6 +135,7 @@ public final class InfoStore {
         }
         self.exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
 
+        self.releaseOwnedRows()
         self.palette.deallocate(host: self.host)
         self.transparentAlpha.deallocate(host: self.host)
         self.histogram.deallocate(host: self.host)
@@ -331,4 +341,55 @@ public struct Rgb16: Sendable {
     public var gray: UInt16 = 0
 
     public init() {}
+}
+
+
+extension InfoStore {
+    /// Allocates one row per scanline, for the calls that read a whole image at once.
+    ///
+    /// One allocation for the rows and one for the pointers to them, rather than one per row: a client
+    /// that frees them itself frees the array, and the reference's own arrangement is the same.
+    public func allocateRows(rowBytes: Int) throws {
+        guard let header = self.header, header.height > 0, rowBytes > 0 else { return }
+
+        self.releaseOwnedRows()
+
+        let pointerSize = MemoryLayout<UnsafeMutablePointer<UInt8>?>.stride
+        let buffer = try RawBuffer.allocate(
+            header.height * pointerSize + header.height * rowBytes,
+            host: self.host
+        )
+
+        let base = buffer.bytes.baseAddress!
+        let table = UnsafeMutableRawPointer(base)
+            .assumingMemoryBound(to: UnsafeMutablePointer<UInt8>?.self)
+        let pixels = base + header.height * pointerSize
+
+        for row in 0 ..< header.height {
+            table[row] = pixels + row * rowBytes
+        }
+
+        // Cleared, because a client is entitled to look at a row the decode never reached — a
+        // truncated file leaves some of these untouched, and untouched must mean blank rather than
+        // whatever the allocator had lying about.
+        pixels.update(repeating: 0, count: header.height * rowBytes)
+
+        self.ownedRows = buffer
+        self.ownedRowCount = header.height
+        self.ownedRowBytes = rowBytes
+        self.rows = table
+    }
+
+    public func releaseOwnedRows() {
+        guard !self.ownedRows.isEmpty else { return }
+
+        let buffer = self.ownedRows
+
+        self.ownedRows = .empty
+        self.ownedRowCount = 0
+        self.ownedRowBytes = 0
+        self.rows = nil
+
+        buffer.deallocate(host: self.host)
+    }
 }
