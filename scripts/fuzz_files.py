@@ -21,6 +21,7 @@ when it is clean.
 usage: fuzz_files.py <ours> <reference> <corpus> [rounds]
 """
 
+import collections
 import pathlib
 import random
 import struct
@@ -90,6 +91,32 @@ def mutate(data, rng):
     return bytes(out) + extra, f"{len(extra)} bytes added"
 
 
+def differing_line(theirs, mine, text):
+    """The first line where the two answers part company, from whichever is being shown."""
+    left, right = theirs.splitlines(), mine.splitlines()
+    lines = text.splitlines()
+
+    for index in range(max(len(left), len(right))):
+        a = left[index] if index < len(left) else "<nothing>"
+        b = right[index] if index < len(right) else "<nothing>"
+
+        if a != b:
+            return lines[index] if index < len(lines) else "<nothing>"
+
+    return "<the same>"
+
+
+def first_difference(theirs, mine):
+    """A short name for what kind of difference this is, so the tail can be counted by kind."""
+    line = differing_line(theirs, mine, theirs)
+
+    for word in ("error", "warning", "exit", "row", "ihdr", "geometry"):
+        if line.startswith(word):
+            return word
+
+    return line.split()[0] if line.split() else "empty"
+
+
 def run(program, path, mode):
     try:
         finished = subprocess.run(
@@ -118,6 +145,7 @@ def main():
 
     differed = 0
     checked = 0
+    kinds = collections.Counter()
 
     with tempfile.TemporaryDirectory() as work:
         broken = pathlib.Path(work) / "broken.png"
@@ -137,16 +165,23 @@ def main():
 
                 differed += 1
 
-                if differed <= 3:
+                kinds[first_difference(theirs, mine)] += 1
+
+                if differed <= 4:
                     print(f"--- {source.name}, {description}, read by {mode} ---")
-                    print(f"    reference: {theirs.strip()[:300]}")
-                    print(f"    ours:      {mine.strip()[:300]}")
+
+                    for side, text in (("reference", theirs), ("ours", mine)):
+                        line = differing_line(theirs, mine, text)
+                        print(f"    {side:9s} {line}")
 
                     keep = pathlib.Path(f"fuzz-{source.name}")
                     keep.write_bytes(data)
                     print(f"    kept as {keep}")
 
     print(f"{checked - differed}/{checked} broken files read the same way")
+
+    for kind, count in kinds.most_common():
+        print(f"    {count:4d} first differ on a line beginning {kind!r}")
 
     return 1 if differed else 0
 
