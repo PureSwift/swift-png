@@ -82,12 +82,22 @@ func parseTransforms(_ list: String) -> Want {
         case "all": want.insert(.all)
         case "none": break
         default:
-            fputs("pngbench-swift: unknown transform '\(token)'\n", stderr)
+            complain("pngbench-swift: unknown transform '\(token)'\n")
             exit(2)
         }
     }
 
     return want
+}
+
+/// To the error stream by descriptor: Glibc's `stderr` is a mutable global that strict
+/// concurrency refuses to touch from top-level code, and the descriptor says the same thing
+/// on both platforms.
+func complain(_ message: String) {
+    var message = message
+    _ = message.withUTF8 { buffer in
+        write(2, buffer.baseAddress, buffer.count)
+    }
 }
 
 func now() -> Double {
@@ -280,7 +290,7 @@ func encode(
 let arguments = CommandLine.arguments
 
 guard arguments.count >= 2 else {
-    fputs("usage: pngbench-swift <file.png> [rounds] [transform,transform,...]\n", stderr)
+    complain("usage: pngbench-swift <file.png> [rounds] [transform,transform,...]\n")
     exit(2)
 }
 
