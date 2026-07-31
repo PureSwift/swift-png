@@ -354,6 +354,15 @@ def write_metadata() -> list[pathlib.Path]:
 
     emit("gama", before=gama)
     emit("pcal", before=pcal)
+
+    # Chunks nothing here understands, which is an ordinary thing for a format built to be extended.
+    # One safe to copy forward and one not, and one of each either side of the image data, since where
+    # a chunk was is part of what it meant.
+    emit(
+        "unknown",
+        before=chunk(b"unSf", b"safe to copy") + chunk(b"unUN", b"not safe to copy"),
+        after=chunk(b"unAf", b"after the image data"),
+    )
     emit("splt", before=splt8 + splt16)
     emit("chrm", before=chrm)
     emit("srgb", before=srgb)

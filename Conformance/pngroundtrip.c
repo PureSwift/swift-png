@@ -69,6 +69,10 @@ static int read_file(const char *path, png_structp *pp, png_infop *ip, png_bytep
    }
 
    png_init_io(p, fp);
+
+   /* Everything, so that a chunk this library does not know is carried rather than dropped. */
+   png_set_keep_unknown_chunks(p, PNG_HANDLE_CHUNK_ALWAYS, NULL, 0);
+
    png_read_info(p, i);
 
    height = png_get_image_height(p, i);
@@ -226,6 +230,17 @@ static int write_file(const char *path, png_structp source, png_infop info, png_
 
       if (count > 0)
          png_set_sPLT(p, i, palettes, count);
+   }
+
+   {
+      /* Chunks neither library understands.  Asking for all of them is what a program that edits a
+       * file has to do, since dropping one silently would lose whatever it meant.
+       */
+      png_unknown_chunkp unknowns;
+      int count = png_get_unknown_chunks(source, info, &unknowns);
+
+      if (count > 0)
+         png_set_unknown_chunks(p, i, unknowns, count);
    }
 
    num_texts = png_get_text(source, info, &texts, NULL);
@@ -414,6 +429,15 @@ static int dump_file(const char *path)
 
             printf("\n");
          }
+      }
+
+      {
+         png_unknown_chunkp unknowns;
+         int count = png_get_unknown_chunks(p, i, &unknowns);
+
+         for (k = 0; k < count; k++)
+            printf("unknown %s size=%u loc=%d\n", unknowns[k].name,
+                   (unsigned)unknowns[k].size, unknowns[k].location);
       }
 
       num_texts = png_get_text(p, i, &texts, NULL);
