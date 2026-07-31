@@ -146,7 +146,7 @@ extension SequentialWriter {
         var capacity = bytes.count + bytes.count / 8 + 64
         var produced = 0
 
-        try context.reserve(\.textStaging, capacity)
+        try context.reserve(.textStaging, capacity)
 
         stream.setInput(bytes)
 
@@ -165,7 +165,7 @@ extension SequentialWriter {
                 }
 
                 do {
-                    try context.reserve(\.textStaging, capacity * 2)
+                    try context.reserve(.textStaging, capacity * 2)
                 } catch {
                     carried.deallocate(host: context.host)
                     throw error
