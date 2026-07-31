@@ -170,63 +170,81 @@ enum Transform {
         let base = row.baseAddress!
 
         // Backwards, three channels where there was one, with a loop per layout: picking the shape
-        // once out here rather than per byte in there is most of the speed of this kernel.
+        // once out here rather than per byte in there is most of the speed of this kernel, and a
+        // pair of moving pointers is the rest of it.
         switch (info.bitDepth, hadAlpha) {
         case (8, false):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let target = base + pixel * 3
-                let gray = base[pixel]
+            var source = base + pixels
+            var target = base + pixels * 3
 
-                target[2] = gray
-                target[1] = gray
+            for _ in 0 ..< pixels {
+                source -= 1
+                target -= 3
+
+                let gray = source[0]
+
                 target[0] = gray
+                target[1] = gray
+                target[2] = gray
             }
 
         case (8, true):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 2
-                let target = base + pixel * 4
+            var source = base + pixels * 2
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 4
+
                 let gray = source[0]
                 let alpha = source[1]
 
-                target[3] = alpha
-                target[2] = gray
-                target[1] = gray
                 target[0] = gray
+                target[1] = gray
+                target[2] = gray
+                target[3] = alpha
             }
 
         case (_, false):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 2
-                let target = base + pixel * 6
+            var source = base + pixels * 2
+            var target = base + pixels * 6
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 6
+
                 let hi = source[0]
                 let lo = source[1]
 
-                target[5] = lo
-                target[4] = hi
-                target[3] = lo
-                target[2] = hi
-                target[1] = lo
                 target[0] = hi
+                target[1] = lo
+                target[2] = hi
+                target[3] = lo
+                target[4] = hi
+                target[5] = lo
             }
 
         case (_, true):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 4
-                let target = base + pixel * 8
+            var source = base + pixels * 4
+            var target = base + pixels * 8
+
+            for _ in 0 ..< pixels {
+                source -= 4
+                target -= 8
+
                 let hi = source[0]
                 let lo = source[1]
                 let alphaHi = source[2]
                 let alphaLo = source[3]
 
-                target[7] = alphaLo
-                target[6] = alphaHi
-                target[5] = lo
-                target[4] = hi
-                target[3] = lo
-                target[2] = hi
-                target[1] = lo
                 target[0] = hi
+                target[1] = lo
+                target[2] = hi
+                target[3] = lo
+                target[4] = hi
+                target[5] = lo
+                target[6] = alphaHi
+                target[7] = alphaLo
             }
         }
 
@@ -288,105 +306,148 @@ enum Transform {
         // reason as the kernel above: the shape has to be settled before the loop starts.
         switch (width, sourceChannels, afterColor) {
         case (1, 1, true):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let target = base + pixel * 2
-                let gray = base[pixel]
+            var source = base + pixels
+            var target = base + pixels * 2
 
-                target[1] = low
+            for _ in 0 ..< pixels {
+                source -= 1
+                target -= 2
+
+                let gray = source[0]
+
                 target[0] = gray
+                target[1] = low
             }
 
         case (1, 1, false):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let target = base + pixel * 2
-                let gray = base[pixel]
+            var source = base + pixels
+            var target = base + pixels * 2
 
-                target[1] = gray
+            for _ in 0 ..< pixels {
+                source -= 1
+                target -= 2
+
+                let gray = source[0]
+
                 target[0] = low
+                target[1] = gray
             }
 
         case (1, 3, true):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 3
-                let target = base + pixel * 4
+            var source = base + pixels * 3
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 3
+                target -= 4
+
                 let red = source[0]
                 let green = source[1]
                 let blue = source[2]
 
-                target[3] = low
-                target[2] = blue
-                target[1] = green
                 target[0] = red
+                target[1] = green
+                target[2] = blue
+                target[3] = low
             }
 
         case (1, 3, false):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 3
-                let target = base + pixel * 4
+            var source = base + pixels * 3
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 3
+                target -= 4
+
                 let red = source[0]
                 let green = source[1]
                 let blue = source[2]
 
-                target[3] = blue
-                target[2] = green
-                target[1] = red
                 target[0] = low
+                target[1] = red
+                target[2] = green
+                target[3] = blue
             }
 
         case (2, 1, true):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 2
-                let target = base + pixel * 4
+            var source = base + pixels * 2
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 4
+
                 let hi = source[0]
                 let lo = source[1]
 
-                target[3] = low
-                target[2] = high
-                target[1] = lo
                 target[0] = hi
+                target[1] = lo
+                target[2] = high
+                target[3] = low
             }
 
         case (2, 1, false):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 2
-                let target = base + pixel * 4
-                let hi = source[0]
-                let lo = source[1]
+            var source = base + pixels * 2
+            var target = base + pixels * 4
 
-                target[3] = lo
-                target[2] = hi
-                target[1] = low
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 4
+
+                target[2] = source[0]
+                target[3] = source[1]
                 target[0] = high
+                target[1] = low
             }
 
         case (2, 3, true):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 6
-                let target = base + pixel * 8
+            var source = base + pixels * 6
+            var target = base + pixels * 8
 
-                var byte = 5
-                while byte >= 0 {
-                    target[byte] = source[byte]
-                    byte -= 1
-                }
+            for _ in 0 ..< pixels {
+                source -= 6
+                target -= 8
 
-                target[7] = low
+                let byte0 = source[0]
+                let byte1 = source[1]
+                let byte2 = source[2]
+                let byte3 = source[3]
+                let byte4 = source[4]
+                let byte5 = source[5]
+
+                target[0] = byte0
+                target[1] = byte1
+                target[2] = byte2
+                target[3] = byte3
+                target[4] = byte4
+                target[5] = byte5
                 target[6] = high
+                target[7] = low
             }
 
         case (2, 3, false):
-            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
-                let source = base + pixel * 6
-                let target = base + pixel * 8
+            var source = base + pixels * 6
+            var target = base + pixels * 8
 
-                var byte = 5
-                while byte >= 0 {
-                    target[byte + 2] = source[byte]
-                    byte -= 1
-                }
+            for _ in 0 ..< pixels {
+                source -= 6
+                target -= 8
 
-                target[1] = low
+                let byte0 = source[0]
+                let byte1 = source[1]
+                let byte2 = source[2]
+                let byte3 = source[3]
+                let byte4 = source[4]
+                let byte5 = source[5]
+
+                target[2] = byte0
+                target[3] = byte1
+                target[4] = byte2
+                target[5] = byte3
+                target[6] = byte4
+                target[7] = byte5
                 target[0] = high
+                target[1] = low
             }
 
         default:
