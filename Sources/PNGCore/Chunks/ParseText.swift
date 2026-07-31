@@ -133,19 +133,26 @@ extension InfoStore {
         var entry = TextEntry()
         entry.compression = 0
 
+        // Declared out here rather than where it is filled, so that the failure path can release it.
+        // Whatever comes out of the decompressor is this function's until it has been copied into the
+        // entry, and the copy is exactly the step that can fail.
+        var inflated = EscapingBuffer<UInt8>()
+
         do {
             entry.keyword = try TextStorage.copying(keyword, host: self.host)
 
-            var inflated = try self.inflatePayload(compressed, chunk: .ztxt)
+            inflated = try self.inflatePayload(compressed, chunk: .ztxt)
             entry.text = try TextStorage.copying(
                 UnsafeBufferPointer(inflated.elements),
                 host: self.host
             )
-            inflated.deallocate(host: self.host)
         } catch {
+            inflated.deallocate(host: self.host)
             entry.deallocate(host: self.host)
             throw error
         }
+
+        inflated.deallocate(host: self.host)
 
         try self.appendText(entry)
     }
@@ -196,25 +203,30 @@ extension InfoStore {
         // its value was compressed, with these two codes.
         entry.compression = isCompressed == 1 ? 2 : 1
 
+        // As above: held out here so that a failure to copy it into the entry still releases it.
+        var inflated = EscapingBuffer<UInt8>()
+
         do {
             entry.keyword = try TextStorage.copying(keyword, host: self.host)
             entry.language = try TextStorage.copying(language, host: self.host)
             entry.translatedKeyword = try TextStorage.copying(translated, host: self.host)
 
             if isCompressed == 1 {
-                var inflated = try self.inflatePayload(value, chunk: .itxt)
+                inflated = try self.inflatePayload(value, chunk: .itxt)
                 entry.text = try TextStorage.copying(
                     UnsafeBufferPointer(inflated.elements),
                     host: self.host
                 )
-                inflated.deallocate(host: self.host)
             } else {
                 entry.text = try TextStorage.copying(value, host: self.host)
             }
         } catch {
+            inflated.deallocate(host: self.host)
             entry.deallocate(host: self.host)
             throw error
         }
+
+        inflated.deallocate(host: self.host)
 
         try self.appendText(entry)
     }
