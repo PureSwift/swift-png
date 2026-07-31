@@ -195,3 +195,36 @@ public func png_get_current_row_number(_ png_ptr: png_const_structrp?) -> png_ui
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return 0 }
     return context.currentRow
 }
+
+/// The eight bytes a file began with, as they were read.
+///
+/// Useful for a client that wants to know what it actually saw rather than that it was accepted: the
+/// bytes are kept whether or not they were the right ones.
+@c @implementation
+public func png_get_signature(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?
+) -> png_const_bytep? {
+    guard let info_ptr, let info = InfoStore.from(png_inforp(mutating: info_ptr)) else {
+        return nil
+    }
+
+    return info.signatureBytes()
+}
+
+/// The largest palette index the image data actually used.
+///
+/// Not what the palette holds — what the pixels reached.  A client can use it to shrink a palette
+/// that is larger than the image needs, and it is why the count is tracked while rows are read rather
+/// than worked out afterwards.
+@c @implementation
+public func png_get_palette_max(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?
+) -> Int32 {
+    guard let png_ptr, let context = PngContext.from(png_structp(mutating: png_ptr)) else {
+        return 0
+    }
+
+    return Int32(context.highestPaletteIndex)
+}

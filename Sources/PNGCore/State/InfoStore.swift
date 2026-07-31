@@ -93,6 +93,13 @@ public final class InfoStore {
         return (width, height)
     }
 
+    /// The eight bytes the file began with, kept as they were read.
+    ///
+    /// Kept whether or not they were right: a client asking what it saw is usually asking because
+    /// something went wrong.
+    public var signature = (UInt8(0), UInt8(0), UInt8(0), UInt8(0),
+                            UInt8(0), UInt8(0), UInt8(0), UInt8(0))
+
     /// Rows this library allocated, which it therefore has to release.
     ///
     /// Distinct from the pointer below: a client that hands over its own rows keeps them, and a client
@@ -345,6 +352,15 @@ public struct Rgb16: Sendable {
 
 
 extension InfoStore {
+    /// The signature bytes, addressed rather than copied.
+    ///
+    /// The tuple lives in this object, so its address is good for as long as the object is.
+    public func signatureBytes() -> UnsafePointer<UInt8> {
+        withUnsafePointer(to: &self.signature) {
+            UnsafeRawPointer($0).assumingMemoryBound(to: UInt8.self)
+        }
+    }
+
     /// Allocates one row per scanline, for the calls that read a whole image at once.
     ///
     /// One allocation for the rows and one for the pointers to them, rather than one per row: a client
