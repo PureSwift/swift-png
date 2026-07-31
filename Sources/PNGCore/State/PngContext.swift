@@ -62,8 +62,26 @@ public final class PngContext {
 
     var inflater: InflateStream?
 
-    let reader = SequentialReader()
-    let writer = SequentialWriter()
+    // Made on first use rather than up front: a structure reads or writes, never both, and the
+    // machinery for the direction not taken was two allocations paid by every context.
+    private var readerStorage: SequentialReader?
+    private var writerStorage: SequentialWriter?
+
+    var reader: SequentialReader {
+        if let reader = self.readerStorage { return reader }
+
+        let reader = SequentialReader()
+        self.readerStorage = reader
+        return reader
+    }
+
+    var writer: SequentialWriter {
+        if let writer = self.writerStorage { return writer }
+
+        let writer = SequentialWriter()
+        self.writerStorage = writer
+        return writer
+    }
 
     /// The state machine a progressive read runs on, made only when one is started.
     ///
@@ -333,14 +351,22 @@ public final class PngContext {
         self.inflater?.release()
         self.inflater = nil
 
-        self.writer.deflater?.release()
-        self.writer.deflater = nil
+        // Through the storage rather than the accessor, which would make a writer just to find it
+        // has nothing to release.
+        self.writerStorage?.deflater?.release()
+        self.writerStorage?.deflater = nil
 
-        for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch,
-                       self.writeStaging, self.textStaging, self.filterScratch,
-                       self.writeRowBuffer, self.timeText] {
-            buffer.deallocate(host: self.host)
-        }
+        // One call each rather than a loop over a listing of them: the listing would be an array,
+        // allocated on every destruction to name buffers that are usually all empty.
+        self.rowBuffer.deallocate(host: self.host)
+        self.previousRow.deallocate(host: self.host)
+        self.inputBuffer.deallocate(host: self.host)
+        self.scratch.deallocate(host: self.host)
+        self.writeStaging.deallocate(host: self.host)
+        self.textStaging.deallocate(host: self.host)
+        self.filterScratch.deallocate(host: self.host)
+        self.writeRowBuffer.deallocate(host: self.host)
+        self.timeText.deallocate(host: self.host)
 
         self.rowBuffer = .empty
         self.previousRow = .empty
