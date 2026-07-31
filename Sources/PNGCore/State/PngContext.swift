@@ -43,6 +43,14 @@ public final class PngContext {
     /// Buffers rather than locals for the reason every buffer here is one: the client's write callback
     /// may be jumped out of, and nothing owned by a frame would survive it.
     var writeStaging = RawBuffer.empty
+
+    /// Where a text chunk's compressed form is built.
+    ///
+    /// Held by the context rather than by whichever function is writing, because that function hands
+    /// the bytes to the client and a client is entitled not to come back: a buffer belonging to the
+    /// frame would be released by code the departure skips, while this one is released when the
+    /// structure is destroyed whatever happened.
+    var textStaging = RawBuffer.empty
     var filterScratch = RawBuffer.empty
 
     /// Where a client's row is copied to be transformed, so that its own is left alone.
@@ -329,8 +337,8 @@ public final class PngContext {
         self.writer.deflater = nil
 
         for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch,
-                       self.writeStaging, self.filterScratch, self.writeRowBuffer,
-                       self.timeText] {
+                       self.writeStaging, self.textStaging, self.filterScratch,
+                       self.writeRowBuffer, self.timeText] {
             buffer.deallocate(host: self.host)
         }
 
@@ -339,6 +347,7 @@ public final class PngContext {
         self.inputBuffer = .empty
         self.scratch = .empty
         self.writeStaging = .empty
+        self.textStaging = .empty
         self.filterScratch = .empty
         self.writeRowBuffer = .empty
         self.timeText = .empty
