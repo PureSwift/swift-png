@@ -27,31 +27,6 @@ spng_unimplemented_fatal(const char *name)
 }
 
 void PNGAPI
-png_convert_from_struct_tm(png_timep ptime, const struct tm * ttime)
-{
-   spng_unimplemented_fatal("png_convert_from_struct_tm");
-}
-
-void PNGAPI
-png_convert_from_time_t(png_timep ptime, time_t ttime)
-{
-   spng_unimplemented_fatal("png_convert_from_time_t");
-}
-
-png_const_charp PNGAPI
-png_convert_to_rfc1123(png_structrp png_ptr, png_const_timep ptime)
-{
-   png_error(png_ptr, "png_convert_to_rfc1123 is not implemented");
-}
-
-int PNGAPI
-png_convert_to_rfc1123_buffer(char out[29], png_const_timep ptime)
-{
-   spng_unimplemented_fatal("png_convert_to_rfc1123_buffer");
-   return (int)0;
-}
-
-void PNGAPI
 png_data_freer(png_const_structrp png_ptr, png_inforp info_ptr, int freer, png_uint_32 mask)
 {
    png_error(png_ptr, "png_data_freer is not implemented");
@@ -61,30 +36,6 @@ void PNGAPI
 png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_me, int num)
 {
    png_error(png_ptr, "png_free_data is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cHRM_XYZ(png_const_structrp png_ptr, png_const_inforp info_ptr, double *red_X, double *red_Y, double *red_Z, double *green_X, double *green_Y, double *green_Z, double *blue_X, double *blue_Y, double *blue_Z)
-{
-   png_error(png_ptr, "png_get_cHRM_XYZ is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_cHRM_XYZ_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, png_fixed_point *int_red_X, png_fixed_point *int_red_Y, png_fixed_point *int_red_Z, png_fixed_point *int_green_X, png_fixed_point *int_green_Y, png_fixed_point *int_green_Z, png_fixed_point *int_blue_X, png_fixed_point *int_blue_Y, png_fixed_point *int_blue_Z)
-{
-   png_error(png_ptr, "png_get_cHRM_XYZ_fixed is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_chunk_cache_max(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_chunk_cache_max is not implemented");
-}
-
-png_alloc_size_t PNGAPI
-png_get_chunk_malloc_max(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_chunk_malloc_max is not implemented");
 }
 
 png_uint_32 PNGAPI
@@ -106,21 +57,9 @@ png_get_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_charp *purpose
 }
 
 int PNGAPI
-png_get_palette_max(png_const_structp png_ptr, png_const_infop info_ptr)
-{
-   png_error(png_ptr, "png_get_palette_max is not implemented");
-}
-
-int PNGAPI
 png_get_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_sPLT_tpp entries)
 {
    png_error(png_ptr, "png_get_sPLT is not implemented");
-}
-
-png_const_bytep PNGAPI
-png_get_signature(png_const_structrp png_ptr, png_const_inforp info_ptr)
-{
-   png_error(png_ptr, "png_get_signature is not implemented");
 }
 
 int PNGAPI
@@ -133,18 +72,6 @@ png_voidp PNGAPI
 png_get_user_chunk_ptr(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_user_chunk_ptr is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_user_height_max(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_user_height_max is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_user_width_max(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_user_width_max is not implemented");
 }
 
 int PNGAPI
@@ -166,33 +93,9 @@ png_reset_zstream(png_structrp png_ptr)
 }
 
 void PNGAPI
-png_set_cHRM_XYZ(png_const_structrp png_ptr, png_inforp info_ptr, double red_X, double red_Y, double red_Z, double green_X, double green_Y, double green_Z, double blue_X, double blue_Y, double blue_Z)
-{
-   png_error(png_ptr, "png_set_cHRM_XYZ is not implemented");
-}
-
-void PNGAPI
-png_set_cHRM_XYZ_fixed(png_const_structrp png_ptr, png_inforp info_ptr, png_fixed_point int_red_X, png_fixed_point int_red_Y, png_fixed_point int_red_Z, png_fixed_point int_green_X, png_fixed_point int_green_Y, png_fixed_point int_green_Z, png_fixed_point int_blue_X, png_fixed_point int_blue_Y, png_fixed_point int_blue_Z)
-{
-   png_error(png_ptr, "png_set_cHRM_XYZ_fixed is not implemented");
-}
-
-void PNGAPI
 png_set_check_for_invalid_index(png_structrp png_ptr, int allowed)
 {
    png_error(png_ptr, "png_set_check_for_invalid_index is not implemented");
-}
-
-void PNGAPI
-png_set_chunk_cache_max(png_structrp png_ptr, png_uint_32 user_chunk_cache_max)
-{
-   png_error(png_ptr, "png_set_chunk_cache_max is not implemented");
-}
-
-void PNGAPI
-png_set_chunk_malloc_max(png_structrp png_ptr, png_alloc_size_t user_chunk_cache_max)
-{
-   png_error(png_ptr, "png_set_chunk_malloc_max is not implemented");
 }
 
 void PNGAPI
@@ -271,10 +174,4 @@ void PNGAPI
 png_set_unknown_chunks(png_const_structrp png_ptr, png_inforp info_ptr, png_const_unknown_chunkp unknowns, int num_unknowns)
 {
    png_error(png_ptr, "png_set_unknown_chunks is not implemented");
-}
-
-void PNGAPI
-png_set_user_limits(png_structrp png_ptr, png_uint_32 user_width_max, png_uint_32 user_height_max)
-{
-   png_error(png_ptr, "png_set_user_limits is not implemented");
 }

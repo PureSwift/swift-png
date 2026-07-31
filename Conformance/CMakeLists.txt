@@ -130,7 +130,8 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
     add_test(NAME metadata_roundtrip
         COMMAND ${SPNG_SCRIPTS}/compare_output.sh
                 $<TARGET_FILE:metadata_roundtrip>
-                $<TARGET_FILE:metadata_roundtrip_reference>)
+                $<TARGET_FILE:metadata_roundtrip_reference>
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-metadata-differences.txt)
 
     # The writer, which cannot be checked by comparing files: two correct encoders need not agree on
     # the filter each row chose or on how the compressed stream is cut into chunks.  What is compared

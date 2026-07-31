@@ -19,6 +19,122 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+/* The answers a library works out rather than stores.
+ *
+ * These are the accessors that convert rather than fetch: a timestamp as the line a mail header would
+ * carry, the chromaticities as the matrix a colour space is quoted as, and the ceilings a decode will
+ * not go past.  None of them is in a file, and all of them are things a client asks for.
+ */
+static void
+report_derived(png_structp png_ptr, png_infop info_ptr)
+{
+   png_time when;
+   char buffer[32];
+   struct tm broken;
+
+   memset(&when, 0, sizeof when);
+   when.year = 2026; when.month = 7; when.day = 30;
+   when.hour = 9; when.minute = 5; when.second = 3;
+
+   if (png_convert_to_rfc1123_buffer(buffer, &when))
+      printf("rfc1123 %s\n", buffer);
+   else
+      printf("rfc1123 refused\n");
+
+   /* Every field out of range at once, which a file can say and a client should not be handed as a
+    * date.
+    */
+   memset(&when, 0, sizeof when);
+   when.month = 13; when.day = 0; when.hour = 25; when.minute = 61; when.second = 61;
+   printf("rfc1123 out of range %d\n", png_convert_to_rfc1123_buffer(buffer, &when));
+
+   /* Each field on its own, so that a check that is missing shows up as itself rather than being
+    * hidden by the one next to it.
+    */
+   {
+      static const int months[] = { 0, 1, 12, 13 };
+      static const int days[] = { 0, 1, 31, 32 };
+      static const int hours[] = { 0, 23, 24 };
+      static const int seconds[] = { 0, 59, 60, 61 };
+      unsigned k;
+
+      for (k = 0; k < sizeof months / sizeof *months; k++)
+      {
+         memset(&when, 0, sizeof when);
+         when.year = 2026; when.day = 1; when.month = (png_byte)months[k];
+         printf("month %d -> %d\n", months[k], png_convert_to_rfc1123_buffer(buffer, &when));
+      }
+
+      for (k = 0; k < sizeof days / sizeof *days; k++)
+      {
+         memset(&when, 0, sizeof when);
+         when.year = 2026; when.month = 1; when.day = (png_byte)days[k];
+         printf("day %d -> %d\n", days[k], png_convert_to_rfc1123_buffer(buffer, &when));
+      }
+
+      for (k = 0; k < sizeof hours / sizeof *hours; k++)
+      {
+         memset(&when, 0, sizeof when);
+         when.year = 2026; when.month = 1; when.day = 1; when.hour = (png_byte)hours[k];
+         printf("hour %d -> %d\n", hours[k], png_convert_to_rfc1123_buffer(buffer, &when));
+      }
+
+      for (k = 0; k < sizeof seconds / sizeof *seconds; k++)
+      {
+         memset(&when, 0, sizeof when);
+         when.year = 2026; when.month = 1; when.day = 1;
+         when.second = (png_byte)seconds[k];
+         printf("second %d -> %d\n", seconds[k], png_convert_to_rfc1123_buffer(buffer, &when));
+      }
+   }
+
+   memset(&broken, 0, sizeof broken);
+   broken.tm_year = 126; broken.tm_mon = 6; broken.tm_mday = 30;
+   broken.tm_hour = 9; broken.tm_min = 5; broken.tm_sec = 3;
+   png_convert_from_struct_tm(&when, &broken);
+   printf("from tm %d-%d-%d %d:%d:%d\n", when.year, when.month, when.day,
+          when.hour, when.minute, when.second);
+
+   {
+      static const long moments[] = { 0, 1000000000L, 1753900000L, 2000000000L };
+      unsigned k;
+
+      for (k = 0; k < sizeof moments / sizeof *moments; k++)
+      {
+         png_convert_from_time_t(&when, (time_t)moments[k]);
+         printf("from time_t %ld -> %d-%d-%d %d:%d:%d\n", moments[k], when.year, when.month,
+                when.day, when.hour, when.minute, when.second);
+      }
+   }
+
+   {
+      png_fixed_point rX, rY, rZ, gX, gY, gZ, bX, bY, bZ;
+
+      if (png_get_cHRM_XYZ_fixed(png_ptr, info_ptr, &rX, &rY, &rZ, &gX, &gY, &gZ, &bX, &bY, &bZ))
+         printf("chrm xyz %d %d %d %d %d %d %d %d %d\n", (int)rX, (int)rY, (int)rZ,
+                (int)gX, (int)gY, (int)gZ, (int)bX, (int)bY, (int)bZ);
+      else
+         printf("chrm xyz refused\n");
+   }
+
+   printf("limits %u %u %u %u\n",
+          (unsigned)png_get_user_width_max(png_ptr), (unsigned)png_get_user_height_max(png_ptr),
+          (unsigned)png_get_chunk_cache_max(png_ptr),
+          (unsigned)png_get_chunk_malloc_max(png_ptr));
+
+   png_set_user_limits(png_ptr, 1000, 2000);
+   png_set_chunk_cache_max(png_ptr, 7);
+   png_set_chunk_malloc_max(png_ptr, 99);
+
+   printf("limits set %u %u %u %u\n",
+          (unsigned)png_get_user_width_max(png_ptr), (unsigned)png_get_user_height_max(png_ptr),
+          (unsigned)png_get_chunk_cache_max(png_ptr),
+          (unsigned)png_get_chunk_malloc_max(png_ptr));
+
+   printf("palette max %d\n", png_get_palette_max(png_ptr, info_ptr));
+}
 
 static void PNGCBAPI
 report_error(png_structp png_ptr, png_const_charp message)
@@ -395,6 +511,7 @@ main(void)
 
    apply(png_ptr, info_ptr);
    report(png_ptr, info_ptr);
+   report_derived(png_ptr, info_ptr);
 
    png_destroy_write_struct(&png_ptr, &info_ptr);
 

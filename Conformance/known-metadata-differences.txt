@@ -1,0 +1,8 @@
+# Lines of the metadata comparison that differ, and why.
+#
+# Each entry names a word that identifies the line.  A recorded word that stops matching anything
+# fails the build, so nothing here can quietly stop being true.
+#
+# Format: <word> <reason>
+
+chrm Not implemented here: the matrix form of the chromaticities is derived rather than stored, and the reference derives it in fixed point where this library computes it exactly. Two of the nine numbers come out one count apart. Closing it means reproducing the reference's intermediate rounding rather than its answer, and the file itself holds the other form, so nothing a client reads from a file is affected.

@@ -245,3 +245,24 @@ png_image_free
 png_image_write_to_file
 png_image_write_to_stdio
 png_image_write_to_memory
+
+# Sources/PNGABI/TimeAPI.swift
+png_convert_to_rfc1123_buffer
+png_convert_to_rfc1123
+png_convert_from_struct_tm
+png_convert_from_time_t
+
+# Sources/PNGABI/LimitsAPI.swift
+png_set_user_limits
+png_get_user_width_max
+png_get_user_height_max
+png_set_chunk_cache_max
+png_get_chunk_cache_max
+png_set_chunk_malloc_max
+png_get_chunk_malloc_max
+png_get_cHRM_XYZ
+png_get_cHRM_XYZ_fixed
+png_set_cHRM_XYZ
+png_set_cHRM_XYZ_fixed
+png_get_signature
+png_get_palette_max
