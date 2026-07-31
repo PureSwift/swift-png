@@ -251,22 +251,22 @@ extension SequentialWriter {
 
         guard name.count >= 1, name.count <= 79, profile.count > 0 else { return }
 
-        let compressed = try self.compressed(
+        // Into the context's own buffer, because what follows hands these bytes to the client and a
+        // client may leave without returning: anything this frame owned would go with it.
+        let produced = try self.compressed(
             UnsafeBufferPointer(start: profile.baseAddress, count: profile.count),
             context: context
         )
 
-        defer { compressed.buffer.deallocate(host: context.host) }
-
         let body = UnsafeBufferPointer(
-            start: compressed.buffer.bytes.baseAddress,
-            count: compressed.count
+            start: context.textStaging.bytes.baseAddress,
+            count: produced
         )
 
         try self.write(
             .iccp,
             context: context,
-            count: name.count + 2 + compressed.count
+            count: name.count + 2 + produced
         ) { bytes in
             Self.copy(name, into: bytes, at: 0)
             bytes[name.count] = 0
