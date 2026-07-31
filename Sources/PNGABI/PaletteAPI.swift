@@ -423,6 +423,18 @@ public func png_set_sCAL_s(
     _ swidth: png_const_charp?,
     _ sheight: png_const_charp?
 ) {
+    // Checked before anything is stored, and refused rather than corrected: the string is kept as the
+    // client gave it, so a string the format does not allow would reach the file unchanged.
+    for (bytes, what) in [(swidth, "width"), (sheight, "height")] {
+        guard let bytes, !AsciiNumbers.isValid(terminated: bytes) else { continue }
+        guard let png_ptr else { return }
+
+        spng_c_error(
+            png_structp(mutating: png_ptr),
+            what == "width" ? "Invalid sCAL width" : "Invalid sCAL height"
+        )
+    }
+
     updateAllocating(png_ptr, info_ptr) { info in
         let storedWidth = try TextStorage.copying(swidth, host: info.host)
         let storedHeight: TextStorage
@@ -441,5 +453,156 @@ public func png_set_sCAL_s(
         info.scale.width = storedWidth
         info.scale.height = storedHeight
         info.markValid(PNG_INFO_sCAL)
+    }
+}
+
+// -- the physical scale, as numbers rather than strings ----------------------
+//
+// The chunk holds text, and these are the accessors for clients that would rather not deal with it.
+// Reading one is a parse; writing one is a format, and the formatting is the reference's own — five
+// significant digits, a leading zero omitted, an exponent only when it is shorter — because two
+// libraries that write the same number differently write different files.
+
+@c @implementation
+public func png_get_sCAL(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?,
+    _ unit: UnsafeMutablePointer<Int32>?,
+    _ width: UnsafeMutablePointer<Double>?,
+    _ height: UnsafeMutablePointer<Double>?
+) -> png_uint_32 {
+    query(png_inforp(mutating: info_ptr), 0) { info in
+        guard info.isValid(PNG_INFO_sCAL),
+              let read = info.scaleAsNumbers else { return 0 }
+
+        unit?.pointee = Int32(info.scale.unit)
+        width?.pointee = read.width
+        height?.pointee = read.height
+
+        return png_uint_32(PNG_INFO_sCAL)
+    }
+}
+
+@c @implementation
+public func png_get_sCAL_fixed(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_const_inforp?,
+    _ unit: UnsafeMutablePointer<Int32>?,
+    _ width: UnsafeMutablePointer<png_fixed_point>?,
+    _ height: UnsafeMutablePointer<png_fixed_point>?
+) -> png_uint_32 {
+    query(png_inforp(mutating: info_ptr), 0) { info in
+        guard info.isValid(PNG_INFO_sCAL),
+              let read = info.scaleAsNumbers else { return 0 }
+
+        unit?.pointee = Int32(info.scale.unit)
+        width?.pointee = png_fixed_point((read.width * 100_000).rounded())
+        height?.pointee = png_fixed_point((read.height * 100_000).rounded())
+
+        return png_uint_32(PNG_INFO_sCAL)
+    }
+}
+
+@c @implementation
+public func png_set_sCAL(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ unit: Int32,
+    _ width: Double,
+    _ height: Double
+) {
+    setScale(
+        png_ptr,
+        info_ptr,
+        unit: unit,
+        width: AsciiNumbers.string(floating: width),
+        height: AsciiNumbers.string(floating: height),
+        rejects: !(width > 0) || !(height > 0)
+    )
+}
+
+@c @implementation
+public func png_set_sCAL_fixed(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ unit: Int32,
+    _ width: png_fixed_point,
+    _ height: png_fixed_point
+) {
+    setScale(
+        png_ptr,
+        info_ptr,
+        unit: unit,
+        width: AsciiNumbers.string(fixed: width),
+        height: AsciiNumbers.string(fixed: height),
+        rejects: width <= 0 || height <= 0
+    )
+}
+
+/// Stores an already-formatted scale, refusing one the format cannot express.
+///
+/// A scale of zero or less is not a scale, and the reference declines it with a word rather than
+/// writing a chunk no decoder could use.  The two values are refused independently, which is why the
+/// caller says whether either was bad rather than this working it out from the strings.
+private func setScale(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    unit: Int32,
+    width: [UInt8],
+    height: [UInt8],
+    rejects: Bool
+) {
+    guard !rejects else {
+        if let png_ptr {
+            spng_c_warning(png_structp(mutating: png_ptr), "Invalid sCAL width ignored")
+        }
+
+        return
+    }
+
+    var widthText = width + [0]
+    var heightText = height + [0]
+
+    widthText.withUnsafeMutableBufferPointer { widthBytes in
+        heightText.withUnsafeMutableBufferPointer { heightBytes in
+            png_set_sCAL_s(
+                png_ptr,
+                info_ptr,
+                unit,
+                UnsafeRawPointer(widthBytes.baseAddress!).assumingMemoryBound(to: CChar.self),
+                UnsafeRawPointer(heightBytes.baseAddress!).assumingMemoryBound(to: CChar.self)
+            )
+        }
+    }
+}
+
+// -- the older exif accessors ------------------------------------------------
+//
+// These cannot work and the reference says so.  Neither carries a length, and the data is not
+// terminated, so neither the library nor the client can say how much of it there is.  The pair that
+// take a count replaced them; these warn and do nothing, which is what the reference does and what a
+// client built against it will already be handling.
+
+@c @implementation
+public func png_get_eXIf(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ exif: UnsafeMutablePointer<png_bytep?>?
+) -> png_uint_32 {
+    if let png_ptr {
+        spng_c_warning(png_structp(mutating: png_ptr), "png_get_eXIf does not work; use png_get_eXIf_1")
+    }
+
+    return 0
+}
+
+@c @implementation
+public func png_set_eXIf(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ exif: png_bytep?
+) {
+    if let png_ptr {
+        spng_c_warning(png_structp(mutating: png_ptr), "png_set_eXIf does not work; use png_set_eXIf_1")
     }
 }

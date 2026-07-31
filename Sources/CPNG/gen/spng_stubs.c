@@ -88,12 +88,6 @@ png_get_chunk_malloc_max(png_const_structrp png_ptr)
 }
 
 png_uint_32 PNGAPI
-png_get_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep *exif)
-{
-   png_error(png_ptr, "png_get_eXIf is not implemented");
-}
-
-png_uint_32 PNGAPI
 png_get_io_chunk_type(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_io_chunk_type is not implemented");
@@ -121,18 +115,6 @@ png_voidp PNGAPI
 png_get_progressive_ptr(png_const_structrp png_ptr)
 {
    png_error(png_ptr, "png_get_progressive_ptr is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_sCAL(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, double *width, double *height)
-{
-   png_error(png_ptr, "png_get_sCAL is not implemented");
-}
-
-png_uint_32 PNGAPI
-png_get_sCAL_fixed(png_const_structrp png_ptr, png_const_inforp info_ptr, int *unit, png_fixed_point *width, png_fixed_point *height)
-{
-   png_error(png_ptr, "png_get_sCAL_fixed is not implemented");
 }
 
 int PNGAPI
@@ -311,12 +293,6 @@ png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
 }
 
 void PNGAPI
-png_set_eXIf(png_const_structrp png_ptr, png_inforp info_ptr, png_bytep exif)
-{
-   png_error(png_ptr, "png_set_eXIf is not implemented");
-}
-
-void PNGAPI
 png_set_filter_heuristics(png_structrp png_ptr, int heuristic_method, int num_weights, png_const_doublep filter_weights, png_const_doublep filter_costs)
 {
    png_error(png_ptr, "png_set_filter_heuristics is not implemented");
@@ -368,18 +344,6 @@ void PNGAPI
 png_set_read_user_chunk_fn(png_structrp png_ptr, png_voidp user_chunk_ptr, png_user_chunk_ptr read_user_chunk_fn)
 {
    png_error(png_ptr, "png_set_read_user_chunk_fn is not implemented");
-}
-
-void PNGAPI
-png_set_sCAL(png_const_structrp png_ptr, png_inforp info_ptr, int unit, double width, double height)
-{
-   png_error(png_ptr, "png_set_sCAL is not implemented");
-}
-
-void PNGAPI
-png_set_sCAL_fixed(png_const_structrp png_ptr, png_inforp info_ptr, int unit, png_fixed_point width, png_fixed_point height)
-{
-   png_error(png_ptr, "png_set_sCAL_fixed is not implemented");
 }
 
 void PNGAPI

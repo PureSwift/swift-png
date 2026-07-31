@@ -223,3 +223,9 @@ png_write_flush
 png_set_rows
 png_get_rows
 png_write_png
+png_get_sCAL
+png_get_sCAL_fixed
+png_set_sCAL
+png_set_sCAL_fixed
+png_get_eXIf
+png_set_eXIf
