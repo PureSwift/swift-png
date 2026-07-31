@@ -47,6 +47,8 @@ void spng_c_warning_chunk_bytes(png_const_structrp png_ptr, const char *message,
 
 /* Reported as an error or a warning depending on png_set_benign_errors. */
 void spng_c_benign_error(png_const_structrp png_ptr, png_const_charp message);
+void spng_c_benign_error_bytes(png_const_structrp png_ptr, const char *message,
+    size_t length);
 
 /* Formats "<chunk>: <message>" into png_ptr->message and dispatches, matching
  * the reference implementation's chunk diagnostics.
