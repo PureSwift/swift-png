@@ -152,6 +152,26 @@ extension SequentialWriter {
             }
         }
 
+        // The scale, whose numbers are text: a width, a terminator, and a height that is not
+        // terminated because the chunk's length says where it ends.
+        if info.isValid(InfoStore.Valid.scal) {
+            let width = info.scale.width.bytes
+            let height = info.scale.height.bytes
+
+            if width.count > 0, height.count > 0 {
+                try self.write(
+                    .scal,
+                    context: context,
+                    count: 1 + width.count + 1 + height.count
+                ) { bytes in
+                    bytes[0] = info.scale.unit
+                    Self.copy(width, into: bytes, at: 1)
+                    bytes[1 + width.count] = 0
+                    Self.copy(height, into: bytes, at: 2 + width.count)
+                }
+            }
+        }
+
         if info.isValid(InfoStore.Valid.time) {
             try self.writeTime(info, context: context)
         }

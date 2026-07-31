@@ -79,6 +79,20 @@ public final class InfoStore {
     /// which cannot transfer control to the client.
     public var textEntries: [TextEntry] = []
 
+    /// The scale as numbers, when the strings it is stored as are numbers at all.
+    ///
+    /// Absent for a chunk holding something that is not a number, which a file can carry: the accessors
+    /// that hand back strings give it to the client unread, and the ones that hand back numbers say
+    /// there is nothing to give.
+    public var scaleAsNumbers: (width: Double, height: Double)? {
+        guard let width = AsciiNumbers.number(from: self.scale.width.bytes),
+              let height = AsciiNumbers.number(from: self.scale.height.bytes) else {
+            return nil
+        }
+
+        return (width, height)
+    }
+
     /// The rows a client has handed over, for the calls that write or read a whole image at once.
     ///
     /// Not owned: the client allocated them and the client frees them.  Held as the pointer it gave

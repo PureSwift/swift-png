@@ -190,7 +190,10 @@ extension SequentialWriter {
 
 extension TextStorage {
     /// The bytes, without the terminator that follows them.
-    var bytes: UnsafeBufferPointer<UInt8> {
+    ///
+    /// Public because more than the writer wants them: the accessors that read a number out of a text
+    /// field parse these.
+    public var bytes: UnsafeBufferPointer<UInt8> {
         UnsafeBufferPointer(
             start: self.address.map { UnsafeRawPointer($0).assumingMemoryBound(to: UInt8.self) },
             count: self.count
