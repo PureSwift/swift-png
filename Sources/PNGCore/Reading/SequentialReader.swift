@@ -90,6 +90,17 @@ final class SequentialReader {
                     throw Diagnostic("Duplicate IHDR", chunk: .ihdr)
                 }
 
+                // The length before the checksum and before the contents.  A header of the wrong
+                // size is not a header with bad values in it — there is no telling which field the
+                // extra or missing bytes belong to, so nothing it holds can be trusted enough to be
+                // reported as wrong.
+                if chunk.length != Header.Fields.storedSize {
+                    throw Diagnostic(
+                        chunk.length > Header.Fields.storedSize ? "too long" : "too short",
+                        chunk: .ihdr
+                    )
+                }
+
                 try context.reserve(\.scratch, chunk.length)
                 try self.lexer.readWholePayload(
                     into: context.scratch.bytes,
@@ -850,7 +861,16 @@ final class SequentialReader {
             guard let current = self.lexer.current else { return }
 
             if current.name == .iend {
-                try self.finishChunk(context: context)
+                // The end marker has no contents.  A file that gives it some is not a file to
+                // refuse — everything worth reading has already been read — so this is said and
+                // the bytes are walked past like any others.
+                if current.length > 0 {
+                    context.host.warn(Diagnostic("invalid", severity: .warning, chunk: .iend))
+                    try self.skipChunk(context: context)
+                } else {
+                    try self.finishChunk(context: context)
+                }
+
                 self.phase = .streamEnd
                 return
             }
