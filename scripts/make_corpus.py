@@ -594,6 +594,48 @@ def write_damaged() -> list[pathlib.Path]:
     return written
 
 
+def write_overrun() -> list[pathlib.Path]:
+    """Writes files that decode, and are wrong about themselves while doing it.
+
+    Neither of these is a file to reject.  Both produce every row a client asked for; what
+    they also produce is a remark, and a drop-in replacement has to make the same remark at
+    the same moment.  They are here rather than among the damaged files for that reason —
+    nothing fails, so a decoder that says nothing looks correct until it is compared.
+    """
+    written = []
+    palette = b"".join(bytes(((index * 37) & 0xFF, (index * 91) & 0xFF, index * 8))
+                       for index in range(4))
+
+    # Indices naming entries the palette never gave.  The file is readable throughout: the
+    # rows arrive, and what they name is the client's problem to notice.
+    path = CORPUS / "over-palette-index.png"
+    rows = [bytes([0, 1, 2, 3, 4, 5, 6, 7]) for _ in range(3)]
+    encode(path, 8, 3, 8, PALETTE, rows, 0, palette=palette)
+    written.append(path)
+
+    # The same at four bits, where an index is half a byte and has to be unpacked before it
+    # can be found to be out of range.
+    path = CORPUS / "over-palette-index-4bit.png"
+    rows = [bytes([0x01, 0x23, 0x45, 0x67]) for _ in range(2)]
+    encode(path, 8, 2, 4, PALETTE, rows, 0, palette=palette)
+    written.append(path)
+
+    # More scanlines in the compressed stream than the header describes.  Written by hand
+    # rather than through `encode`, because the whole point is a stream that disagrees with
+    # the header it is under.
+    path = CORPUS / "over-image-data.png"
+    body = SIGNATURE
+    body += chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 2, 8, PALETTE, 0, 0, 0))
+    body += chunk(b"PLTE", palette)
+    line = bytes([0, 1, 2, 3])
+    body += chunk(b"IDAT", zlib.compress(b"".join(b"\x00" + line for _ in range(4)), 9))
+    body += chunk(b"IEND", b"")
+    path.write_bytes(body)
+    written.append(path)
+
+    return written
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit("usage: make_corpus.py <output-directory>")
@@ -728,6 +770,7 @@ def main() -> None:
         written.append(path)
 
     written += write_metadata()
+    written += write_overrun()
     written += write_damaged()
 
     print(f"wrote {len(written)} images to {CORPUS}")
