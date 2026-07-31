@@ -26,8 +26,4 @@ spng_unimplemented_fatal(const char *name)
    abort();
 }
 
-void PNGAPI
-png_set_quantize(png_structrp png_ptr, png_colorp palette, int num_palette, int maximum_colors, png_const_uint_16p histogram, int full_quantize)
-{
-   png_error(png_ptr, "png_set_quantize is not implemented");
-}
+/* Every published function is implemented; nothing to stub. */
