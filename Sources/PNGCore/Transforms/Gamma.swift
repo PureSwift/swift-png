@@ -106,6 +106,17 @@ public struct GammaTable {
 
     /// Builds the table for an exponent given in the fixed-point scale.
     public init(exponent: FixedPoint) {
+        // An exponent of one is the identity, and it is what every context starts with: paying two
+        // hundred odd calls to `pow` to tabulate it made creating a context the most expensive
+        // thing a small decode did.
+        if exponent == GammaState.one {
+            for value in 0 ..< 256 {
+                self.values[value] = UInt8(value)
+            }
+
+            return
+        }
+
         let gamma = Double(exponent) * 1e-5
 
         for value in 0 ..< 256 {
