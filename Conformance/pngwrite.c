@@ -122,6 +122,11 @@ static const struct image_case cases[] = {
    { "w_pack_invert", 13, 5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 24 },
    { "w_interlaced_bgr", 9, 9, 8, PNG_COLOR_TYPE_RGB,      1, -1, -1, -1, 10 },
 
+   /* A transform of the client's own, alone and before one of the library's. */
+   { "w_user",       13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 25 },
+   { "w_user_bgr",   13,  7, 8, PNG_COLOR_TYPE_RGB,        0, -1, -1, -1, 26 },
+   { "w_user_pack",  13,  5, 2, PNG_COLOR_TYPE_GRAY,       0, -1, -1, -1, 27 },
+
    { "meta_rgb",     13,  7, 8, PNG_COLOR_TYPE_RGB,       0, -1, -1, -1, 1 },
    { "meta_gray",    13,  7, 8, PNG_COLOR_TYPE_GRAY,      0, -1, -1, -1, 1 },
    { "meta_palette",  9,  3, 8, PNG_COLOR_TYPE_PALETTE,   0, -1, -1, -1, 1 },
@@ -140,6 +145,19 @@ static const struct image_case cases[] = {
  * The values are arbitrary but distinct, so that a field written into the wrong place is visible
  * rather than plausible.
  */
+/* A transform of the client's own: something visible, and something that depends on the description
+ * it is handed, so that a library showing it the wrong one is caught.
+ */
+static void write_user(png_structp p, png_row_infop info, png_bytep row)
+{
+   size_t k;
+
+   (void)p;
+
+   for (k = 0; k < info->rowbytes; k++)
+      row[k] = (png_byte)(row[k] ^ (png_byte)(info->channels * 16 + info->bit_depth));
+}
+
 static void set_metadata(png_structp p, png_infop i, const struct image_case *c)
 {
    /* Two says to set the histogram as well, which is the one chunk that cannot be compared. */
@@ -225,7 +243,7 @@ static void fill(png_bytep row, png_uint_32 y, const struct image_case *c)
     * supplies a channel more.  Either way it hands over more than the file stores, so the row is
     * filled to whatever it is about to hand over rather than to what the file will hold.
     */
-   if (c->metadata == 15 || c->metadata == 17 || c->metadata == 24)
+   if (c->metadata == 15 || c->metadata == 17 || c->metadata == 24 || c->metadata == 27)
       rowbytes = (size_t)width * channels;
    else if (c->metadata == 18 || c->metadata == 19 || c->metadata == 22)
       rowbytes = (size_t)width * (channels + 1) * c->bit_depth / 8;
@@ -348,6 +366,9 @@ static int write_file(const char *path, const struct image_case *c)
          case 22: png_set_filler(p, 0, PNG_FILLER_BEFORE); png_set_bgr(p); break;
          case 23: png_set_shift(p, &sig); png_set_bgr(p); break;
          case 24: png_set_packing(p); png_set_invert_mono(p); break;
+         case 25: png_set_write_user_transform_fn(p, write_user); break;
+         case 26: png_set_write_user_transform_fn(p, write_user); png_set_bgr(p); break;
+         case 27: png_set_write_user_transform_fn(p, write_user); png_set_packing(p); break;
       }
    }
 
