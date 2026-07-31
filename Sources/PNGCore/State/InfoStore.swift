@@ -228,6 +228,14 @@ public final class InfoStore {
         self.validChunks |= flag
     }
 
+    /// Forgets that a chunk was there.
+    ///
+    /// The data itself is left alone: what a client asked to invalidate it may yet ask to set again,
+    /// and freeing it here would make that a use of memory that had gone.
+    public func clearValid(_ flag: UInt32) {
+        self.validChunks &= ~flag
+    }
+
     public func isValid(_ flag: UInt32) -> Bool {
         self.validChunks & flag != 0
     }

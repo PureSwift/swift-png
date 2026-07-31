@@ -1001,3 +1001,44 @@ public func png_set_cHRM_XYZ(
         chromaticity.blueX, chromaticity.blueY
     )
 }
+
+/// Says the image is in the standard colour space, and fills in what that means.
+///
+/// Three chunks for one statement.  A decoder that knows the space needs neither of the other two, and
+/// one that does not can still be told the gamma and the primaries — so a file that says it is sRGB
+/// carries the numbers as well, and this is the call that writes all three.
+@c @implementation
+public func png_set_sRGB_gAMA_and_cHRM(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ srgb_intent: Int32
+) {
+    png_set_sRGB(png_ptr, info_ptr, srgb_intent)
+
+    // The standard's own numbers, which are what "sRGB" means and are not this library's to choose.
+    png_set_gAMA_fixed(png_ptr, info_ptr, 45455)
+    png_set_cHRM_fixed(
+        png_ptr,
+        info_ptr,
+        31270, 32900,
+        64000, 33000,
+        30000, 60000,
+        15000, 6000
+    )
+}
+
+/// Forgets one of the things the image said about itself.
+///
+/// For a client that has read a file and does not want to write back everything it found — or that
+/// has decided a chunk it was given is wrong.  The data stays where it was; what changes is that
+/// nothing will report or write it.
+@c @implementation
+public func png_set_invalid(
+    _ png_ptr: png_const_structrp?,
+    _ info_ptr: png_inforp?,
+    _ mask: Int32
+) {
+    guard let info_ptr, let info = InfoStore.from(info_ptr) else { return }
+
+    info.clearValid(UInt32(bitPattern: mask))
+}
