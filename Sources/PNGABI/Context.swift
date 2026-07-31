@@ -56,6 +56,16 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
         },
         flushBytes: { owner in
             spng_c_call_flush(owner?.pngStruct)
+        },
+        writeUserTransform: { owner, row, width, depth, channels, colorType in
+            spng_c_call_write_user_transform(
+                owner?.pngStruct,
+                row,
+                width,
+                depth,
+                channels,
+                colorType
+            )
         }
     )
 }

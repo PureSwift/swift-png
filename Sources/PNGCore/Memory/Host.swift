@@ -85,6 +85,13 @@ public struct Host {
     public let writeBytes: Write?
     public let flushBytes: Flush?
 
+    /// The same as ``userTransform``, for rows on their way into a file.
+    ///
+    /// A separate entry rather than a direction argument, because the two reach different callbacks: a
+    /// client installs one for reading and another for writing, and a structure that did both would be
+    /// a structure doing two jobs.
+    public let writeUserTransform: UserTransform?
+
     public init(
         owner: Owner,
         allocate: Allocate,
@@ -94,7 +101,8 @@ public struct Host {
         warnChunk: WarnChunk,
         userTransform: UserTransform? = nil,
         writeBytes: Write? = nil,
-        flushBytes: Flush? = nil
+        flushBytes: Flush? = nil,
+        writeUserTransform: UserTransform? = nil
     ) {
         self.owner = owner
         self.allocate = allocate
@@ -105,6 +113,7 @@ public struct Host {
         self.userTransform = userTransform
         self.writeBytes = writeBytes
         self.flushBytes = flushBytes
+        self.writeUserTransform = writeUserTransform
     }
 }
 
