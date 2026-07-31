@@ -97,9 +97,43 @@ public final class PngContext {
     /// are the client's and this library no longer has them.
     public private(set) var highestPaletteIndex = 0
 
-    /// Records an index the decode has seen.
-    public func notePaletteIndex(_ index: Int) {
-        if index > self.highestPaletteIndex { self.highestPaletteIndex = index }
+    /// How many palette entries the rows are entitled to name.
+    ///
+    /// The file's count until something changes it, and one thing does: shortening the palette leaves
+    /// rows entitled to fewer entries than the file's own chunk still describes.  So this is asked of
+    /// the reading state rather than of the metadata, and a file whose indices were always inside its
+    /// own palette can still be found to have run past the end of the client's.
+    public var entitledPaletteCount = 0
+
+    /// Records the largest index in a row of them.
+    ///
+    /// Given the row rather than one index at a time, because at fewer than eight bits an index is not
+    /// a byte and unpacking it is this function's business rather than the caller's.
+    public func notePaletteIndices(
+        _ row: UnsafeBufferPointer<UInt8>,
+        width: Int,
+        bitDepth: Int
+    ) {
+        var largest = self.highestPaletteIndex
+
+        if bitDepth == 8 {
+            for pixel in 0 ..< min(width, row.count) {
+                largest = max(largest, Int(row[pixel]))
+            }
+        } else {
+            let perByte = 8 / bitDepth
+            let mask = (1 << bitDepth) - 1
+
+            for pixel in 0 ..< width {
+                let byte = pixel / perByte
+                guard byte < row.count else { break }
+
+                let shift = 8 - bitDepth * (pixel % perByte + 1)
+                largest = max(largest, (Int(row[byte]) >> shift) & mask)
+            }
+        }
+
+        self.highestPaletteIndex = largest
     }
 
     /// What each of the library's own switches is set to, indexed by half the option number.
