@@ -558,7 +558,8 @@ final class SequentialReader {
                 at: column,
                 to: full,
                 at: Adam7.imageColumn(ofPass: pass, passColumn: column),
-                pixelDepth: pixelDepth
+                pixelDepth: pixelDepth,
+                packSwapped: context.transforms?.swapsPackedSamples ?? false
             )
         }
     }
