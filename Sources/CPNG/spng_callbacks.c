@@ -322,3 +322,43 @@ spng_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
        png_ptr == NULL ? NULL : png_ptr->write_user_transform_fn,
        row, width, bit_depth, channels, color_type);
 }
+
+/* The three points a progressive read reports back at.
+ *
+ * Each is the client's own code and each may be jumped out of, so the flag is set and cleared around
+ * it exactly as the others are.  The info structure is the one the client handed to png_process_data;
+ * the library never owns it.
+ */
+void
+spng_c_call_progressive_info(png_structrp png_ptr, png_inforp info_ptr)
+{
+   if (png_ptr == NULL || png_ptr->info_fn == NULL)
+      return;
+
+   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->info_fn(png_ptr, info_ptr);
+   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+}
+
+void
+spng_c_call_progressive_row(png_structrp png_ptr, png_bytep new_row,
+    png_uint_32 row_number, int pass)
+{
+   if (png_ptr == NULL || png_ptr->row_fn == NULL)
+      return;
+
+   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->row_fn(png_ptr, new_row, row_number, pass);
+   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+}
+
+void
+spng_c_call_progressive_end(png_structrp png_ptr, png_inforp info_ptr)
+{
+   if (png_ptr == NULL || png_ptr->end_fn == NULL)
+      return;
+
+   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->end_fn(png_ptr, info_ptr);
+   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+}

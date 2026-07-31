@@ -67,6 +67,12 @@ struct png_struct_def
    png_progressive_end_ptr end_fn;
    png_voidp progressive_ptr;
 
+   /* The info structure the client handed to png_process_data, kept so that the
+    * callbacks can be given it.  The library never owns it; it is the client's,
+    * and is only borrowed for the length of one push.
+    */
+   png_inforp progressive_info;
+
    /* User transforms. */
    png_user_transform_ptr read_user_transform_fn;
    png_user_transform_ptr write_user_transform_fn;

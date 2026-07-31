@@ -66,6 +66,15 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
                 channels,
                 colorType
             )
+        },
+        progressiveInfoFn: { owner in
+            spng_c_call_progressive_info(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
+        },
+        progressiveRowFn: { owner, row, number, pass in
+            spng_c_call_progressive_row(owner?.pngStruct, row, number, pass)
+        },
+        progressiveEndFn: { owner in
+            spng_c_call_progressive_end(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
         }
     )
 }

@@ -85,12 +85,25 @@ public struct Host {
     public let writeBytes: Write?
     public let flushBytes: Flush?
 
+    /// The three points a progressive read reports back at: the header is complete, a row is ready,
+    /// and the image has ended.
+    ///
+    /// Absent for a caller that is not driving a progressive read, which is every caller but the C
+    /// boundary — the pure Swift library hands rows back rather than calling out for them.
+    public typealias ProgressiveInfo = @convention(c) (Owner?) -> Void
+    public typealias ProgressiveRow =
+        @convention(c) (Owner?, UnsafeMutablePointer<UInt8>?, UInt32, Int32) -> Void
+
     /// The same as ``userTransform``, for rows on their way into a file.
     ///
     /// A separate entry rather than a direction argument, because the two reach different callbacks: a
     /// client installs one for reading and another for writing, and a structure that did both would be
     /// a structure doing two jobs.
     public let writeUserTransform: UserTransform?
+
+    public let progressiveInfoFn: ProgressiveInfo?
+    public let progressiveRowFn: ProgressiveRow?
+    public let progressiveEndFn: ProgressiveInfo?
 
     public init(
         owner: Owner,
@@ -102,7 +115,10 @@ public struct Host {
         userTransform: UserTransform? = nil,
         writeBytes: Write? = nil,
         flushBytes: Flush? = nil,
-        writeUserTransform: UserTransform? = nil
+        writeUserTransform: UserTransform? = nil,
+        progressiveInfoFn: ProgressiveInfo? = nil,
+        progressiveRowFn: ProgressiveRow? = nil,
+        progressiveEndFn: ProgressiveInfo? = nil
     ) {
         self.owner = owner
         self.allocate = allocate
@@ -114,6 +130,9 @@ public struct Host {
         self.writeBytes = writeBytes
         self.flushBytes = flushBytes
         self.writeUserTransform = writeUserTransform
+        self.progressiveInfoFn = progressiveInfoFn
+        self.progressiveRowFn = progressiveRowFn
+        self.progressiveEndFn = progressiveEndFn
     }
 }
 
@@ -162,5 +181,24 @@ extension Host {
         }
 
         self.warnChunk(self.owner, text, length, chunk.packed)
+    }
+}
+
+
+extension Host {
+    /// The three points a progressive read reports back at.
+    ///
+    /// Nothing on the Swift stack may own anything across these: they are the client's, and a client
+    /// may jump out of any of them.
+    func progressiveInfo() {
+        self.progressiveInfoFn?(self.owner)
+    }
+
+    func progressiveRow(_ row: UnsafeMutablePointer<UInt8>?, row number: UInt32, pass: Int32) {
+        self.progressiveRowFn?(self.owner, row, number, pass)
+    }
+
+    func progressiveEnd() {
+        self.progressiveEndFn?(self.owner)
     }
 }
