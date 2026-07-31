@@ -211,6 +211,23 @@ static int write_file(const char *path, png_structp source, png_infop info, png_
          png_set_eXIf_1(p, i, num_exif, exif);
    }
 
+   {
+      png_charp purpose, units, *params;
+      png_int_32 x0, x1;
+      int type, nparams;
+
+      if (png_get_pCAL(source, info, &purpose, &x0, &x1, &type, &nparams, &units, &params))
+         png_set_pCAL(p, i, purpose, x0, x1, type, nparams, units, params);
+   }
+
+   {
+      png_sPLT_tp palettes;
+      int count = png_get_sPLT(source, info, &palettes);
+
+      if (count > 0)
+         png_set_sPLT(p, i, palettes, count);
+   }
+
    num_texts = png_get_text(source, info, &texts, NULL);
 
    if (num_texts > 0)
@@ -360,6 +377,40 @@ static int dump_file(const char *path)
             printf("exif length=%u:", (unsigned)num_exif);
 
             for (k = 0; k < (int)num_exif && k < 32; k++) printf(" %02x", exif[k]);
+
+            printf("\n");
+         }
+      }
+
+      {
+         png_charp purpose, units, *params;
+         png_int_32 x0, x1;
+         int type, nparams;
+
+         if (png_get_pCAL(p, i, &purpose, &x0, &x1, &type, &nparams, &units, &params))
+         {
+            printf("pcal %s %d %d type=%d units=%s:", purpose, (int)x0, (int)x1, type, units);
+
+            for (k = 0; k < nparams; k++) printf(" %s", params[k]);
+
+            printf("\n");
+         }
+      }
+
+      {
+         png_sPLT_tp palettes;
+         int count = png_get_sPLT(p, i, &palettes);
+         int e;
+
+         for (k = 0; k < count; k++)
+         {
+            printf("splt %s depth=%d entries=%d:", palettes[k].name, palettes[k].depth,
+                   (int)palettes[k].nentries);
+
+            for (e = 0; e < palettes[k].nentries && e < 4; e++)
+               printf(" %u,%u,%u,%u/%u", palettes[k].entries[e].red,
+                      palettes[k].entries[e].green, palettes[k].entries[e].blue,
+                      palettes[k].entries[e].alpha, palettes[k].entries[e].frequency);
 
             printf("\n");
          }

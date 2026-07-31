@@ -308,6 +308,30 @@ def write_metadata() -> list[pathlib.Path]:
         encode(path, 6, 3, 8, kwargs.pop("ct", RGB), rows, 0, **kwargs)
         written.append(path)
 
+    # What the samples measure, for an image that is a set of readings rather than a picture.
+    # Every string is terminated except the last parameter, which runs to the end of the chunk.
+    pcal = chunk(
+        b"pCAL",
+        b"depth\x00" + struct.pack(">iiBB", -100, 5000, 0, 2) + b"metres\x00" + b"1.5\x00-2",
+    )
+
+    # Palettes the file suggests, at both depths the chunk allows, since the depth is what decides
+    # how long an entry is rather than what the numbers mean.
+    splt8 = chunk(
+        b"sPLT",
+        b"eight\x00" + bytes([8]) + b"".join(
+            bytes([k * 7 & 0xFF, k * 13 & 0xFF, k * 29 & 0xFF, 0xFF]) + struct.pack(">H", k + 1)
+            for k in range(4)
+        ),
+    )
+    splt16 = chunk(
+        b"sPLT",
+        b"sixteen\x00" + bytes([16]) + b"".join(
+            struct.pack(">HHHHH", k * 1000, k * 2000, k * 3000, k * 4000, k + 1)
+            for k in range(3)
+        ),
+    )
+
     gama = chunk(b"gAMA", struct.pack(">I", 45455))
     chrm = chunk(b"cHRM", struct.pack(">8I", 31270, 32900, 64000, 33000, 30000, 60000,
                                      15000, 6000))
@@ -329,6 +353,8 @@ def write_metadata() -> list[pathlib.Path]:
                     + zlib.compress(profile_body, 6))
 
     emit("gama", before=gama)
+    emit("pcal", before=pcal)
+    emit("splt", before=splt8 + splt16)
     emit("chrm", before=chrm)
     emit("srgb", before=srgb)
     emit("sbit", before=sbit_rgb)

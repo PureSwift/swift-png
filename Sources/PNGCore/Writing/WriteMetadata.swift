@@ -172,6 +172,16 @@ extension SequentialWriter {
             }
         }
 
+        // What the samples measure, for an image that is a set of readings.
+        if info.isValid(InfoStore.Valid.pcal) {
+            try self.writeCalibration(info, context: context)
+        }
+
+        // The palettes the file suggests, one chunk each.
+        for palette in info.suggestedPalettes {
+            try self.writeSuggestedPalette(palette, context: context)
+        }
+
         if info.isValid(InfoStore.Valid.time) {
             try self.writeTime(info, context: context)
         }
@@ -217,6 +227,104 @@ extension SequentialWriter {
             bytes[name.count] = 0
             bytes[name.count + 1] = info.profileCompression
             Self.copy(body, into: bytes, at: name.count + 2)
+        }
+    }
+
+    /// What the samples measure.
+    ///
+    /// Every string is terminated except the last parameter, which runs to the end of the chunk — so
+    /// the length has to be worked out before anything is written, which is why it is counted first.
+    private func writeCalibration(_ info: InfoStore, context: PngContext) throws {
+        let calibration = info.calibration
+        let purpose = calibration.purpose.bytes
+        let unit = calibration.unit.bytes
+
+        guard purpose.count >= 1 else { return }
+
+        var count = purpose.count + 1 + 8 + 1 + 1 + unit.count + 1
+
+        for index in calibration.parameters.indices {
+            count += calibration.parameters[index].bytes.count
+
+            // Every parameter but the last is followed by a terminator.
+            if index + 1 < calibration.parameters.count { count += 1 }
+        }
+
+        try self.write(.pcal, context: context, count: count) { bytes in
+            var offset = 0
+
+            Self.copy(purpose, into: bytes, at: offset)
+            offset += purpose.count
+            bytes[offset] = 0
+            offset += 1
+
+            Self.put32(bytes, offset, UInt32(bitPattern: calibration.x0))
+            Self.put32(bytes, offset + 4, UInt32(bitPattern: calibration.x1))
+            offset += 8
+
+            bytes[offset] = calibration.equation
+            bytes[offset + 1] = UInt8(calibration.parameters.count)
+            offset += 2
+
+            Self.copy(unit, into: bytes, at: offset)
+            offset += unit.count
+            bytes[offset] = 0
+            offset += 1
+
+            for index in calibration.parameters.indices {
+                let parameter = calibration.parameters[index].bytes
+
+                Self.copy(parameter, into: bytes, at: offset)
+                offset += parameter.count
+
+                if index + 1 < calibration.parameters.count {
+                    bytes[offset] = 0
+                    offset += 1
+                }
+            }
+        }
+    }
+
+    /// One palette the file suggests.
+    ///
+    /// The entries are held widened whatever the depth says, so writing an eight bit one is narrowing
+    /// them again — the depth is what the file means by them, not how this library keeps them.
+    private func writeSuggestedPalette(
+        _ palette: SuggestedPalette,
+        context: PngContext
+    ) throws {
+        let name = palette.name.bytes
+        let entries = palette.entries.elements
+
+        guard name.count >= 1 else { return }
+
+        let entrySize = palette.depth == 8 ? 6 : 10
+        let count = name.count + 1 + 1 + entries.count * entrySize
+
+        try self.write(.splt, context: context, count: count) { bytes in
+            Self.copy(name, into: bytes, at: 0)
+            bytes[name.count] = 0
+            bytes[name.count + 1] = palette.depth
+
+            var offset = name.count + 2
+
+            for entry in entries {
+                if palette.depth == 8 {
+                    bytes[offset] = UInt8(truncatingIfNeeded: entry.red)
+                    bytes[offset + 1] = UInt8(truncatingIfNeeded: entry.green)
+                    bytes[offset + 2] = UInt8(truncatingIfNeeded: entry.blue)
+                    bytes[offset + 3] = UInt8(truncatingIfNeeded: entry.alpha)
+                    Self.put16(bytes, offset + 4, entry.frequency)
+                } else {
+                    Self.put16(bytes, offset, entry.red)
+                    Self.put16(bytes, offset + 2, entry.green)
+                    Self.put16(bytes, offset + 4, entry.blue)
+                    Self.put16(bytes, offset + 6, entry.alpha)
+                    Self.put16(bytes, offset + 8, entry.frequency)
+                }
+
+                offset += entrySize
+            }
         }
     }
 

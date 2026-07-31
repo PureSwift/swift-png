@@ -38,18 +38,6 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_
    png_error(png_ptr, "png_free_data is not implemented");
 }
 
-png_uint_32 PNGAPI
-png_get_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_charp *purpose, png_int_32 *X0, png_int_32 *X1, int *type, int *nparams, png_charp *units, png_charpp *params)
-{
-   png_error(png_ptr, "png_get_pCAL is not implemented");
-}
-
-int PNGAPI
-png_get_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_sPLT_tpp entries)
-{
-   png_error(png_ptr, "png_get_sPLT is not implemented");
-}
-
 int PNGAPI
 png_get_unknown_chunks(png_const_structrp png_ptr, png_inforp info_ptr, png_unknown_chunkpp entries)
 {
@@ -81,12 +69,6 @@ png_set_keep_unknown_chunks(png_structrp png_ptr, int keep, png_const_bytep chun
 }
 
 void PNGAPI
-png_set_pCAL(png_const_structrp png_ptr, png_inforp info_ptr, png_const_charp purpose, png_int_32 X0, png_int_32 X1, int type, int nparams, png_const_charp units, png_charpp params)
-{
-   png_error(png_ptr, "png_set_pCAL is not implemented");
-}
-
-void PNGAPI
 png_set_quantize(png_structrp png_ptr, png_colorp palette, int num_palette, int maximum_colors, png_const_uint_16p histogram, int full_quantize)
 {
    png_error(png_ptr, "png_set_quantize is not implemented");
@@ -96,12 +78,6 @@ void PNGAPI
 png_set_read_user_chunk_fn(png_structrp png_ptr, png_voidp user_chunk_ptr, png_user_chunk_ptr read_user_chunk_fn)
 {
    png_error(png_ptr, "png_set_read_user_chunk_fn is not implemented");
-}
-
-void PNGAPI
-png_set_sPLT(png_const_structrp png_ptr, png_inforp info_ptr, png_const_sPLT_tp entries, int nentries)
-{
-   png_error(png_ptr, "png_set_sPLT is not implemented");
 }
 
 void PNGAPI
