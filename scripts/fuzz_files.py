@@ -13,10 +13,18 @@ The seed is fixed, so a failure here is one anyone can reproduce by running the 
 that reads differently is kept, under a name saying which image it came from, so that the case can be
 looked at on its own afterwards.
 
-Not part of the suite yet, because it does not pass yet.  Roughly two broken files in three read the
-same way through both libraries; the rest are the error corpus's remaining work, and each one it finds
-is a fault to fix or a difference to record rather than a reason to loosen this.  It joins the suite
-when it is clean.
+Not part of the suite yet, because it does not pass yet.  At the last run two hundred and six of two
+hundred and forty broken files read the same way; of the rest, twenty four first part on an error line
+and ten on a warning.  Each one it finds is a fault to fix or a difference to record rather than a
+reason to loosen this, and it joins the suite when it is clean.
+
+What it is pointing at next: a byte changed inside the image data.  The reference calls that a
+checksum that does not match, and this library says the image was given more data than it needed —
+both are true, and the question is which is noticed first.  The surplus is found here while the rows
+are still being decompressed, and the chunk's checksum is not looked at until the chunk ends; the
+reference reaches the checksum first.  Where exactly it does that is worth establishing by probing
+before anything is moved, since the same remark is already known to be right on its own when the
+checksum is sound.
 
 usage: fuzz_files.py <ours> <reference> <corpus> [rounds]
 """
