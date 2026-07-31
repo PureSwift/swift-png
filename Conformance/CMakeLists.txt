@@ -166,6 +166,28 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:scaleprobe>
                 $<TARGET_FILE:scaleprobe_reference>)
 
+    # The progressive reader, fed at several block sizes: a decoder that only works when whole chunks
+    # arrive at once is not a progressive decoder.
+    add_executable(pngprog pngprog.c)
+    target_link_libraries(pngprog PRIVATE png16)
+
+    add_executable(pngprog_reference pngprog.c)
+    target_include_directories(pngprog_reference BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngprog_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngprog BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(pngprog spng_corpus)
+
+    add_test(NAME differential_progressive
+        COMMAND ${SPNG_SCRIPTS}/compare_progressive.sh
+                $<TARGET_FILE:pngprog>
+                $<TARGET_FILE:pngprog_reference>
+                ${SPNG_CORPUS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-progressive-differences.txt)
+
     add_executable(pngroundtrip pngroundtrip.c)
     target_link_libraries(pngroundtrip PRIVATE png16)
 

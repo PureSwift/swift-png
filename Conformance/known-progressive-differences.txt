@@ -1,0 +1,13 @@
+# Progressive decodes the comparison reports but does not fail on.
+#
+# Same shape as the files next door, and the same reason for existing: a difference that has been
+# examined is worth recording, and a list that mixed those with work not yet done would let the second
+# look like the first.
+#
+# Format: <image> <reason>
+
+meta-palette-hist.png The reference's reader refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+
+# -- this library's own gaps, still to be closed ------------------------------
+
+bad-corrupt-zlib.png Not implemented here: the two libraries agree on what happens to a file whose compressed image data is corrupt — the client is warned, no rows are produced, and the walk carries on to the end — but not on what to call it. The reference summarises the failure as an ADLER32 mismatch and adds a second warning about the data left over; this library reports what the decompressor said. Closing it means finding the reference's mapping from a decompressor's fault to its own words, which is worth doing with the whole error corpus rather than one file.
