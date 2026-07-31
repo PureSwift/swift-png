@@ -135,6 +135,13 @@ public final class PngContext {
         if let chunk { self.ioChunkName = chunk }
     }
 
+    /// What a checksum that does not match should mean, asked separately for the two kinds of chunk.
+    ///
+    /// Separately because the answers differ: a critical chunk with a bad checksum is a file to give
+    /// up on, and an ancillary one is a chunk to drop.
+    public var criticalCrcAction: CrcAction = .errorQuit
+    public var ancillaryCrcAction: CrcAction = .warnDiscard
+
     /// What the client asked to be done with chunks this library does not know.
     public var unknownChunks = UnknownChunkPolicy()
 
