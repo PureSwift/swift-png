@@ -102,25 +102,27 @@ public struct GammaState: Sendable {
 /// does it — and since the table is exhaustive, agreeing with it on all 256 entries is the whole of
 /// agreeing on eight bit gamma.
 public struct GammaTable {
-    public private(set) var values = [UInt8](repeating: 0, count: 256)
+    public private(set) var values: [UInt8]
+
+    /// The identity curve, shared: every context starts with it, so building it fresh each time —
+    /// let alone through two hundred odd calls to `pow`, as this once did — made creating a context
+    /// the most expensive thing a small decode did.  Handing out the one copy is a retain.
+    private static let identity = [UInt8](0 ... 255)
 
     /// Builds the table for an exponent given in the fixed-point scale.
     public init(exponent: FixedPoint) {
-        // An exponent of one is the identity, and it is what every context starts with: paying two
-        // hundred odd calls to `pow` to tabulate it made creating a context the most expensive
-        // thing a small decode did.
         if exponent == GammaState.one {
-            for value in 0 ..< 256 {
-                self.values[value] = UInt8(value)
-            }
-
+            self.values = Self.identity
             return
         }
 
         let gamma = Double(exponent) * 1e-5
 
-        for value in 0 ..< 256 {
-            self.values[value] = Self.correct8(UInt8(value), gamma: gamma)
+        self.values = [UInt8](unsafeUninitializedCapacity: 256) { buffer, count in
+            for value in 0 ..< 256 {
+                buffer[value] = Self.correct8(UInt8(value), gamma: gamma)
+            }
+            count = 256
         }
     }
 
