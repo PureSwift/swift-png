@@ -47,7 +47,20 @@ static void free_rows(png_bytepp rows, png_uint_32 height)
  * Nothing is transformed: the rows are whatever the file stores, so what is written back out is the
  * same image rather than a rendering of it.
  */
-static int read_file(const char *path, png_structp *pp, png_infop *ip, png_bytepp *rows)
+/* Swallows what a read says about the file.
+ *
+ * Only for reading the *source*: what the source provokes is the decode comparison's business, and
+ * this program compares a full run against runs that only read a written file — so a diagnostic from
+ * the source would appear in one and not the others and look like a difference.
+ */
+static void PNGCBAPI say_nothing(png_structp p, png_const_charp message)
+{
+   (void)p;
+   (void)message;
+}
+
+static int read_file(const char *path, png_structp *pp, png_infop *ip, png_bytepp *rows,
+                     int quiet)
 {
    FILE *fp = fopen(path, "rb");
    png_structp p;
@@ -58,7 +71,8 @@ static int read_file(const char *path, png_structp *pp, png_infop *ip, png_bytep
 
    if (fp == NULL) return 1;
 
-   p = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+   p = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL,
+                              quiet ? say_nothing : NULL);
    i = png_create_info_struct(p);
 
    if (setjmp(png_jmpbuf(p)))
@@ -273,7 +287,7 @@ static int dump_file(const char *path)
    png_colorp palette;
    int entries;
 
-   if (read_file(path, &p, &i, &rows) != 0) { printf("read error\n"); return 1; }
+   if (read_file(path, &p, &i, &rows, 0) != 0) { printf("read error\n"); return 1; }
 
    height = png_get_image_height(p, i);
 
@@ -486,7 +500,7 @@ int main(int argc, char **argv)
    if (strcmp(argv[2], "dump") == 0)
       return dump_file(argv[1]);
 
-   if (read_file(argv[1], &p, &i, &rows) != 0) { printf("read error\n"); return 1; }
+   if (read_file(argv[1], &p, &i, &rows, 1) != 0) { printf("read error\n"); return 1; }
 
    height = png_get_image_height(p, i);
 
