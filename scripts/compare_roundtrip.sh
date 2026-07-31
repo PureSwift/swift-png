@@ -16,7 +16,9 @@
 #
 # Images that are meant to be unreadable are skipped.  A file that cannot be read cannot be written
 # back, and what a library does with a broken file is the error comparison's business rather than
-# this one's.
+# this one's.  So are the ones a writer is required to refuse: they read perfectly well and are then
+# not writable at all, which is a fact about writing them rather than about what survives a round
+# trip.
 #
 # usage: compare_roundtrip.sh <ours> <reference> <corpus> [known-differences-file]
 
@@ -43,9 +45,14 @@ used=""
 for path in "$corpus"/*.png; do
     image=$(basename "$path")
 
-    case "$image" in damaged-*|bad-*) continue ;; esac
+    case "$image" in damaged-*|bad-*|over-*) continue ;; esac
 
     count=$((count + 1))
+
+    # Cleared first, so that a write which fails leaves nothing behind: without this the next
+    # comparison would be made against whichever file the previous image left in place, and would
+    # pass or fail for reasons that have nothing to do with the image being tested.
+    rm -f "$work/reference.png" "$work/ours.png"
 
     "$reference" "$path" "$work/reference.png" > "$work/reference" 2>&1 \
         || echo "exit $?" >> "$work/reference"
