@@ -63,7 +63,7 @@ extension InfoStore {
         }
     }
 
-    private func separator(
+    func separator(
         in payload: UnsafeBufferPointer<UInt8>,
         from start: Int
     ) -> Int? {
@@ -75,7 +75,7 @@ extension InfoStore {
         return nil
     }
 
-    private func slice(
+    func slice(
         _ payload: UnsafeBufferPointer<UInt8>,
         _ range: Range<Int>
     ) -> UnsafeBufferPointer<UInt8> {

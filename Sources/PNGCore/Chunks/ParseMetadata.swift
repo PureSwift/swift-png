@@ -476,3 +476,146 @@ extension InfoStore {
         self.markValid(Valid.exif)
     }
 }
+
+
+extension InfoStore {
+    /// Reads what the samples measure.
+    ///
+    /// A keyword, two sample values, an equation number, a count, a unit, and that many parameters —
+    /// the last of them not terminated, because the chunk's length says where it ends.
+    func parseCalibration(_ payload: UnsafeBufferPointer<UInt8>) throws {
+        guard let purposeEnd = self.separator(in: payload, from: 0),
+              purposeEnd + 10 <= payload.count else {
+            throw Diagnostic("malformed", severity: .warning, chunk: .pcal)
+        }
+
+        let purpose = self.slice(payload, 0 ..< purposeEnd)
+        var reader = ByteReader(self.slice(payload, (purposeEnd + 1) ..< payload.count))
+
+        let x0 = Int32(bitPattern: try reader.readUInt32())
+        let x1 = Int32(bitPattern: try reader.readUInt32())
+        let equation = try reader.readUInt8()
+        let count = try reader.readUInt8()
+
+        guard let kind = Calibration.Equation(rawValue: equation) else {
+            throw Diagnostic("Invalid pCAL equation type", severity: .warning, chunk: .pcal)
+        }
+
+        guard Int(count) == kind.parameterCount else {
+            throw Diagnostic("Invalid pCAL parameter count", severity: .warning, chunk: .pcal)
+        }
+
+        // What is left after the fixed fields: the unit and the parameters, each terminated except the
+        // last, which runs to the end.
+        let rest = self.slice(payload, (purposeEnd + 1 + 10) ..< payload.count)
+
+        guard let unitEnd = self.separator(in: rest, from: 0) else {
+            throw Diagnostic("malformed", severity: .warning, chunk: .pcal)
+        }
+
+        var calibration = Calibration()
+
+        calibration.x0 = x0
+        calibration.x1 = x1
+        calibration.equation = equation
+
+        do {
+            calibration.purpose = try TextStorage.copying(purpose, host: self.host)
+            calibration.unit = try TextStorage.copying(
+                self.slice(rest, 0 ..< unitEnd),
+                host: self.host
+            )
+
+            var offset = unitEnd + 1
+
+            for index in 0 ..< Int(count) {
+                let end = index + 1 < Int(count)
+                    ? (self.separator(in: rest, from: offset) ?? rest.count)
+                    : rest.count
+
+                calibration.parameters.append(
+                    try TextStorage.copying(self.slice(rest, offset ..< end), host: self.host)
+                )
+
+                offset = end + 1
+            }
+        } catch {
+            calibration.deallocate(host: self.host)
+            throw error
+        }
+
+        self.calibration.deallocate(host: self.host)
+        self.calibration = calibration
+        self.markValid(Valid.pcal)
+    }
+
+    /// Reads one palette the file suggests.
+    ///
+    /// A name, a depth, and entries of five numbers each — narrower at eight bits than at sixteen, so
+    /// the depth is what decides how long an entry is.
+    func parseSuggestedPalette(_ payload: UnsafeBufferPointer<UInt8>) throws {
+        guard let nameEnd = self.separator(in: payload, from: 0), nameEnd + 1 < payload.count else {
+            throw Diagnostic("malformed", severity: .warning, chunk: .splt)
+        }
+
+        let name = self.slice(payload, 0 ..< nameEnd)
+        let depth = payload[nameEnd + 1]
+
+        guard depth == 8 || depth == 16 else {
+            throw Diagnostic("Invalid sPLT sample depth", severity: .warning, chunk: .splt)
+        }
+
+        let entrySize = depth == 8 ? 6 : 10
+        let entries = self.slice(payload, (nameEnd + 2) ..< payload.count)
+
+        guard entries.count % entrySize == 0 else {
+            throw Diagnostic("Invalid sPLT data length", severity: .warning, chunk: .splt)
+        }
+
+        var palette = SuggestedPalette()
+        let count = entries.count / entrySize
+
+        do {
+            palette.name = try TextStorage.copying(name, host: self.host)
+            palette.depth = depth
+
+            if count > 0 {
+                palette.entries = try EscapingBuffer<png_sPLT_entry_layout>.allocated(
+                    count,
+                    host: self.host
+                )
+
+                for index in 0 ..< count {
+                    let base = index * entrySize
+                    var entry = png_sPLT_entry_layout()
+
+                    func wide(_ offset: Int) -> UInt16 {
+                        UInt16(entries[base + offset]) << 8 | UInt16(entries[base + offset + 1])
+                    }
+
+                    if depth == 8 {
+                        entry.red = UInt16(entries[base])
+                        entry.green = UInt16(entries[base + 1])
+                        entry.blue = UInt16(entries[base + 2])
+                        entry.alpha = UInt16(entries[base + 3])
+                        entry.frequency = wide(4)
+                    } else {
+                        entry.red = wide(0)
+                        entry.green = wide(2)
+                        entry.blue = wide(4)
+                        entry.alpha = wide(6)
+                        entry.frequency = wide(8)
+                    }
+
+                    palette.entries.elements[index] = entry
+                }
+            }
+        } catch {
+            palette.deallocate(host: self.host)
+            throw error
+        }
+
+        self.suggestedPalettes.append(palette)
+        self.markValid(Valid.splt)
+    }
+}

@@ -17,7 +17,8 @@ extension SequentialReader {
              .trns, .gama, .chrm, .srgb, .iccp, .sbit, .bkgd, .hist,
              .cicp, .clli, .mdcv,
              .text, .ztxt, .itxt,
-             .phys, .offs, .scal, .time, .exif:
+             .phys, .offs, .scal, .time, .exif,
+             .pcal, .splt:
             return true
         default:
             return false
@@ -57,6 +58,9 @@ extension SequentialReader {
             case .scal: try info.parseScale(payload)
             case .time: try info.parseTimestamp(payload)
             case .exif: try info.parseExif(payload)
+
+            case .pcal: try info.parseCalibration(payload)
+            case .splt: try info.parseSuggestedPalette(payload)
 
             case .text: try info.parseText(payload)
             case .ztxt: try info.parseCompressedText(payload)
