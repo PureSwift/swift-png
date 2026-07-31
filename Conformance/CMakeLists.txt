@@ -167,6 +167,26 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:scaleprobe>
                 $<TARGET_FILE:scaleprobe_reference>)
 
+    # Fitting an image into fewer colours than it has.  Generated palettes rather than corpus images:
+    # what the reduction does depends on how the colours are spread, not on what the picture is of.
+    add_executable(pngquantize pngquantize.c)
+    target_link_libraries(pngquantize PRIVATE png16)
+
+    add_executable(pngquantize_reference pngquantize.c)
+    target_include_directories(pngquantize_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngquantize_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngquantize BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_test(NAME quantize
+        COMMAND ${SPNG_SCRIPTS}/compare_output.sh
+                $<TARGET_FILE:pngquantize>
+                $<TARGET_FILE:pngquantize_reference>
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-quantize-differences.txt)
+
     # The progressive reader, fed at several block sizes: a decoder that only works when whole chunks
     # arrive at once is not a progressive decoder.
     add_executable(pngprog pngprog.c)
