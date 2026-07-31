@@ -157,10 +157,23 @@ png_get_mem_ptr(png_const_structrp png_ptr)
    return png_ptr->mem_ptr;
 }
 
+/* The engine's own allocations, which report a failure by returning rather than by
+ * jumping.
+ *
+ * png_malloc cannot be used for these.  It reports a failure with png_error, and a
+ * client's error handler is entitled not to return — so the jump would leave from
+ * inside the allocator, skipping every Swift frame between there and the client's
+ * setjmp along with whatever those frames were holding.  A half-built text entry is
+ * exactly that: its keyword is allocated, its value is not, and the code that would
+ * free the keyword never runs.
+ *
+ * Returning null instead lets the engine unwind normally, free what it has, and
+ * report the failure from the boundary where nothing is live.
+ */
 png_voidp
 spng_c_malloc(png_const_structrp png_ptr, png_alloc_size_t size)
 {
-   return png_malloc(png_ptr, size);
+   return spng_malloc_base(png_ptr, size);
 }
 
 png_voidp
