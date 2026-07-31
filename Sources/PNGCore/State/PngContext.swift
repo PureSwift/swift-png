@@ -545,12 +545,15 @@ public final class PngContext {
                 return result
             }
 
-            let table = GammaTable(exponent: exponent)
+            // The same arithmetic the eight bit table is built from, applied to the four samples
+            // here rather than through a table: tabulating all two hundred and fifty six to read
+            // four made every update of the description pay for a blend that mostly never happens.
+            let gamma = Double(exponent) * 1e-5
 
-            result.red = UInt16(table.values[Int(color.red & 0xFF)])
-            result.green = UInt16(table.values[Int(color.green & 0xFF)])
-            result.blue = UInt16(table.values[Int(color.blue & 0xFF)])
-            result.gray = UInt16(table.values[Int(color.gray & 0xFF)])
+            result.red = UInt16(GammaTable.correct8(UInt8(color.red & 0xFF), gamma: gamma))
+            result.green = UInt16(GammaTable.correct8(UInt8(color.green & 0xFF), gamma: gamma))
+            result.blue = UInt16(GammaTable.correct8(UInt8(color.blue & 0xFF), gamma: gamma))
+            result.gray = UInt16(GammaTable.correct8(UInt8(color.gray & 0xFF), gamma: gamma))
 
             return result
         }
