@@ -70,6 +70,13 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
         userChunk: { owner, name, data, size in
             spng_c_call_user_chunk(owner?.pngStruct, name, data, size_t(size))
         },
+        benign: { owner, message, length in
+            spng_c_benign_error_bytes(
+                owner?.pngStruct,
+                UnsafeRawPointer(message)?.assumingMemoryBound(to: CChar.self),
+                size_t(length)
+            )
+        },
         progressiveInfoFn: { owner in
             spng_c_call_progressive_info(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
         },
