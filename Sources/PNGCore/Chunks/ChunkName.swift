@@ -34,6 +34,23 @@ public struct ChunkName: Hashable, Sendable {
         self.packed & 0x2000_0000 != 0
     }
 
+    /// Whether all four bytes are letters, which is what a chunk type is made of.
+    ///
+    /// Asked of every chunk as its header arrives.  The four bits that give a chunk its properties
+    /// are the case bits of its letters, so a byte outside the alphabet does not describe a chunk
+    /// this library could reason about even to ignore it.
+    public var isWellFormed: Bool {
+        for shift in stride(from: 24, through: 0, by: -8) {
+            let byte = UInt8(truncatingIfNeeded: self.packed >> UInt32(shift))
+
+            let isLetter = (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A)
+
+            if !isLetter { return false }
+        }
+
+        return true
+    }
+
     /// Whether the chunk type is registered in the specification, as opposed to
     /// application-private. Encoded as a lowercase second letter.
     public var isPrivate: Bool {
