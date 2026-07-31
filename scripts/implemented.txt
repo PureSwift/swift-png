@@ -236,3 +236,4 @@ png_process_data
 png_process_data_pause
 png_process_data_skip
 png_progressive_combine_row
+png_read_png

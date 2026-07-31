@@ -214,12 +214,6 @@ png_permit_mng_features(png_structrp png_ptr, png_uint_32 mng_features_permitted
    png_error(png_ptr, "png_permit_mng_features is not implemented");
 }
 
-void PNGAPI
-png_read_png(png_structrp png_ptr, png_inforp info_ptr, int transforms, png_voidp params)
-{
-   png_error(png_ptr, "png_read_png is not implemented");
-}
-
 int PNGAPI
 png_reset_zstream(png_structrp png_ptr)
 {

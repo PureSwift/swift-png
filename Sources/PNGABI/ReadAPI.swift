@@ -213,3 +213,80 @@ public func png_progressive_combine_row(
 
     context.combineRow(into: old_row, from: new_row)
 }
+
+// -- reading a whole file in one call ----------------------------------------
+
+/// Reads an entire image, allocating the rows to hold it.
+///
+/// The convenience form, for a client that wants the pixels and has no interest in how they arrive.
+/// What it gives up is the streaming: the whole image is in memory at once, which for a large one is
+/// the difference between a decoder that works and one that does not.
+///
+/// The rows belong to the library and are released with the structure that holds them.
+@c @implementation
+public func png_read_png(
+    _ png_ptr: png_structrp?,
+    _ info_ptr: png_inforp?,
+    _ transforms: Int32,
+    _ params: png_voidp?
+) {
+    attempt(png_ptr, info_ptr) { context, info in
+        png_read_info(png_ptr, info_ptr)
+
+        // The requests are made here rather than by the client, which is the whole point of the call:
+        // a client that wanted to make them itself would be using the ordinary sequence.
+        applyReadTransforms(png_ptr, info_ptr, transforms)
+
+        // Turned on here rather than left to the client, because the client is not reading the rows:
+        // the whole image is being assembled on its behalf, and a pass's narrow rows would not fit
+        // the array it is about to be handed.
+        _ = png_set_interlace_handling(png_ptr)
+
+        png_read_update_info(png_ptr, info_ptr)
+
+        try info.allocateRows(rowBytes: context.transformedShape?.rowBytes ?? info.rowBytes)
+
+        guard let rows = info.rows else { return }
+
+        try context.readImage(rows: rows)
+
+        png_read_end(png_ptr, info_ptr)
+    }
+}
+
+/// Turns the bits `png_read_png` takes into the requests they stand for.
+///
+/// Spelled out one at a time rather than driven by a table, because each is a different call with
+/// different arguments — and because the two that are not simply "do this" are worth seeing: the
+/// shift needs the significant bits the file declared, and asking for both ways of narrowing sixteen
+/// bit samples is a choice the resolution below makes rather than one made here.
+private func applyReadTransforms(
+    _ png_ptr: png_structrp?,
+    _ info_ptr: png_inforp?,
+    _ transforms: Int32
+) {
+    if transforms & PNG_TRANSFORM_SCALE_16 != 0 { png_set_scale_16(png_ptr) }
+    if transforms & PNG_TRANSFORM_STRIP_16 != 0 { png_set_strip_16(png_ptr) }
+    if transforms & PNG_TRANSFORM_STRIP_ALPHA != 0 { png_set_strip_alpha(png_ptr) }
+    if transforms & PNG_TRANSFORM_PACKING != 0 { png_set_packing(png_ptr) }
+    if transforms & PNG_TRANSFORM_PACKSWAP != 0 { png_set_packswap(png_ptr) }
+    if transforms & PNG_TRANSFORM_EXPAND != 0 { png_set_expand(png_ptr) }
+    if transforms & PNG_TRANSFORM_INVERT_MONO != 0 { png_set_invert_mono(png_ptr) }
+
+    // Only when the file said what its significant bits were: without that there is nothing to shift
+    // by, and the reference asks for the shift only when it has an answer.
+    if transforms & PNG_TRANSFORM_SHIFT != 0 {
+        var bits: png_color_8p?
+
+        if png_get_sBIT(png_ptr, info_ptr, &bits) != 0, let bits {
+            png_set_shift(png_ptr, bits)
+        }
+    }
+
+    if transforms & PNG_TRANSFORM_BGR != 0 { png_set_bgr(png_ptr) }
+    if transforms & PNG_TRANSFORM_SWAP_ALPHA != 0 { png_set_swap_alpha(png_ptr) }
+    if transforms & PNG_TRANSFORM_SWAP_ENDIAN != 0 { png_set_swap(png_ptr) }
+    if transforms & PNG_TRANSFORM_INVERT_ALPHA != 0 { png_set_invert_alpha(png_ptr) }
+    if transforms & PNG_TRANSFORM_GRAY_TO_RGB != 0 { png_set_gray_to_rgb(png_ptr) }
+    if transforms & PNG_TRANSFORM_EXPAND_16 != 0 { png_set_expand_16(png_ptr) }
+}
