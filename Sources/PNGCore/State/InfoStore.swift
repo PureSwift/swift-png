@@ -93,6 +93,13 @@ public final class InfoStore {
         return (width, height)
     }
 
+    /// The chunks kept because a client asked for them.
+    ///
+    /// A list, plus the contiguous array the accessor hands back, for the same reason the suggested
+    /// palettes have both: the descriptions grow one at a time and the client reads them all at once.
+    public var unknownChunks: [UnknownChunk] = []
+    public var unknownChunkArray = EscapingBuffer<png_unknown_chunk_layout>()
+
     /// What the samples measure, when the file says they measure something.
     public var calibration = Calibration()
 
@@ -155,6 +162,14 @@ public final class InfoStore {
         // Cleared as well as freed, which every field here does and which is not tidiness: this runs
         // once per structure in the ordinary case and more than once when a client destroys one it has
         // already emptied, so a field that still held its old pointer would be freed twice.
+        for chunk in self.unknownChunks {
+            chunk.deallocate(host: self.host)
+        }
+
+        self.unknownChunks = []
+        self.unknownChunkArray.deallocate(host: self.host)
+        self.unknownChunkArray = EscapingBuffer()
+
         self.calibration.deallocate(host: self.host)
         self.calibration = Calibration()
 
@@ -404,6 +419,30 @@ extension InfoStore {
         }
     }
 
+    /// The same for the chunks kept as unknown.
+    public func buildUnknownChunkArray() throws {
+        let count = self.unknownChunks.count
+
+        self.unknownChunkArray.deallocate(host: self.host)
+        self.unknownChunkArray = .init()
+
+        guard count > 0 else { return }
+
+        self.unknownChunkArray = try .allocated(count, host: self.host)
+
+        for index in 0 ..< count {
+            var entry = png_unknown_chunk_layout()
+            let bytes = self.unknownChunks[index].name.bytes
+
+            entry.name = (bytes.0, bytes.1, bytes.2, bytes.3, 0)
+            entry.data = self.unknownChunks[index].data.address
+            entry.size = self.unknownChunks[index].data.count
+            entry.location = self.unknownChunks[index].location
+
+            self.unknownChunkArray.elements[index] = entry
+        }
+    }
+
     /// The same for the suggested palettes, which a client reads as one contiguous array.
     public func buildSuggestedPaletteArray() throws {
         let count = self.suggestedPalettes.count
@@ -446,6 +485,14 @@ extension InfoStore {
         // Cleared as well as freed, which every field here does and which is not tidiness: this runs
         // once per structure in the ordinary case and more than once when a client destroys one it has
         // already emptied, so a field that still held its old pointer would be freed twice.
+        for chunk in self.unknownChunks {
+            chunk.deallocate(host: self.host)
+        }
+
+        self.unknownChunks = []
+        self.unknownChunkArray.deallocate(host: self.host)
+        self.unknownChunkArray = EscapingBuffer()
+
         self.calibration.deallocate(host: self.host)
         self.calibration = Calibration()
 

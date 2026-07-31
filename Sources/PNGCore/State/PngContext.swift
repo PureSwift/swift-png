@@ -135,6 +135,15 @@ public final class PngContext {
         if let chunk { self.ioChunkName = chunk }
     }
 
+    /// What the client asked to be done with chunks this library does not know.
+    public var unknownChunks = UnknownChunkPolicy()
+
+    /// Whether the client installed a handler for them.
+    ///
+    /// Separate from the seam's own entry, which the C boundary always fills in: what matters is
+    /// whether the *client* asked for one, since that is what says it cares about these chunks.
+    public var hasUserChunkCallback = false
+
     /// The ceilings a decoder will not go past.
     public var limits = DecodeLimits()
 
@@ -757,6 +766,7 @@ public final class PngContext {
         }
 
         try self.writer.writeAfterPalette(info, context: self)
+        try self.writer.writeUnknown(info, afterImageData: false, context: self)
         try self.writer.writeTextBeforeRows(info, context: self)
     }
 

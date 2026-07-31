@@ -284,3 +284,12 @@ png_set_pCAL
 png_get_pCAL
 png_set_sPLT
 png_get_sPLT
+
+# Sources/PNGABI/UnknownChunkAPI.swift
+png_set_keep_unknown_chunks
+png_handle_as_unknown
+png_set_read_user_chunk_fn
+png_get_user_chunk_ptr
+png_get_unknown_chunks
+png_set_unknown_chunks
+png_set_unknown_chunk_location

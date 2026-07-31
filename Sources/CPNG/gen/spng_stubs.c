@@ -38,24 +38,6 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 free_
    png_error(png_ptr, "png_free_data is not implemented");
 }
 
-int PNGAPI
-png_get_unknown_chunks(png_const_structrp png_ptr, png_inforp info_ptr, png_unknown_chunkpp entries)
-{
-   png_error(png_ptr, "png_get_unknown_chunks is not implemented");
-}
-
-png_voidp PNGAPI
-png_get_user_chunk_ptr(png_const_structrp png_ptr)
-{
-   png_error(png_ptr, "png_get_user_chunk_ptr is not implemented");
-}
-
-int PNGAPI
-png_handle_as_unknown(png_const_structrp png_ptr, png_const_bytep chunk_name)
-{
-   png_error(png_ptr, "png_handle_as_unknown is not implemented");
-}
-
 void PNGAPI
 png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
 {
@@ -63,31 +45,7 @@ png_set_crc_action(png_structrp png_ptr, int crit_action, int ancil_action)
 }
 
 void PNGAPI
-png_set_keep_unknown_chunks(png_structrp png_ptr, int keep, png_const_bytep chunk_list, int num_chunks)
-{
-   png_error(png_ptr, "png_set_keep_unknown_chunks is not implemented");
-}
-
-void PNGAPI
 png_set_quantize(png_structrp png_ptr, png_colorp palette, int num_palette, int maximum_colors, png_const_uint_16p histogram, int full_quantize)
 {
    png_error(png_ptr, "png_set_quantize is not implemented");
-}
-
-void PNGAPI
-png_set_read_user_chunk_fn(png_structrp png_ptr, png_voidp user_chunk_ptr, png_user_chunk_ptr read_user_chunk_fn)
-{
-   png_error(png_ptr, "png_set_read_user_chunk_fn is not implemented");
-}
-
-void PNGAPI
-png_set_unknown_chunk_location(png_const_structrp png_ptr, png_inforp info_ptr, int chunk, int location)
-{
-   png_error(png_ptr, "png_set_unknown_chunk_location is not implemented");
-}
-
-void PNGAPI
-png_set_unknown_chunks(png_const_structrp png_ptr, png_inforp info_ptr, png_const_unknown_chunkp unknowns, int num_unknowns)
-{
-   png_error(png_ptr, "png_set_unknown_chunks is not implemented");
 }
