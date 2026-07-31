@@ -111,6 +111,9 @@ int spng_swift_image_read_header(png_imagep image, png_controlp control);
 int spng_swift_image_finish_read(png_imagep image, png_controlp control,
     png_const_colorp background, void *buffer, png_int_32 row_stride,
     void *colormap);
+int spng_swift_image_write(png_imagep image, png_controlp control,
+    const void *buffer, png_int_32 row_stride, int convert_to_8_bit,
+    const void *colormap);
 
 /* Non-zero when a client callback is on the stack; debug re-entrancy checks
  * use it to catch illegal nested API calls.

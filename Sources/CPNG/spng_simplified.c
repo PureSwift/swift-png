@@ -318,3 +318,201 @@ png_image_free(png_imagep image)
 {
    spng_c_image_free(image);
 }
+
+
+/* -- writing ---------------------------------------------------------------
+ *
+ * The same cage the other way round.  A client describes the image it holds and hands over the
+ * pixels; everything about how they become a file is the library's.
+ */
+
+/* `used` comes back with how many bytes the file came to, taken before the control block goes away:
+ * the caller cannot read it afterwards, because afterwards there is nothing to read.
+ */
+static int
+spng_image_write(png_imagep image, const void *buffer, png_int_32 row_stride,
+    int convert_to_8_bit, const void *colormap, size_t *used)
+{
+   png_controlp control = image->opaque;
+
+   if (buffer == NULL)
+   {
+      spng_image_record(image, "png_image_write: no buffer", PNG_IMAGE_ERROR);
+      spng_c_image_free(image);
+      return 0;
+   }
+
+   if (setjmp(control->jmpbuf) != 0)
+   {
+      spng_c_image_free(image);
+      return 0;
+   }
+
+   {
+      int result = spng_swift_image_write(image, control, buffer, row_stride,
+                                          convert_to_8_bit, colormap);
+
+      if (used != NULL)
+         *used = control->out_used;
+
+      spng_c_image_free(image);
+
+      return result;
+   }
+}
+
+int
+png_image_write_to_file(png_imagep image, const char *file, int convert_to_8_bit,
+    const void *buffer, png_int_32 row_stride, const void *colormap)
+{
+   png_controlp control;
+
+   if (image == NULL)
+      return 0;
+
+   control = spng_image_begin(image, 1);
+
+   if (control == NULL)
+      return 0;
+
+   control->file = fopen(file, "wb");
+
+   if (control->file == NULL)
+   {
+      spng_image_record(image, strerror(errno), PNG_IMAGE_ERROR);
+      spng_c_image_free(image);
+      return 0;
+   }
+
+   control->owned_file = 1;
+
+   if (setjmp(control->jmpbuf) != 0)
+   {
+      spng_c_image_free(image);
+      return 0;
+   }
+
+   png_init_io(control->png_ptr, control->file);
+
+   return spng_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, NULL);
+}
+
+int
+png_image_write_to_stdio(png_imagep image, FILE *file, int convert_to_8_bit,
+    const void *buffer, png_int_32 row_stride, const void *colormap)
+{
+   png_controlp control;
+
+   if (image == NULL)
+      return 0;
+
+   if (file == NULL)
+   {
+      spng_image_record(image, "png_image_write: invalid file", PNG_IMAGE_ERROR);
+      return 0;
+   }
+
+   control = spng_image_begin(image, 1);
+
+   if (control == NULL)
+      return 0;
+
+   control->file = file;
+   control->owned_file = 0;
+
+   if (setjmp(control->jmpbuf) != 0)
+   {
+      spng_c_image_free(image);
+      return 0;
+   }
+
+   png_init_io(control->png_ptr, control->file);
+
+   return spng_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, NULL);
+}
+
+/* Writing to memory, which is also how the size is found out.
+ *
+ * A client that does not know how much room to set aside passes none, and what it gets back is the
+ * count it needed: the whole file is produced either way and the bytes are simply not kept.  That is
+ * the reference's arrangement and it is the only one that can answer the question exactly, since how
+ * well an image compresses is not something anyone can predict.
+ */
+static void PNGCBAPI
+spng_image_write_memory(png_structp png_ptr, png_bytep data, size_t length)
+{
+   png_controlp control = (png_controlp)png_get_io_ptr(png_ptr);
+
+   if (control == NULL)
+      return;
+
+   if (control->out_memory != NULL && control->out_used + length <= control->out_size)
+      memcpy(control->out_memory + control->out_used, data, length);
+
+   control->out_used += length;
+}
+
+static void PNGCBAPI
+spng_image_flush_memory(png_structp png_ptr)
+{
+   (void)png_ptr;
+}
+
+int
+png_image_write_to_memory(png_imagep image, void *memory,
+    png_alloc_size_t * PNG_RESTRICT memory_bytes, int convert_to_8_bit,
+    const void *buffer, png_int_32 row_stride, const void *colormap)
+{
+   png_controlp control;
+   int result;
+
+   if (image == NULL || memory_bytes == NULL)
+   {
+      if (image != NULL)
+         spng_image_record(image, "png_image_write: no size", PNG_IMAGE_ERROR);
+
+      return 0;
+   }
+
+   control = spng_image_begin(image, 1);
+
+   if (control == NULL)
+      return 0;
+
+   control->out_memory = memory;
+   control->out_size = memory == NULL ? 0 : (size_t)*memory_bytes;
+   control->out_used = 0;
+
+   if (setjmp(control->jmpbuf) != 0)
+   {
+      spng_c_image_free(image);
+      return 0;
+   }
+
+   png_set_write_fn(control->png_ptr, control, spng_image_write_memory,
+                    spng_image_flush_memory);
+
+   /* The count is wanted whether or not the bytes fitted, so it is taken from the control block
+    * before that block goes away.
+    */
+   {
+      size_t used = 0;
+
+      result = spng_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, &used);
+
+      if (result != 0)
+      {
+         if (memory != NULL && used > (size_t)*memory_bytes)
+         {
+            /* There was not room, and saying so is the point of the call. */
+            *memory_bytes = used;
+            spng_image_record(image, "png_image_write: buffer too small", PNG_IMAGE_ERROR);
+            return 0;
+         }
+
+         *memory_bytes = used;
+      }
+   }
+
+   return result;
+}
