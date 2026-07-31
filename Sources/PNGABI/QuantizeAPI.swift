@@ -80,4 +80,9 @@ public func png_set_quantize(
     }
 
     context.quantization = tables
+
+    // What the rows may now name, which is fewer entries than the file's own chunk describes.  A row
+    // naming one of the entries that went is a row past the end of the palette the client is working
+    // with, and is reported as such even though the file was never at fault.
+    context.entitledPaletteCount = min(count, maximum)
 }
