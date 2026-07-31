@@ -96,6 +96,13 @@ final class SequentialReader {
                     host: context.host
                 )
 
+                // The checksum before the contents, which is the order the reference asks in and
+                // the order that gives the better answer: a header whose bytes arrived damaged is a
+                // damaged header, and saying its depth is invalid describes the damage rather than
+                // the fault.  For a chunk the file cannot be read without, a checksum that does not
+                // match ends the read here.
+                try self.finishChunk(context: context)
+
                 let fields = try Header.Fields(
                     parsing: UnsafeBufferPointer(
                         start: context.scratch.bytes.baseAddress,
@@ -116,7 +123,6 @@ final class SequentialReader {
                 info.header = Header(fields)
 
                 sawHeader = true
-                try self.finishChunk(context: context)
                 continue
             }
 
