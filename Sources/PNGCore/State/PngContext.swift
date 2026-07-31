@@ -353,6 +353,43 @@ public final class PngContext {
         self.timeText = .empty
     }
 
+    /// The buffers `reserve` can grow, named so that reaching one is a switch rather
+    /// than a key path: a key path is resolved through the runtime on every access,
+    /// and this is called per chunk and per row.
+    enum BufferSlot {
+        case rowBuffer, previousRow, inputBuffer, scratch, writeStaging
+        case textStaging, filterScratch, writeRowBuffer, timeText
+    }
+
+    private subscript(slot: BufferSlot) -> RawBuffer {
+        get {
+            switch slot {
+            case .rowBuffer: self.rowBuffer
+            case .previousRow: self.previousRow
+            case .inputBuffer: self.inputBuffer
+            case .scratch: self.scratch
+            case .writeStaging: self.writeStaging
+            case .textStaging: self.textStaging
+            case .filterScratch: self.filterScratch
+            case .writeRowBuffer: self.writeRowBuffer
+            case .timeText: self.timeText
+            }
+        }
+        set {
+            switch slot {
+            case .rowBuffer: self.rowBuffer = newValue
+            case .previousRow: self.previousRow = newValue
+            case .inputBuffer: self.inputBuffer = newValue
+            case .scratch: self.scratch = newValue
+            case .writeStaging: self.writeStaging = newValue
+            case .textStaging: self.textStaging = newValue
+            case .filterScratch: self.filterScratch = newValue
+            case .writeRowBuffer: self.writeRowBuffer = newValue
+            case .timeText: self.timeText = newValue
+            }
+        }
+    }
+
     /// Ensures `buffer` holds at least `count` bytes, replacing it if not.
     ///
     /// The order matters and is the reason this is a method here rather than one on
@@ -363,16 +400,13 @@ public final class PngContext {
     ///
     /// The previous contents are not preserved: every use of this replaces a buffer
     /// whose contents are already spent.
-    func reserve(
-        _ buffer: ReferenceWritableKeyPath<PngContext, RawBuffer>,
-        _ count: Int
-    ) throws {
-        guard count > self[keyPath: buffer].count else { return }
+    func reserve(_ buffer: BufferSlot, _ count: Int) throws {
+        guard count > self[buffer].count else { return }
 
         let fresh = try RawBuffer.allocate(count, host: self.host)
-        let previous = self[keyPath: buffer]
+        let previous = self[buffer]
 
-        self[keyPath: buffer] = fresh
+        self[buffer] = fresh
         previous.deallocate(host: self.host)
     }
 
@@ -880,7 +914,7 @@ public final class PngContext {
     /// On the context because the answer has to outlive the call, and a client is entitled to hold it
     /// until the next one — which is exactly why the call is deprecated.
     public func timestampBuffer() throws -> UnsafeMutablePointer<CChar> {
-        try self.reserve(\.timeText, 32)
+        try self.reserve(.timeText, 32)
 
         return self.timeText.bytes.baseAddress!
             .withMemoryRebound(to: CChar.self, capacity: 32) { $0 }
