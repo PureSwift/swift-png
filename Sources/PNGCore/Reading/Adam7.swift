@@ -23,6 +23,18 @@ enum Adam7 {
     static let columnStride = [8, 8, 4, 4, 2, 2, 1]
     static let rowStride = [8, 8, 8, 4, 4, 2, 2]
 
+    /// How tall the block one pass row stands for is.
+    ///
+    /// Not the same as how far apart the pass's rows are, and the difference is the whole of what a
+    /// progressive reader shows before the image is complete: a pass row is displayed as a block of
+    /// pixels, and the block shrinks as the passes fill the picture in.  The last pass adds no
+    /// vertical detail at all — the pass before it already reached every other row — so its blocks are
+    /// a single row tall while its rows are two apart.
+    static let blockHeight = [8, 8, 4, 4, 2, 2, 1]
+
+    /// The same across, for the pixels within a row.
+    static let blockWidth = [8, 4, 4, 2, 2, 1, 1]
+
     /// How many pixels wide a pass is for an image of this width.
     ///
     /// Zero when the image is too narrow to contain any of this pass, which happens for
