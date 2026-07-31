@@ -96,6 +96,9 @@ public struct Header: Sendable {
     /// problem at a time, so the fields have to be readable before they are known to
     /// be good.
     public struct Fields {
+        /// How many bytes the header chunk carries, which the format fixes.
+        public static let storedSize = 13
+
         public let width: UInt32
         public let height: UInt32
         public let bitDepth: UInt8
@@ -129,7 +132,7 @@ public struct Header: Sendable {
         /// Throws only when the payload is not thirteen bytes; anything wrong with
         /// the values themselves is reported through ``problems``.
         public init(parsing payload: UnsafeBufferPointer<UInt8>) throws {
-            guard payload.count == 13 else {
+            guard payload.count == Self.storedSize else {
                 throw Diagnostic("Invalid IHDR data")
             }
 
