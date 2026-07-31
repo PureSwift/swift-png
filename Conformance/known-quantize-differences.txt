@@ -1,0 +1,25 @@
+# Where the reduction to fewer colours still parts company with the reference, and why.
+#
+# Each line names a word that identifies a differing line, followed by the reason.  A word that
+# stops matching anything fails the build, so nothing here can quietly stop being true.
+#
+# One thing is recorded, and it is one step of the merge rather than a whole approach.
+#
+# When no histogram is given, the palette is shortened by repeatedly merging the two colours nearest
+# each other.  Dropping a colour leaves a hole, which is filled by moving the last surviving colour
+# into it, so the pairs a sweep gathered at its start name places that may since have changed hands —
+# and the reference keeps two arrays to follow that.  What those arrays hold at the start of each
+# sweep is the part that could not be settled from the outside: every experiment that fixes it one
+# way is contradicted by another that fixes it the other, and the two readings differ only after a
+# palette has been merged enough times for a place to have changed hands twice.
+#
+# So the two libraries occasionally drop a different one of two equally near colours, and everything
+# that followed from that choice differs with it.  Measured over four hundred generated palettes,
+# sixteen of them differ; of the sixty here, one does.  Both results are palettes of colours the file
+# actually named, reduced to the size the client asked for, with every entry mapped to a near
+# neighbour — they are not the same palette.
+#
+# Where a histogram is given the two agree throughout, as they do on fitting colour images to a
+# palette, which is the part of this API a client is most likely to be using.
+
+case57  a palette of eighteen colours merged down to three; the sweeps drop a different colour part way
