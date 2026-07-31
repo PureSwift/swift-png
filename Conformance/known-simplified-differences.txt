@@ -18,6 +18,23 @@ unimplemented Every conversion this library refuses is recorded here as one thin
 # assembling it out of the public calls.
 #
 # This line goes stale, and the build fails, as soon as nothing is refused any more.
+#
+# Part of the first of the three has since been pinned down, and is written here so that closing it
+# does not start from nothing.
+#
+# Compositing onto the buffer — which is what a client asks for by naming no colour — mixes in light
+# rather than in the numbers a display is driven with, and the curve is sRGB's own, a short straight
+# run near black and a power curve above it, not the plain power law the gamma machinery uses.  A
+# white pixel at half coverage over a mid grey comes to exactly what that curve gives, and so does a
+# black one; a plain average of the two bytes is nowhere near.  The blend itself weighs the coverage
+# out of two hundred and fifty five in that light.
+#
+# What is not pinned down is the arithmetic of the reference's own tables.  Reading white at every one
+# of the two hundred and fifty six coverages over a black buffer draws its inverse curve out point by
+# point: an exact computation reproduces two hundred and fifty four of them and misses two by a count.
+# Written out, the whole conversion lands within about three counts of the reference on the corpus —
+# near enough to look right and not near enough to be it, which is the same finish as the coarse gamma
+# table next door and wants the same answer, the construction rather than a fit to it.
 
 # Removing coverage against a colour the client named is implemented and agrees with the reference
 # exactly when that colour is black.  Against any other colour it differs in the low bits, and for the
