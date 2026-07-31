@@ -142,6 +142,12 @@ public final class PngContext {
     public var criticalCrcAction: CrcAction = .errorQuit
     public var ancillaryCrcAction: CrcAction = .warnDiscard
 
+    /// What a request to fit the image into fewer colours produced, if one was made.
+    ///
+    /// The work happens when the request is made, not when the rows are read: the client passes a
+    /// palette in and expects to find it shortened when the call returns.
+    public var quantization = Quantization()
+
     /// What the client asked to be done with chunks this library does not know.
     public var unknownChunks = UnknownChunkPolicy()
 
@@ -527,7 +533,8 @@ public final class PngContext {
             fillerAfterColor: self.fillerAfterColor,
             gamma: gamma,
             background: background,
-            alphaMode: self.effectiveAlphaMode
+            alphaMode: self.effectiveAlphaMode,
+            quantization: self.quantization
         )
 
         // The correction table is built before the snapshot, because for an indexed image it changes
@@ -635,6 +642,7 @@ public final class PngContext {
         }
 
         self.transformInputs.rgbToGray = self.rgbToGray
+        self.transformInputs.quantization = self.quantization
 
         // The pair that map to linear light and back, built only when something needs to average
         // samples and there is a curve to undo first.  They are built together: converting one way
