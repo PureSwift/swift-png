@@ -207,55 +207,62 @@ extension InfoStore {
         var produced = 0
         var buffer = try RawBuffer.allocate(capacity, host: self.host)
 
-        while true {
-            let made = try stream.inflate(
-                into: buffer.bytes.baseAddress! + produced,
-                count: capacity - produced
-            )
-            produced += made
+        // Everything from here to the handover is wrapped, because everything in it can fail and
+        // all of it is holding the same buffer.  Growing takes a second allocation, the decompressor
+        // can refuse the data, and the handover takes an allocation of its own — and each of those
+        // used to lose whatever had been decompressed so far.
+        do {
+            while true {
+                let made = try stream.inflate(
+                    into: buffer.bytes.baseAddress! + produced,
+                    count: capacity - produced
+                )
+                produced += made
 
-            if stream.isFinished { break }
+                if stream.isFinished { break }
 
-            if produced == capacity {
-                guard capacity < Self.chunkMallocMax else {
+                if produced == capacity {
+                    guard capacity < Self.chunkMallocMax else {
+                        throw Diagnostic("Read Error", chunk: chunk)
+                    }
+
+                    let larger = min(capacity * 2, Self.chunkMallocMax)
+                    let grown = try RawBuffer.allocate(larger, host: self.host)
+
+                    grown.bytes.baseAddress!.update(
+                        from: buffer.bytes.baseAddress!,
+                        count: produced
+                    )
                     buffer.deallocate(host: self.host)
-                    throw Diagnostic("Read Error", chunk: chunk)
+
+                    buffer = grown
+                    capacity = larger
+                    continue
                 }
 
-                let larger = min(capacity * 2, Self.chunkMallocMax)
-                let grown = try RawBuffer.allocate(larger, host: self.host)
+                if made == 0 {
+                    // No progress, no more input, and no end marker: the stream is short.
+                    throw Diagnostic("Truncated compressed data", chunk: chunk)
+                }
+            }
 
-                grown.bytes.baseAddress!.update(
+            // Handed over at exactly its length, because the accessor reports that length and
+            // a client may read every byte of it.
+            let result = try EscapingBuffer<UInt8>.allocated(produced, host: self.host)
+
+            if produced > 0 {
+                result.elements.baseAddress!.update(
                     from: buffer.bytes.baseAddress!,
                     count: produced
                 )
-                buffer.deallocate(host: self.host)
-
-                buffer = grown
-                capacity = larger
-                continue
             }
 
-            if made == 0 {
-                // No progress, no more input, and no end marker: the stream is short.
-                buffer.deallocate(host: self.host)
-                throw Diagnostic("Truncated compressed data", chunk: chunk)
-            }
+            buffer.deallocate(host: self.host)
+
+            return result
+        } catch {
+            buffer.deallocate(host: self.host)
+            throw error
         }
-
-        // Handed over at exactly its length, because the accessor reports that length and
-        // a client may read every byte of it.
-        let result = try EscapingBuffer<UInt8>.allocated(produced, host: self.host)
-
-        if produced > 0 {
-            result.elements.baseAddress!.update(
-                from: buffer.bytes.baseAddress!,
-                count: produced
-            )
-        }
-
-        buffer.deallocate(host: self.host)
-
-        return result
     }
 }
