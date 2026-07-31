@@ -298,3 +298,6 @@ png_set_unknown_chunk_location
 png_data_freer
 png_free_data
 png_set_crc_action
+
+# Sources/PNGABI/QuantizeAPI.swift
+png_set_quantize
