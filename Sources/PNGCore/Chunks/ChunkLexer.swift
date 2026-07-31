@@ -94,6 +94,14 @@ final class ChunkLexer {
 
         let name = ChunkName(raw.4, raw.5, raw.6, raw.7)
 
+        // A chunk's type is four letters, and the format says so: the case of each one carries a
+        // meaning — whether the chunk may be ignored, whether it is registered, whether it may be
+        // copied — and a byte that is not a letter has no case to carry any of that.  So this is not
+        // an unknown chunk to be skipped; it is a stream that has stopped making sense.
+        guard name.isWellFormed else {
+            throw Diagnostic("bad header (invalid type)", chunk: name)
+        }
+
         // Past the header and into the contents, which is where a client watching from its own
         // callback will see the library while a chunk is being consumed.
         context?.noteIO(0x0040, chunk: name)
