@@ -36,6 +36,11 @@ final class SequentialReader {
 
     private(set) var phase: ReadPhase = .start
 
+    /// Whether the file has already been reported as holding more image data than the image needs.
+    ///
+    /// Once per image, because it is one fact about the file rather than a fault in each row.
+    private var saidTooMuchData = false
+
     let lexer = ChunkLexer()
 
     /// How many scanlines of the current pass have been consumed.
@@ -313,6 +318,7 @@ final class SequentialReader {
         // by this, whatever they left behind.
         guard runsPipeline || runsUserTransform else {
             self.maskTrailingBits(of: shape, in: row)
+            self.noteIndices(in: row, shape: shape, context: context)
             self.transformedShape = nil
             return stored
         }
@@ -333,6 +339,13 @@ final class SequentialReader {
 
             try self.report(observations, context: context)
         }
+
+        // Before the client's own transform and after the library's, which is where the reference
+        // looks and the only place the question means anything: after the library's transforms the
+        // row either still holds indices or does not, and after the client's there is no telling —
+        // a row it widened or rearranged holds whatever it decided, and reading that as indices
+        // would report a fault in the file that the file never had.
+        self.noteIndices(in: whole, shape: shape, context: context)
 
         // The client's own transform, after everything the library does, which is where the reference
         // puts it and the only place it could sensibly go: a client asking for a row in a particular
@@ -357,6 +370,51 @@ final class SequentialReader {
         self.transformedShape = shape
 
         return shape.rowBytes
+    }
+
+    /// Says once that the file holds image data the image does not need.
+    ///
+    /// Asked of the decompressor rather than of the file, because that is where the question can be
+    /// answered: a stream that will still produce a byte after the last row has more scanlines in it
+    /// than the header described.  Only of what it already holds — fetching another chunk to find out
+    /// would turn a file that merely ends into a file that failed.
+    private func noteExtraImageData(context: PngContext) {
+        guard !self.saidTooMuchData else { return }
+
+        guard let inflater = context.inflater, !inflater.isFinished, !inflater.needsInput else {
+            return
+        }
+
+        var spare: UInt8 = 0
+        let made = withUnsafeMutablePointer(to: &spare) { byte in
+            (try? inflater.inflate(into: byte, count: 1)) ?? 0
+        }
+
+        guard made > 0 else { return }
+
+        // Set before the report rather than after it: the report runs the client's handler, and a
+        // client is entitled to jump out of that.
+        self.saidTooMuchData = true
+        context.host.warn(Diagnostic("Too much image data", chunk: .idat))
+    }
+
+    /// Remembers the largest palette entry this row named.
+    ///
+    /// After the transforms rather than before, which is what decides whose indices these are: a row
+    /// that was expanded into colours holds no indices at all and is not looked at, and one that was
+    /// renumbered is judged on the numbers the client will actually receive.
+    private func noteIndices(
+        in row: UnsafeMutableBufferPointer<UInt8>,
+        shape: RowInfo,
+        context: PngContext
+    ) {
+        guard shape.colorType.isIndexed else { return }
+
+        context.notePaletteIndices(
+            UnsafeBufferPointer(row),
+            width: shape.width,
+            bitDepth: shape.bitDepth
+        )
     }
 
     /// Tells the client what the pipeline noticed about the row.
@@ -453,6 +511,7 @@ final class SequentialReader {
 
         if self.pass >= Adam7.passCount {
             self.phase = .imageEnd
+            self.noteExtraImageData(context: context)
             return
         }
 
@@ -546,6 +605,7 @@ final class SequentialReader {
 
             if self.rowIndex >= header.height {
                 self.phase = .imageEnd
+                self.noteExtraImageData(context: context)
             }
 
             return
@@ -732,6 +792,14 @@ final class SequentialReader {
     func readEnd(info: InfoStore?, context: PngContext) throws {
         guard self.phase == .imageEnd || self.phase == .rows else { return }
 
+        // A client that stopped reading part way leaves rows behind, and those rows are image data
+        // this call is about to walk past.  The reference says so, and says the same thing it says
+        // about a file carrying more scanlines than its header describes, because from here the two
+        // are the same situation: image data nobody is going to look at.
+        if self.phase == .rows {
+            self.noteExtraImageData(context: context)
+        }
+
         // Image data the client did not read still has to be walked past, since it may
         // have stopped short of the last row.  Only the image data: the condition must not
         // also test for unread bytes, or it would swallow the first metadata chunk after
@@ -739,6 +807,19 @@ final class SequentialReader {
         while self.lexer.current?.name == .idat {
             try self.skipChunk(context: context)
             _ = try self.lexer.readHeader(host: context.host, context: context)
+        }
+
+        // Said here rather than at the row that named the entry, and said once.  A file naming an
+        // entry it never gave is broken in a way nothing can be done about — every row has already
+        // been handed over — so this is a report on the image rather than a fault in reading it.
+        //
+        // After the image data and before the chunks that follow it, which is the order a client
+        // sees these things in: what the rows did, then what came after them.
+        if context.entitledPaletteCount > 0,
+           context.highestPaletteIndex >= context.entitledPaletteCount {
+            context.host.warn(
+                Diagnostic("Read palette index exceeding num_palette", chunk: .idat)
+            )
         }
 
         // Metadata is allowed after the image data as well as before it, and is reported
@@ -901,6 +982,12 @@ final class SequentialReader {
             info: info,
             host: context.host
         )
+
+        // What the rows are entitled to name, which the file has just said.  Kept apart from the
+        // metadata because a client may shorten it afterwards and the chunk still says what it said.
+        if chunk.name == .plte {
+            context.entitledPaletteCount = info.palette.elements.count
+        }
     }
 
     /// Names the chunk that turned up where the header should have been.
