@@ -78,7 +78,7 @@ final class SequentialWriter {
     func beginFile(context: PngContext) throws {
         guard self.stage == .start else { return }
 
-        try context.reserve(\.writeStaging, 8)
+        try context.reserve(.writeStaging, 8)
 
         var writer = context.chunkWriter
         writer.writeSignature()
@@ -90,7 +90,7 @@ final class SequentialWriter {
     func writeHeader(_ fields: Header.Fields, _ header: Header, context: PngContext) throws {
         try self.beginFile(context: context)
 
-        try context.reserve(\.scratch, 13)
+        try context.reserve(.scratch, 13)
 
         let bytes = context.scratch.bytes
 
@@ -118,7 +118,7 @@ final class SequentialWriter {
 
         let count = entries.count * 3
 
-        try context.reserve(\.scratch, count)
+        try context.reserve(.scratch, count)
 
         let bytes = context.scratch.bytes
 
@@ -222,7 +222,7 @@ final class SequentialWriter {
 
         let supplied = program.suppliedShape.rowBytes
 
-        try context.reserve(\.writeRowBuffer, max(supplied, RowInfo(header).rowBytes))
+        try context.reserve(.writeRowBuffer, max(supplied, RowInfo(header).rowBytes))
 
         let working = UnsafeMutableBufferPointer(
             start: context.writeRowBuffer.bytes.baseAddress!,
@@ -281,8 +281,8 @@ final class SequentialWriter {
         header: Header,
         context: PngContext
     ) throws {
-        try context.reserve(\.rowBuffer, stored + 1)
-        try context.reserve(\.filterScratch, stored * 2)
+        try context.reserve(.rowBuffer, stored + 1)
+        try context.reserve(.filterScratch, stored * 2)
 
         // The row the client handed over is theirs, so the encoding is done into ours.
         let encoded = UnsafeMutableBufferPointer(
@@ -338,8 +338,8 @@ final class SequentialWriter {
 
         let stored = Adam7.rowBytes(ofPass: pass, header: header)
 
-        try context.reserve(\.rowBuffer, stored + 1)
-        try context.reserve(\.filterScratch, stored * 2)
+        try context.reserve(.rowBuffer, stored + 1)
+        try context.reserve(.filterScratch, stored * 2)
 
         // Gathered into the second half of the filter scratch, which is sized for two rows: the first
         // half is what the filters try their candidates in, and both are wanted at once.
@@ -446,11 +446,11 @@ final class SequentialWriter {
             ? Adam7.widestRowBytes(header: header)
             : header.rowBytes
 
-        try context.reserve(\.previousRow, widest)
-        try context.reserve(\.filterScratch, widest * 2)
+        try context.reserve(.previousRow, widest)
+        try context.reserve(.filterScratch, widest * 2)
         context.previousRow.bytes.baseAddress!.update(repeating: 0, count: widest)
 
-        try context.reserve(\.inputBuffer, max(context.compression.bufferSize, 1024))
+        try context.reserve(.inputBuffer, max(context.compression.bufferSize, 1024))
 
         // Built here rather than when the header was written, because a client may ask for a
         // transform right up until it hands over its first row.
@@ -467,7 +467,7 @@ final class SequentialWriter {
 
             // The client's row is wider than the file's when it is supplying a channel the file has
             // no room for, or a byte per sample where the file packs several.
-            try context.reserve(\.writeRowBuffer, max(program.suppliedShape.rowBytes, widest))
+            try context.reserve(.writeRowBuffer, max(program.suppliedShape.rowBytes, widest))
         }
 
         self.deflater = try DeflateStream(settings: context.compression)
