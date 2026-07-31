@@ -13,17 +13,6 @@
 import CPNG
 import PNGCore
 
-/// Runs a query against the info structure, answering `fallback` when there is nothing to
-/// query.
-private func query<Value>(
-    _ info_ptr: png_const_inforp?,
-    _ fallback: Value,
-    _ body: (InfoStore) -> Value
-) -> Value {
-    guard let info_ptr, let info = InfoStore.from(info_ptr) else { return fallback }
-    return body(info)
-}
-
 /// Runs an update against the info structure.
 private func update(_ info_ptr: png_inforp?, _ body: (InfoStore) -> Void) {
     guard let info_ptr, let info = InfoStore.from(info_ptr) else { return }

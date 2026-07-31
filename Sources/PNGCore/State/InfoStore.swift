@@ -93,6 +93,16 @@ public final class InfoStore {
         return (width, height)
     }
 
+    /// What the samples measure, when the file says they measure something.
+    public var calibration = Calibration()
+
+    /// The palettes the file suggests for a decoder that has to reduce the image.
+    ///
+    /// A list, because a file may carry any number of them, and the array a client is handed has to be
+    /// contiguous — so the descriptions live here and the array is built when it is asked for.
+    public var suggestedPalettes: [SuggestedPalette] = []
+    public var suggestedPaletteArray = EscapingBuffer<png_sPLT_layout>()
+
     /// The eight bytes the file began with, kept as they were read.
     ///
     /// Kept whether or not they were right: a client asking what it saw is usually asking because
@@ -141,6 +151,20 @@ public final class InfoStore {
             slot.deallocate(host: self.host)
         }
         self.exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
+
+        // Cleared as well as freed, which every field here does and which is not tidiness: this runs
+        // once per structure in the ordinary case and more than once when a client destroys one it has
+        // already emptied, so a field that still held its old pointer would be freed twice.
+        self.calibration.deallocate(host: self.host)
+        self.calibration = Calibration()
+
+        for palette in self.suggestedPalettes {
+            palette.deallocate(host: self.host)
+        }
+
+        self.suggestedPalettes = []
+        self.suggestedPaletteArray.deallocate(host: self.host)
+        self.suggestedPaletteArray = EscapingBuffer()
 
         self.releaseOwnedRows()
         self.palette.deallocate(host: self.host)
@@ -360,6 +384,49 @@ public struct Rgb16: Sendable {
 
 
 extension InfoStore {
+    /// Builds the array of parameter pointers a client reads.
+    ///
+    /// Rebuilt each time rather than kept in step with the strings, because it is a view of them: a
+    /// stale array would point at storage a later call had replaced.
+    public func buildCalibrationPointers() throws {
+        let count = self.calibration.parameters.count
+
+        self.calibration.parameterPointers.deallocate(host: self.host)
+        self.calibration.parameterPointers = .init()
+
+        guard count > 0 else { return }
+
+        self.calibration.parameterPointers = try .allocated(count, host: self.host)
+
+        for index in 0 ..< count {
+            self.calibration.parameterPointers.elements[index] =
+                self.calibration.parameters[index].address
+        }
+    }
+
+    /// The same for the suggested palettes, which a client reads as one contiguous array.
+    public func buildSuggestedPaletteArray() throws {
+        let count = self.suggestedPalettes.count
+
+        self.suggestedPaletteArray.deallocate(host: self.host)
+        self.suggestedPaletteArray = .init()
+
+        guard count > 0 else { return }
+
+        self.suggestedPaletteArray = try .allocated(count, host: self.host)
+
+        for index in 0 ..< count {
+            var entry = png_sPLT_layout()
+
+            entry.name = self.suggestedPalettes[index].name.address
+            entry.depth = self.suggestedPalettes[index].depth
+            entry.entries = self.suggestedPalettes[index].entries.address
+            entry.nentries = Int32(self.suggestedPalettes[index].entries.count)
+
+            self.suggestedPaletteArray.elements[index] = entry
+        }
+    }
+
     /// The signature bytes, addressed rather than copied.
     ///
     /// The tuple lives in this object, so its address is good for as long as the object is.
@@ -375,6 +442,20 @@ extension InfoStore {
     /// that frees them itself frees the array, and the reference's own arrangement is the same.
     public func allocateRows(rowBytes: Int) throws {
         guard let header = self.header, header.height > 0, rowBytes > 0 else { return }
+
+        // Cleared as well as freed, which every field here does and which is not tidiness: this runs
+        // once per structure in the ordinary case and more than once when a client destroys one it has
+        // already emptied, so a field that still held its old pointer would be freed twice.
+        self.calibration.deallocate(host: self.host)
+        self.calibration = Calibration()
+
+        for palette in self.suggestedPalettes {
+            palette.deallocate(host: self.host)
+        }
+
+        self.suggestedPalettes = []
+        self.suggestedPaletteArray.deallocate(host: self.host)
+        self.suggestedPaletteArray = EscapingBuffer()
 
         self.releaseOwnedRows()
 

@@ -11,20 +11,11 @@
 import CPNG
 import PNGCore
 
-private func query<Value>(
-    _ info_ptr: png_const_inforp?,
-    _ fallback: Value,
-    _ body: (InfoStore) -> Value
-) -> Value {
-    guard let info_ptr, let info = InfoStore.from(info_ptr) else { return fallback }
-    return body(info)
-}
-
 /// Runs an update that allocates, reporting a failure through the control structure.
 ///
 /// Unlike the value setters, these can fail: they copy the client's data into memory from
 /// the client's allocator, and that allocation can fail.
-private func updateAllocating(
+func updateAllocating(
     _ png_ptr: png_const_structrp?,
     _ info_ptr: png_inforp?,
     _ body: (InfoStore) throws -> Void

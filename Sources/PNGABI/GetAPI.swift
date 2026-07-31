@@ -13,7 +13,7 @@ import PNGCore
 ///
 /// Queries do not report errors: a client calling these before `png_read_info` gets
 /// a zero, not a jump.
-private func query<Value>(
+func query<Value>(
     _ info_ptr: png_const_inforp?,
     _ fallback: Value,
     _ body: (InfoStore) -> Value
