@@ -182,6 +182,27 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
     add_test(NAME faults
         COMMAND ${SPNG_SCRIPTS}/run_faults.sh $<TARGET_FILE:pngfaults> ${SPNG_CORPUS})
 
+    # How long each library takes over the same work.  Built like the comparisons, run like a
+    # report: `ctest` does not include it, because a timing is not something to fail a build on.
+    add_executable(pngbench pngbench.c)
+    target_link_libraries(pngbench PRIVATE png16)
+
+    add_executable(pngbench_reference pngbench.c)
+    target_include_directories(pngbench_reference BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngbench_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngbench BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(pngbench spng_corpus)
+
+    add_custom_target(benchmark
+        COMMAND ${SPNG_SCRIPTS}/compare_bench.sh
+                $<TARGET_FILE:pngbench> $<TARGET_FILE:pngbench_reference> ${SPNG_CORPUS}
+        DEPENDS pngbench pngbench_reference
+        USES_TERMINAL)
+
     # Fitting an image into fewer colours than it has.  Generated palettes rather than corpus images:
     # what the reduction does depends on how the colours are spread, not on what the picture is of.
     add_executable(pngquantize pngquantize.c)
