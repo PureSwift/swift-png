@@ -202,8 +202,66 @@ static void PNGCBAPI settle(png_structp png_ptr)
    (void)png_ptr;
 }
 
+/* The transforms a read is asked for, since which of them are in force decides what is allocated.
+ *
+ * A gamma correction builds tables, an expansion builds a palette, a reduction to fewer colours
+ * builds a lookup of its own — and each is a place where a failure part way could leave one table
+ * built and another not.  Reading with no transforms at all would never reach any of them.
+ */
+enum shape { PLAIN, EXPANDED, CORRECTED, REDUCED, COMPOSED };
+
+static void ask_for(png_structp p, png_infop i, enum shape shape)
+{
+   static png_color palette[16];
+   static png_color_16 background;
+   int k;
+
+   switch (shape)
+   {
+   case PLAIN:
+      break;
+
+   case EXPANDED:
+      png_set_expand(p);
+      png_set_gray_to_rgb(p);
+      png_set_add_alpha(p, 0xFF, PNG_FILLER_AFTER);
+      break;
+
+   case CORRECTED:
+      png_set_expand(p);
+      png_set_gamma(p, 2.2, 0.45455);
+      png_set_rgb_to_gray(p, PNG_ERROR_ACTION_NONE, -1, -1);
+      break;
+
+   case REDUCED:
+      for (k = 0; k < 16; k++)
+      {
+         palette[k].red = (png_byte)(k * 17);
+         palette[k].green = (png_byte)(k * 15);
+         palette[k].blue = (png_byte)(k * 13);
+      }
+      png_set_quantize(p, palette, 16, 8, NULL, 1);
+      png_set_gamma(p, 2.2, 0.45455);
+      break;
+
+   case COMPOSED:
+      memset(&background, 0, sizeof background);
+      background.red = 0x8000;
+      background.green = 0x4000;
+      background.blue = 0x2000;
+      background.gray = 0x8000;
+      png_set_expand(p);
+      png_set_background(p, &background, PNG_BACKGROUND_GAMMA_SCREEN, 0, 1.0);
+      png_set_gamma(p, 2.2, 0.45455);
+      png_set_scale_16(p);
+      break;
+   }
+
+   (void)i;
+}
+
 /* One whole read, abandoned wherever the tracker says.  Returns the blocks left over. */
-static int run(const char *path, struct tracker *t)
+static int run(const char *path, struct tracker *t, enum shape shape)
 {
    png_structp p;
    png_infop i;
@@ -246,9 +304,7 @@ static int run(const char *path, struct tracker *t)
       png_get_IHDR(p, i, &width, &height, &depth, &colour, &interlace,
                    &compression, &filter);
 
-      /* Enough transforms to reach the parts of the library that allocate tables. */
-      png_set_expand(p);
-      png_set_gamma(p, 2.2, 0.45455);
+      ask_for(p, i, shape);
       passes = png_set_interlace_handling(p);
       png_read_update_info(p, i);
 
@@ -424,38 +480,45 @@ int main(int argc, char **argv)
    for (argument = 1; argument < argc; argument++)
    {
       const char *path = argv[argument];
+      static const char *const names[] = {
+         "plain", "expanded", "corrected", "reduced", "composed",
+      };
+      enum shape shape;
       long total;
       long which;
       long left;
 
+      images++;
+
+      for (shape = PLAIN; shape <= COMPOSED; shape++)
+      {
       /* What an undisturbed read costs, which says how many ways there are to disturb it. */
       t.refuse = 0;
       t.warn_leave = 0;
       t.read_leave = 0;
-      left = run(path, &t);
+      left = run(path, &t, shape);
       total = t.allocations;
       runs++;
 
       if (left != 0)
       {
-         printf("%s: %ld blocks left after an ordinary read\n", path, left);
+         printf("%s: %ld blocks left after an ordinary read (%s)\n", path, left, names[shape]);
          failures++;
          continue;
       }
-
-      images++;
 
       for (which = 1; which <= total; which++)
       {
          t.refuse = which;
          t.warn_leave = 0;
          t.read_leave = 0;
-         left = run(path, &t);
+         left = run(path, &t, shape);
          runs++;
 
          if (left != 0)
          {
-            printf("%s: %ld blocks left with allocation %ld refused, of", path, left, which);
+            printf("%s: %ld blocks left with allocation %ld refused (%s), of",
+                   path, left, which, names[shape]);
             {
                int index;
                for (index = 0; index < t.live; index++)
@@ -480,12 +543,13 @@ int main(int argc, char **argv)
          t.refuse = 0;
          t.warn_leave = which;
          t.read_leave = 0;
-         left = run(path, &t);
+         left = run(path, &t, shape);
          runs++;
 
          if (left != 0)
          {
-            printf("%s: %ld blocks left leaving at warning %ld\n", path, left, which);
+            printf("%s: %ld blocks left leaving at warning %ld (%s)\n",
+                   path, left, which, names[shape]);
             failures++;
          }
       }
@@ -495,14 +559,17 @@ int main(int argc, char **argv)
          t.refuse = 0;
          t.warn_leave = 0;
          t.read_leave = which;
-         left = run(path, &t);
+         left = run(path, &t, shape);
          runs++;
 
          if (left != 0)
          {
-            printf("%s: %ld blocks left leaving at read %ld\n", path, left, which);
+            printf("%s: %ld blocks left leaving at read %ld (%s)\n",
+                   path, left, which, names[shape]);
             failures++;
          }
+      }
+
       }
 
       /* The same file pushed in, which abandons from inside a callback rather than between calls. */
