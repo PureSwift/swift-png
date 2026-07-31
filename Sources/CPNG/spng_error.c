@@ -69,10 +69,32 @@ spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
 
    if (chunk_name != NULL)
    {
-      while (offset + 2 < SPNG_MESSAGE_MAX && chunk_name[offset] != '\0')
+      size_t index = 0;
+
+      /* A byte that is not a letter is written out as its number in brackets rather than sent to
+       * the client's handler as it stands.  A chunk name reaches here straight from the file, so it
+       * may hold anything at all, and a message carrying a control byte or a broken character is a
+       * message a client cannot print, log or compare.
+       */
+      while (offset + 2 < SPNG_MESSAGE_MAX && chunk_name[index] != '\0')
       {
-         staged[offset] = chunk_name[offset];
-         ++offset;
+         unsigned char byte = (unsigned char)chunk_name[index++];
+
+         if ((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z'))
+            staged[offset++] = (char)byte;
+
+         else if (offset + 6 < SPNG_MESSAGE_MAX)
+         {
+            static const char digits[] = "0123456789ABCDEF";
+
+            staged[offset++] = '[';
+            staged[offset++] = digits[(byte >> 4) & 0xF];
+            staged[offset++] = digits[byte & 0xF];
+            staged[offset++] = ']';
+         }
+
+         else
+            break;
       }
 
       if (offset + 2 < SPNG_MESSAGE_MAX)
