@@ -100,7 +100,8 @@ png_uint_32 spng_c_call_read_user_transform(png_structrp png_ptr, png_bytep row,
 png_uint_32 spng_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
     png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
     png_uint_32 color_type);
-int spng_c_call_user_chunk(png_structrp png_ptr, png_unknown_chunkp chunk);
+int spng_c_call_user_chunk(png_structrp png_ptr, png_uint_32 name, png_bytep data,
+    size_t size);
 
 /* The simplified API's own pieces.  The lifecycle is C, because the whole of it
  * is a setjmp cage; the work is Swift, because it is the same decoding as

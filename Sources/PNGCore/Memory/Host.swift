@@ -101,6 +101,15 @@ public struct Host {
     /// a structure doing two jobs.
     public let writeUserTransform: UserTransform?
 
+    /// Offers a chunk this library does not understand to the client.
+    ///
+    /// Returns what the client said: above zero it handled the chunk, below zero it failed, and zero
+    /// means it would like whatever would have happened anyway.
+    public typealias UserChunk =
+        @convention(c) (Owner?, UInt32, UnsafeMutablePointer<UInt8>?, UInt) -> Int32
+
+    public let userChunk: UserChunk?
+
     public let progressiveInfoFn: ProgressiveInfo?
     public let progressiveRowFn: ProgressiveRow?
     public let progressiveEndFn: ProgressiveInfo?
@@ -116,6 +125,7 @@ public struct Host {
         writeBytes: Write? = nil,
         flushBytes: Flush? = nil,
         writeUserTransform: UserTransform? = nil,
+        userChunk: UserChunk? = nil,
         progressiveInfoFn: ProgressiveInfo? = nil,
         progressiveRowFn: ProgressiveRow? = nil,
         progressiveEndFn: ProgressiveInfo? = nil
@@ -130,6 +140,7 @@ public struct Host {
         self.writeBytes = writeBytes
         self.flushBytes = flushBytes
         self.writeUserTransform = writeUserTransform
+        self.userChunk = userChunk
         self.progressiveInfoFn = progressiveInfoFn
         self.progressiveRowFn = progressiveRowFn
         self.progressiveEndFn = progressiveEndFn
@@ -200,5 +211,15 @@ extension Host {
 
     func progressiveEnd() {
         self.progressiveEndFn?(self.owner)
+    }
+
+    /// Offers a chunk to the client's own handler.
+    ///
+    /// Nothing on this side may own anything across it: the client may jump out, and the chunk it is
+    /// shown lives in the context's own buffer rather than on a frame here.
+    func callUserChunk(name: ChunkName, data: UnsafeMutablePointer<UInt8>?, size: Int) -> Int32 {
+        guard let userChunk else { return 0 }
+
+        return userChunk(self.owner, name.packed, data, UInt(size))
     }
 }

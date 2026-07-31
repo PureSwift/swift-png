@@ -362,3 +362,34 @@ spng_c_call_progressive_end(png_structrp png_ptr, png_inforp info_ptr)
    png_ptr->end_fn(png_ptr, info_ptr);
    png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
 }
+
+/* A chunk this library does not understand, offered to the client's own handler.
+ *
+ * The structure it is shown is a local, for the reason the row description is: a client may jump out
+ * of its handler, and a description owned by a Swift frame would be abandoned with whatever kept it
+ * alive.
+ */
+int
+spng_c_call_user_chunk(png_structrp png_ptr, png_uint_32 name, png_bytep data, size_t size)
+{
+   png_unknown_chunk chunk;
+   int result;
+
+   if (png_ptr == NULL || png_ptr->read_user_chunk_fn == NULL)
+      return 0;
+
+   chunk.name[0] = (png_byte)(name >> 24);
+   chunk.name[1] = (png_byte)(name >> 16);
+   chunk.name[2] = (png_byte)(name >> 8);
+   chunk.name[3] = (png_byte)name;
+   chunk.name[4] = 0;
+   chunk.data = data;
+   chunk.size = size;
+   chunk.location = 0;
+
+   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   result = png_ptr->read_user_chunk_fn(png_ptr, &chunk);
+   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+
+   return result;
+}

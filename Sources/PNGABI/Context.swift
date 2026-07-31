@@ -67,6 +67,9 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
                 colorType
             )
         },
+        userChunk: { owner, name, data, size in
+            spng_c_call_user_chunk(owner?.pngStruct, name, data, size_t(size))
+        },
         progressiveInfoFn: { owner in
             spng_c_call_progressive_info(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
         },

@@ -757,6 +757,102 @@ final class SequentialReader {
         }
     }
 
+    /// Which of the chunks that divide a file into parts have been seen.
+    ///
+    /// What a kept chunk records as its location, and what decides where it is written back: a chunk
+    /// that was after the image data has to stay after it, because that is what its being there meant.
+    func chunkLocation(info: InfoStore) -> UInt8 {
+        // One marker rather than a union of them, which is what the reference records: a chunk after
+        // the image data is *after the image data*, and saying it was also after the header adds
+        // nothing a reader could use.
+        switch self.phase {
+        case .rows, .imageEnd, .streamEnd:
+            return 0x08
+
+        case .start, .header:
+            // The palette matters because a chunk that refers into one is only meaningful after it.
+            return info.isValid(InfoStore.Valid.plte) ? 0x02 : 0x01
+        }
+    }
+
+    /// Keeps, offers or drops a chunk this library does not understand.
+    ///
+    /// The order matters: the chunk is read whole first, because both the client's callback and the
+    /// keeping need its contents, and a chunk that was skipped cannot be un-skipped.
+    private func handleUnknown(
+        _ chunk: ChunkHeader,
+        info: InfoStore,
+        context: PngContext
+    ) throws {
+        let wantsCallback = context.host.userChunk != nil && context.hasUserChunkCallback
+        let keeps = context.unknownChunks.keeps(
+            chunk.name,
+            isSafeToCopy: chunk.name.isSafeToCopy,
+            hasUserCallback: wantsCallback
+        )
+
+        guard keeps || wantsCallback else {
+            try self.skipChunk(context: context)
+            return
+        }
+
+        guard chunk.length <= InfoStore.chunkMallocMax else {
+            context.host.warn("chunk is too large")
+            try self.skipChunk(context: context)
+            return
+        }
+
+        try context.reserve(\.scratch, max(chunk.length, 1))
+        try self.lexer.readWholePayload(into: context.scratch.bytes, host: context.host)
+        try self.finishChunk(context: context)
+
+        // Offered to the client first.  A client that says it handled the chunk has taken it, and
+        // keeping a copy as well would hand it back the thing it just dealt with.
+        if wantsCallback {
+            let handled = context.host.callUserChunk(
+                name: chunk.name,
+                data: context.scratch.bytes.baseAddress,
+                size: chunk.length
+            )
+
+            if handled > 0 { return }
+
+            if handled < 0 {
+                throw Diagnostic("user chunk callback failed", chunk: chunk.name)
+            }
+        }
+
+        guard keeps else { return }
+
+        // A client that installed a handler but asked for no policy gets the chunk kept anyway, and
+        // is told twice: once against the chunk and once about the call it should have made.  Keeping
+        // it is a guess at what such a client wanted, and the warning is what says so.
+        if context.unknownChunks.named(chunk.name) == .asDefault,
+           context.unknownChunks.default == .asDefault {
+            context.host.warn(
+                Diagnostic("Saving unknown chunk:", severity: .warning, chunk: chunk.name)
+            )
+            context.host.warn(
+                "forcing save of an unhandled chunk; please call png_set_keep_unknown_chunks"
+            )
+        }
+
+        var kept = UnknownChunk()
+
+        kept.name = chunk.name
+        kept.location = self.chunkLocation(info: info)
+        kept.data = try EscapingBuffer<UInt8>.allocated(max(chunk.length, 1), host: info.host)
+
+        if chunk.length > 0 {
+            kept.data.elements.baseAddress!.update(
+                from: context.scratch.bytes.baseAddress!,
+                count: chunk.length
+            )
+        }
+
+        info.unknownChunks.append(kept)
+    }
+
     /// Reads an optional chunk whole and parses it, or skips it when it is one this
     /// library does not recognise.
     ///
@@ -767,10 +863,16 @@ final class SequentialReader {
         info: InfoStore?,
         context: PngContext
     ) throws {
-        // With nowhere to record it, there is nothing to gain from parsing it; the
-        // checksum is still verified on the way past.
+        // A chunk this library does not know is not an error: the format is built to be extended, and
+        // the chunk's own name says whether it may be dropped.  What happens to it is the client's
+        // answer, which it gives in advance.
         guard let info, Self.isRecognised(chunk.name) else {
-            try self.skipChunk(context: context)
+            guard let info else {
+                try self.skipChunk(context: context)
+                return
+            }
+
+            try self.handleUnknown(chunk, info: info, context: context)
             return
         }
 
