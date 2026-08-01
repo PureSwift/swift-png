@@ -1,4 +1,4 @@
-/* spng_simplified.c - the lifecycle of the simplified API
+/* swift_simplified.c - the lifecycle of the simplified API
  *
  * The one part of the library a client uses without installing anything.  Everywhere else a client
  * supplies an error handler and this library jumps to it; here it calls a function that returns zero
@@ -9,7 +9,7 @@
  * setjmp is not something a Swift frame can be on the wrong side of.
  */
 
-#include "include/spng_internal.h"
+#include "include/swift_internal.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -22,7 +22,7 @@
  * gets both is told about the one that stopped it.
  */
 static void
-spng_image_record(png_imagep image, png_const_charp message, int severity)
+swift_image_record(png_imagep image, png_const_charp message, int severity)
 {
    if (image == NULL)
       return;
@@ -47,13 +47,13 @@ spng_image_record(png_imagep image, png_const_charp message, int severity)
 }
 
 static void PNGCBAPI
-spng_image_error(png_structp png_ptr, png_const_charp message)
+swift_image_error(png_structp png_ptr, png_const_charp message)
 {
    png_controlp control = (png_controlp)png_get_error_ptr(png_ptr);
 
    if (control != NULL)
    {
-      spng_image_record(control->image, message, PNG_IMAGE_ERROR);
+      swift_image_record(control->image, message, PNG_IMAGE_ERROR);
       longjmp(control->jmpbuf, 1);
    }
 
@@ -64,17 +64,17 @@ spng_image_error(png_structp png_ptr, png_const_charp message)
 }
 
 static void PNGCBAPI
-spng_image_warning(png_structp png_ptr, png_const_charp message)
+swift_image_warning(png_structp png_ptr, png_const_charp message)
 {
    png_controlp control = (png_controlp)png_get_error_ptr(png_ptr);
 
    if (control != NULL)
-      spng_image_record(control->image, message, PNG_IMAGE_WARNING);
+      swift_image_record(control->image, message, PNG_IMAGE_WARNING);
 }
 
 /* Releases everything the control block owns, including itself. */
 void
-spng_c_image_free(png_imagep image)
+swift_c_image_free(png_imagep image)
 {
    png_controlp control;
 
@@ -103,7 +103,7 @@ spng_c_image_free(png_imagep image)
  * Returns NULL having recorded the reason, which is this API's way of failing.
  */
 static png_controlp
-spng_image_begin(png_imagep image, int for_write)
+swift_image_begin(png_imagep image, int for_write)
 {
    png_controlp control;
 
@@ -112,12 +112,12 @@ spng_image_begin(png_imagep image, int for_write)
 
    if (image->version != PNG_IMAGE_VERSION)
    {
-      spng_image_record(image, "png_image: incorrect version", PNG_IMAGE_ERROR);
+      swift_image_record(image, "png_image: incorrect version", PNG_IMAGE_ERROR);
       return NULL;
    }
 
    /* Anything already here is from a previous call the client did not finish. */
-   spng_c_image_free(image);
+   swift_c_image_free(image);
 
    image->warning_or_error = 0;
    image->message[0] = 0;
@@ -126,7 +126,7 @@ spng_image_begin(png_imagep image, int for_write)
 
    if (control == NULL)
    {
-      spng_image_record(image, "png_image: out of memory", PNG_IMAGE_ERROR);
+      swift_image_record(image, "png_image: out of memory", PNG_IMAGE_ERROR);
       return NULL;
    }
 
@@ -136,14 +136,14 @@ spng_image_begin(png_imagep image, int for_write)
 
    control->png_ptr = for_write
       ? png_create_write_struct(PNG_LIBPNG_VER_STRING, control,
-                                spng_image_error, spng_image_warning)
+                                swift_image_error, swift_image_warning)
       : png_create_read_struct(PNG_LIBPNG_VER_STRING, control,
-                               spng_image_error, spng_image_warning);
+                               swift_image_error, swift_image_warning);
 
    if (control->png_ptr == NULL)
    {
       free(control);
-      spng_image_record(image, "png_image: out of memory", PNG_IMAGE_ERROR);
+      swift_image_record(image, "png_image: out of memory", PNG_IMAGE_ERROR);
       return NULL;
    }
 
@@ -151,8 +151,8 @@ spng_image_begin(png_imagep image, int for_write)
 
    if (control->info_ptr == NULL)
    {
-      spng_c_image_free(image);
-      spng_image_record(image, "png_image: out of memory", PNG_IMAGE_ERROR);
+      swift_c_image_free(image);
+      swift_image_record(image, "png_image: out of memory", PNG_IMAGE_ERROR);
       return NULL;
    }
 
@@ -164,7 +164,7 @@ spng_image_begin(png_imagep image, int for_write)
 int
 png_image_begin_read_from_file(png_imagep image, const char *file_name)
 {
-   png_controlp control = spng_image_begin(image, 0);
+   png_controlp control = swift_image_begin(image, 0);
 
    if (control == NULL)
       return 0;
@@ -173,8 +173,8 @@ png_image_begin_read_from_file(png_imagep image, const char *file_name)
 
    if (control->file == NULL)
    {
-      spng_image_record(image, strerror(errno), PNG_IMAGE_ERROR);
-      spng_c_image_free(image);
+      swift_image_record(image, strerror(errno), PNG_IMAGE_ERROR);
+      swift_c_image_free(image);
       return 0;
    }
 
@@ -182,13 +182,13 @@ png_image_begin_read_from_file(png_imagep image, const char *file_name)
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
    png_init_io(control->png_ptr, control->file);
 
-   return spng_swift_image_read_header(image, control);
+   return swift_swift_image_read_header(image, control);
 }
 
 int
@@ -199,12 +199,12 @@ png_image_begin_read_from_stdio(png_imagep image, FILE *file)
    if (file == NULL)
    {
       if (image != NULL)
-         spng_image_record(image, "png_image: invalid file", PNG_IMAGE_ERROR);
+         swift_image_record(image, "png_image: invalid file", PNG_IMAGE_ERROR);
 
       return 0;
    }
 
-   control = spng_image_begin(image, 0);
+   control = swift_image_begin(image, 0);
 
    if (control == NULL)
       return 0;
@@ -214,20 +214,20 @@ png_image_begin_read_from_stdio(png_imagep image, FILE *file)
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
    png_init_io(control->png_ptr, control->file);
 
-   return spng_swift_image_read_header(image, control);
+   return swift_swift_image_read_header(image, control);
 }
 
 /* Reading from memory, which needs a read callback of our own: the bytes are the client's and are
  * handed out a piece at a time as the decoder asks.
  */
 static void PNGCBAPI
-spng_image_read_memory(png_structp png_ptr, png_bytep data, size_t length)
+swift_image_read_memory(png_structp png_ptr, png_bytep data, size_t length)
 {
    png_controlp control = (png_controlp)png_get_io_ptr(png_ptr);
 
@@ -250,12 +250,12 @@ png_image_begin_read_from_memory(png_imagep image, png_const_voidp memory, size_
    if (memory == NULL)
    {
       if (image != NULL)
-         spng_image_record(image, "png_image: invalid memory", PNG_IMAGE_ERROR);
+         swift_image_record(image, "png_image: invalid memory", PNG_IMAGE_ERROR);
 
       return 0;
    }
 
-   control = spng_image_begin(image, 0);
+   control = swift_image_begin(image, 0);
 
    if (control == NULL)
       return 0;
@@ -265,13 +265,13 @@ png_image_begin_read_from_memory(png_imagep image, png_const_voidp memory, size_
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
-   png_set_read_fn(control->png_ptr, control, spng_image_read_memory);
+   png_set_read_fn(control->png_ptr, control, swift_image_read_memory);
 
-   return spng_swift_image_read_header(image, control);
+   return swift_swift_image_read_header(image, control);
 }
 
 int
@@ -283,7 +283,7 @@ png_image_finish_read(png_imagep image, png_const_colorp background,
    if (image == NULL || image->opaque == NULL)
    {
       if (image != NULL)
-         spng_image_record(image, "png_image_finish_read: no image", PNG_IMAGE_ERROR);
+         swift_image_record(image, "png_image_finish_read: no image", PNG_IMAGE_ERROR);
 
       return 0;
    }
@@ -292,22 +292,22 @@ png_image_finish_read(png_imagep image, png_const_colorp background,
 
    if (buffer == NULL)
    {
-      spng_image_record(image, "png_image_finish_read: no buffer", PNG_IMAGE_ERROR);
-      spng_c_image_free(image);
+      swift_image_record(image, "png_image_finish_read: no buffer", PNG_IMAGE_ERROR);
+      swift_c_image_free(image);
       return 0;
    }
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
    {
-      int result = spng_swift_image_finish_read(image, control, background, buffer,
+      int result = swift_swift_image_finish_read(image, control, background, buffer,
                                                 row_stride, colormap);
 
-      spng_c_image_free(image);
+      swift_c_image_free(image);
 
       return result;
    }
@@ -316,7 +316,7 @@ png_image_finish_read(png_imagep image, png_const_colorp background,
 void
 png_image_free(png_imagep image)
 {
-   spng_c_image_free(image);
+   swift_c_image_free(image);
 }
 
 
@@ -330,32 +330,32 @@ png_image_free(png_imagep image)
  * the caller cannot read it afterwards, because afterwards there is nothing to read.
  */
 static int
-spng_image_write(png_imagep image, const void *buffer, png_int_32 row_stride,
+swift_image_write(png_imagep image, const void *buffer, png_int_32 row_stride,
     int convert_to_8_bit, const void *colormap, size_t *used)
 {
    png_controlp control = image->opaque;
 
    if (buffer == NULL)
    {
-      spng_image_record(image, "png_image_write: no buffer", PNG_IMAGE_ERROR);
-      spng_c_image_free(image);
+      swift_image_record(image, "png_image_write: no buffer", PNG_IMAGE_ERROR);
+      swift_c_image_free(image);
       return 0;
    }
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
    {
-      int result = spng_swift_image_write(image, control, buffer, row_stride,
+      int result = swift_swift_image_write(image, control, buffer, row_stride,
                                           convert_to_8_bit, colormap);
 
       if (used != NULL)
          *used = control->out_used;
 
-      spng_c_image_free(image);
+      swift_c_image_free(image);
 
       return result;
    }
@@ -370,7 +370,7 @@ png_image_write_to_file(png_imagep image, const char *file, int convert_to_8_bit
    if (image == NULL)
       return 0;
 
-   control = spng_image_begin(image, 1);
+   control = swift_image_begin(image, 1);
 
    if (control == NULL)
       return 0;
@@ -379,8 +379,8 @@ png_image_write_to_file(png_imagep image, const char *file, int convert_to_8_bit
 
    if (control->file == NULL)
    {
-      spng_image_record(image, strerror(errno), PNG_IMAGE_ERROR);
-      spng_c_image_free(image);
+      swift_image_record(image, strerror(errno), PNG_IMAGE_ERROR);
+      swift_c_image_free(image);
       return 0;
    }
 
@@ -388,13 +388,13 @@ png_image_write_to_file(png_imagep image, const char *file, int convert_to_8_bit
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
    png_init_io(control->png_ptr, control->file);
 
-   return spng_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, NULL);
+   return swift_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, NULL);
 }
 
 int
@@ -408,11 +408,11 @@ png_image_write_to_stdio(png_imagep image, FILE *file, int convert_to_8_bit,
 
    if (file == NULL)
    {
-      spng_image_record(image, "png_image_write: invalid file", PNG_IMAGE_ERROR);
+      swift_image_record(image, "png_image_write: invalid file", PNG_IMAGE_ERROR);
       return 0;
    }
 
-   control = spng_image_begin(image, 1);
+   control = swift_image_begin(image, 1);
 
    if (control == NULL)
       return 0;
@@ -422,13 +422,13 @@ png_image_write_to_stdio(png_imagep image, FILE *file, int convert_to_8_bit,
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
    png_init_io(control->png_ptr, control->file);
 
-   return spng_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, NULL);
+   return swift_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, NULL);
 }
 
 /* Writing to memory, which is also how the size is found out.
@@ -439,7 +439,7 @@ png_image_write_to_stdio(png_imagep image, FILE *file, int convert_to_8_bit,
  * well an image compresses is not something anyone can predict.
  */
 static void PNGCBAPI
-spng_image_write_memory(png_structp png_ptr, png_bytep data, size_t length)
+swift_image_write_memory(png_structp png_ptr, png_bytep data, size_t length)
 {
    png_controlp control = (png_controlp)png_get_io_ptr(png_ptr);
 
@@ -453,7 +453,7 @@ spng_image_write_memory(png_structp png_ptr, png_bytep data, size_t length)
 }
 
 static void PNGCBAPI
-spng_image_flush_memory(png_structp png_ptr)
+swift_image_flush_memory(png_structp png_ptr)
 {
    (void)png_ptr;
 }
@@ -469,12 +469,12 @@ png_image_write_to_memory(png_imagep image, void *memory,
    if (image == NULL || memory_bytes == NULL)
    {
       if (image != NULL)
-         spng_image_record(image, "png_image_write: no size", PNG_IMAGE_ERROR);
+         swift_image_record(image, "png_image_write: no size", PNG_IMAGE_ERROR);
 
       return 0;
    }
 
-   control = spng_image_begin(image, 1);
+   control = swift_image_begin(image, 1);
 
    if (control == NULL)
       return 0;
@@ -485,12 +485,12 @@ png_image_write_to_memory(png_imagep image, void *memory,
 
    if (setjmp(control->jmpbuf) != 0)
    {
-      spng_c_image_free(image);
+      swift_c_image_free(image);
       return 0;
    }
 
-   png_set_write_fn(control->png_ptr, control, spng_image_write_memory,
-                    spng_image_flush_memory);
+   png_set_write_fn(control->png_ptr, control, swift_image_write_memory,
+                    swift_image_flush_memory);
 
    /* The count is wanted whether or not the bytes fitted, so it is taken from the control block
     * before that block goes away.
@@ -498,7 +498,7 @@ png_image_write_to_memory(png_imagep image, void *memory,
    {
       size_t used = 0;
 
-      result = spng_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, &used);
+      result = swift_image_write(image, buffer, row_stride, convert_to_8_bit, colormap, &used);
 
       if (result != 0)
       {
@@ -506,7 +506,7 @@ png_image_write_to_memory(png_imagep image, void *memory,
          {
             /* There was not room, and saying so is the point of the call. */
             *memory_bytes = used;
-            spng_image_record(image, "png_image_write: buffer too small", PNG_IMAGE_ERROR);
+            swift_image_record(image, "png_image_write: buffer too small", PNG_IMAGE_ERROR);
             return 0;
          }
 
