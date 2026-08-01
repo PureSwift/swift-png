@@ -361,7 +361,7 @@ struct TransformProgram {
     /// The limit is the image's own depth in every case, indexed images included.  That is worth
     /// stating because the plausible alternative is wrong: an indexed image's samples live in its
     /// palette and are eight bit, but what the reference checks against is the depth of the indices.
-    static func validateShift(_ bits: SignificantBits, header: Header) throws {
+    static func validateShift(_ bits: SignificantBits, header: Header) throws(Diagnostic) {
         let limit = header.bitDepth
 
         var required: [UInt8] = []
