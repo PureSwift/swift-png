@@ -1,17 +1,17 @@
 // App.swift - the thing this whole harness exists to run
 //
-// Encodes a small synthetic image with PNGCore's own writer, decodes it back with its own
+// Encodes a small synthetic image with PNG's own writer, decodes it back with its own
 // reader, and checks the round trip pixel for pixel — the same shape as
-// Tests/PNGCoreTests/RoundTripTests.swift, run here as compiled ARM object code under an
+// Tests/PNGTests/RoundTripTests.swift, run here as compiled ARM object code under an
 // emulator instead of as a host-native test. Neither the C API boundary nor the system zlib
-// trait is reachable on this target, so what runs is exactly what a client embedding PNGCore
+// trait is reachable on this target, so what runs is exactly what a client embedding PNG
 // directly, with the pure-Swift LZ77 module, would run.
 //
 // The `@_silgen_name` declarations below are how a freestanding Swift file built with a bare
 // `swiftc` invocation — no SwiftPM target, no bridging header — names C symbols it expects to
 // find at link time; `shim.c` is where each of them is actually defined.
 
-import PNGCore
+import PNG
 
 @_silgen_name("bump_malloc") func c_malloc(_ size: Int) -> UnsafeMutableRawPointer?
 @_silgen_name("bump_free") func c_free(_ ptr: UnsafeMutableRawPointer?)
