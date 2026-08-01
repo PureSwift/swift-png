@@ -13,6 +13,8 @@
 
 #if SystemZlib
 import CZlib
+#else
+import LZ77
 #endif
 
 /// A zlib stream being decompressed.
@@ -23,6 +25,8 @@ final class InflateStream {
     #if SystemZlib
     private var stream = z_stream()
     private var isInitialized = false
+    #else
+    private let stream = Inflate()
     #endif
 
     init() throws {
@@ -40,8 +44,6 @@ final class InflateStream {
         }
 
         self.isInitialized = true
-        #else
-        throw Diagnostic("this build has no decompressor")
         #endif
     }
 
@@ -59,7 +61,7 @@ final class InflateStream {
         #if SystemZlib
         return self.stream.avail_in == 0
         #else
-        return true
+        return self.stream.needsInput
         #endif
     }
 
@@ -71,6 +73,8 @@ final class InflateStream {
         #if SystemZlib
         self.stream.next_in = bytes.baseAddress
         self.stream.avail_in = UInt32(bytes.count)
+        #else
+        self.stream.setInput(UnsafeBufferPointer(bytes))
         #endif
     }
 
@@ -120,7 +124,13 @@ final class InflateStream {
 
         return count - Int(self.stream.avail_out)
         #else
-        throw Diagnostic("this build has no decompressor")
+        do {
+            let produced = try self.stream.inflate(into: destination, count: count)
+            self.isFinished = self.stream.isFinished
+            return produced
+        } catch let error as DeflateError {
+            throw Diagnostic(error.message, chunk: .idat)
+        }
         #endif
     }
 }
