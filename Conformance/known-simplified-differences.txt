@@ -123,6 +123,18 @@ rgb16-filter4.png 0x12:bg0 The reference's sixteen bit gamma table is coarser th
 rgb16-filter4.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgb16-filter4.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgb16-filter4.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through the colour cube rather than the ordinary sRGB formats above, but the same cause: a
+# one count difference in the underlying byte, from the same coarse table.  It looks larger here
+# only because the cube's index weights each channel by six or thirty-six — one level of difference
+# in one channel moves the reported index by that much, not because more went wrong.
+rgb16-filter4.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
 rgba16-filter1.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
