@@ -7,11 +7,11 @@
 # desktop build that never notices, which is exactly why this runs on every push rather than
 # being checked by hand when someone remembers.
 #
-# `qemu-cortex-m4` and `hypervisor-arm64` are the exceptions: each links a bootable firmware
-# image and actually runs it — under an emulated Cortex-M4F and under Hypervisor.framework
-# respectively — so those two targets are checked for correctness, a real encode and a real
-# decode, byte-exact, rather than only for a clean link. See Firmware/QEMU and
-# Firmware/Hypervisor.
+# `qemu-cortex-m4` is the exception: it links a bootable firmware image around the armv7em
+# build and actually runs it, under an emulated Cortex-M4F, so that target is checked for
+# correctness — a real encode and a real decode, byte-exact — rather than only for a clean
+# link. See Firmware/QEMU. Firmware/Hypervisor does the same for arm64-apple-none-macho, run
+# locally rather than in CI (see that directory's own README for why).
 #
 # `pure-swift` runs the compression path on the host, with the system zlib trait switched off:
 # on every one of these targets that path is the only one there is, so a test suite that only
@@ -97,47 +97,6 @@ jobs:
         run: >
           ./Firmware/QEMU/run.sh
           build/embedded/armv7em-none-none-eabi/firmware/firmware.elf
-
-  # The other target checked by running it rather than only linking it — but on a runner rather
-  # than an emulator, since Hypervisor.framework is what stands in for a board model here (see
-  # Firmware/Hypervisor). That is also this job's real risk: GitHub's macOS runners are
-  # themselves VMs, and whether they expose nested virtualization to a guest process is not
-  # something documented anywhere reliable enough to build a hard requirement on. `run.sh`
-  # reports that case as exit code 3, distinctly from a firmware fault, and this job treats it
-  # as an accepted outcome rather than a failure — so this job can go from "unsupported here" to
-  # "actually verifying the firmware" the moment the runner supports it, with no workflow change
-  # required, while a real regression still fails the job either way.
-  hypervisor-arm64:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-
-      # The runner's own Xcode-bundled Swift does not ship the embedded standard library for
-      # arm64-apple-none-macho — only a standalone swift.org toolchain does. Installed system-
-      # wide, which is where scripts/build_embedded.sh and Firmware/Hypervisor/build.sh both
-      # know to look for it.
-      - name: Install a Swift toolchain with the embedded standard library
-        run: |
-          curl -sSL -o /tmp/swift.pkg \
-              "https://download.swift.org/swift-6.3.3-release/xcode/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-osx.pkg"
-          sudo installer -pkg /tmp/swift.pkg -target /
-          rm /tmp/swift.pkg
-
-      - name: Build the firmware and the host loader
-        run: ./Firmware/Hypervisor/build.sh
-
-      - name: Boot it and check the round trip
-        run: |
-          set +e
-          ./Firmware/Hypervisor/run.sh \
-              build/embedded/arm64-apple-none-macho/hypervisor/firmware.macho \
-              build/embedded/arm64-apple-none-macho/hypervisor/loader
-          status=$?
-          if [ "$status" -eq 3 ]; then
-            echo "::warning::This runner has no nested virtualization; the firmware itself was not verified this run."
-            exit 0
-          fi
-          exit $status
 
   wasm-embedded:
     runs-on: ubuntu-latest
