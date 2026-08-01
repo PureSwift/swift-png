@@ -115,21 +115,33 @@ public func swift_swift_image_finish_read(
 
     guard let info = InfoStore.from(info_ptr), let header = info.header else { return 0 }
 
-    // The one colour-mapped case built so far: an opaque greyscale file, mapped to a greyscale
-    // colour map with no coverage of its own.  Everything else — colour, coverage, an indexed or
-    // sixteen bit source — still refuses; see readGrayColormap for why this particular shape was
-    // worth doing first.
+    // The two colour-mapped cases built so far, both opaque sources with no coverage of their own:
+    // a greyscale file into a greyscale colour map, and an RGB file into the reference's fixed
+    // six-by-six-by-six colour cube.  Everything else — coverage in either direction, an indexed
+    // source, colour reduced to grey or grey expanded to colour, sixteen bits — still refuses.
     if format.isColormapped {
-        guard !format.hasColor, !format.hasAlpha, !format.isLinear,
-              header.colorType == .grayscale, header.bitDepth <= 8,
-              !(header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)) else {
-            swift_c_error(png_ptr, "png_image: colour-mapped output not implemented")
+        let fileHasAlpha = header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)
+
+        if !format.hasColor, !format.hasAlpha, !format.isLinear,
+            header.colorType == .grayscale, header.bitDepth <= 8, !fileHasAlpha {
+            return readGrayColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
+                buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
         }
 
-        return readGrayColormap(
-            image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
-            buffer: buffer, rowStride: row_stride, colormap: colormap
-        )
+        // `.rgba` is never reached here: that colour type carries an alpha channel by
+        // definition, so `!fileHasAlpha` already rules it out — a source with genuinely no
+        // coverage to remove is always `.rgb`.
+        if format.hasColor, !format.hasAlpha, !format.isLinear,
+            header.colorType == .rgb, !fileHasAlpha {
+            return readRGBColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
+        swift_c_error(png_ptr, "png_image: colour-mapped output not implemented")
     }
 
     // What this does not do yet, and refuses rather than approximates.  The messages are short on
@@ -471,6 +483,123 @@ private func readGrayColormap(
             let destination = first.advanced(by: stride * row).assumingMemoryBound(to: UInt8.self)
 
             png_read_row(png_ptr, destination, nil)
+        }
+    }
+
+    png_read_end(png_ptr, nil)
+
+    return 1
+}
+
+/// The one nearest-colour step every entry of the six-by-six-by-six colour cube shares: which of
+/// its six levels a component is closest to, `0...5`.
+///
+/// The reference's own rounding (`PNG_DIV51`), not an obvious one: dividing by 51 and rounding
+/// would put the boundary between two levels at the arithmetic midpoint of 51, which is not where
+/// this puts it — `* 5 + 130) >> 8` is `/ 51.2` rounded, matching the levels' own spacing
+/// (`0, 51, 102, 153, 204, 255` — four gaps of 51 and a fifth short one) rather than splitting 51
+/// itself evenly.
+private func div51(_ value: UInt8) -> UInt8 {
+    UInt8((UInt32(value) &* 5 &+ 130) >> 8)
+}
+
+/// Reads an opaque RGB or RGBA file into the reference's own fixed colour map: every combination
+/// of six levels per channel, the same cube regardless of what the file holds, so that no analysis
+/// of the image's own colours is needed — a client asking for this format is asking for a
+/// reduction, not the best one findable, and the reference has one answer to what "this reduction"
+/// means rather than as many as there are images.
+///
+/// Coverage is not handled here — see the caller — so this file's presence in `PNG_CMAP_RGB` also
+/// says the file has none; the cube has no transparent entry to spare for it.
+private func readRGBColormap(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let colormap else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let entries = 216
+    let map = colormap.assumingMemoryBound(to: UInt8.self)
+
+    // Blue and red swap places for a client that asked for BGR; the cube's own indexing (below)
+    // does not change, since that always works from the file's own component order regardless of
+    // how a found entry's bytes are laid out.
+    let redOffset = format.isReversed ? 2 : 0
+    let blueOffset = format.isReversed ? 0 : 2
+
+    for r in 0 ..< 6 {
+        for g in 0 ..< 6 {
+            for b in 0 ..< 6 {
+                let entry = (r * 6 + g) * 6 + b
+                let base = entry * 3
+
+                map[base + redOffset] = UInt8(r * 51)
+                map[base + 1] = UInt8(g * 51)
+                map[base + blueOffset] = UInt8(b * 51)
+            }
+        }
+    }
+
+    image.pointee.colormap_entries = png_uint_32(entries)
+
+    // Every source this handles becomes the same shape libpng hands the ordinary sRGB eight bit
+    // reader: expand to samples, narrow sixteen bit ones, encode for sRGB.  There is no coverage
+    // to add or remove and nothing to average, since the caller has already refused both.
+    png_set_expand(png_ptr)
+    png_set_scale_16(png_ptr)
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
+
+    png_read_update_info(png_ptr, info_ptr)
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+    let stride = rowStride == 0 ? width : Int(rowStride)
+
+    guard abs(stride) >= width else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    let passes = png_set_interlace_handling(png_ptr)
+
+    // The whole file's own sRGB triples, not one row: an interlaced pass only ever touches a
+    // scattered subset of an image's pixels, and png_read_row is what knows which — it leaves
+    // every pixel outside the current pass untouched in whatever buffer it is given, which is
+    // what makes calling it once per row per pass build up the whole image correctly, the same
+    // way the ordinary (non-colour-mapped) reader relies on when it hands the client's own row
+    // buffer to every call. Converting straight to an index as each pass comes in, into a buffer
+    // sized for one row rather than the whole image, would instead recompute every pixel's index
+    // on every pass — including the ones that pass never touched, from whatever that row buffer
+    // happened to hold last, which is not this image's data.
+    let raw = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: width * height * 3)
+    defer { raw.deallocate() }
+
+    for _ in 0 ..< passes {
+        for y in 0 ..< height {
+            png_read_row(png_ptr, raw.baseAddress! + y * width * 3, nil)
+        }
+    }
+
+    for y in 0 ..< height {
+        let destination = first.advanced(by: stride * y).assumingMemoryBound(to: UInt8.self)
+        let sourceRow = y * width * 3
+
+        for x in 0 ..< width {
+            let r = div51(raw[sourceRow + x * 3])
+            let g = div51(raw[sourceRow + x * 3 + 1])
+            let b = div51(raw[sourceRow + x * 3 + 2])
+
+            destination[x] = (r * 6 + g) * 6 + b
         }
     }
 
