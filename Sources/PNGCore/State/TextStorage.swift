@@ -36,7 +36,7 @@ public struct TextStorage {
     public static func copying(
         _ bytes: UnsafeBufferPointer<UInt8>,
         host: Host
-    ) throws -> Self {
+    ) throws(Diagnostic) -> Self {
         var text = Self()
 
         // One extra byte for the terminator, and one allocation even for an empty
@@ -60,19 +60,29 @@ public struct TextStorage {
     public static func copying(
         _ cString: UnsafePointer<CChar>?,
         host: Host
-    ) throws -> Self {
+    ) throws(Diagnostic) -> Self {
         guard let cString else { return Self() }
 
         var length = 0
         while cString[length] != 0 { length += 1 }
 
-        return try UnsafeRawPointer(cString)
-            .withMemoryRebound(to: UInt8.self, capacity: length) { bytes in
-                try Self.copying(
-                    UnsafeBufferPointer(start: bytes, count: length),
-                    host: host
-                )
+        // The rebinding closure cannot throw a typed error through `rethrows`, so the throwing
+        // copy happens inside it behind a Result and is unwrapped, typed, out here.
+        let result = UnsafeRawPointer(cString)
+            .withMemoryRebound(to: UInt8.self, capacity: length) { bytes -> Result<Self, Diagnostic> in
+                do throws(Diagnostic) {
+                    return .success(
+                        try Self.copying(
+                            UnsafeBufferPointer(start: bytes, count: length),
+                            host: host
+                        )
+                    )
+                } catch {
+                    return .failure(error)
+                }
             }
+
+        return try result.get()
     }
 
     public func deallocate(host: Host) {

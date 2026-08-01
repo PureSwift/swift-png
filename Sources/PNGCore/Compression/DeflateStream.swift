@@ -12,6 +12,8 @@
 
 #if SystemZlib
 import CZlib
+#else
+import LZ77
 #endif
 
 /// How the image data is to be compressed.
@@ -42,9 +44,11 @@ final class DeflateStream {
     #if SystemZlib
     private var stream = z_stream()
     private var isInitialized = false
+    #else
+    private let stream: Deflate
     #endif
 
-    init(settings: CompressionSettings) throws {
+    init(settings: CompressionSettings) throws(Diagnostic) {
         #if SystemZlib
         // The window is given negated by callers who want a raw stream; here it is always positive,
         // since the format's image data is a zlib stream complete with its header and check value.
@@ -65,7 +69,7 @@ final class DeflateStream {
 
         self.isInitialized = true
         #else
-        throw Diagnostic("this build has no compressor")
+        self.stream = Deflate(level: settings.level)
         #endif
     }
 
@@ -83,7 +87,7 @@ final class DeflateStream {
         #if SystemZlib
         return self.stream.avail_in == 0
         #else
-        return true
+        return self.stream.needsInput
         #endif
     }
 
@@ -94,6 +98,8 @@ final class DeflateStream {
         #if SystemZlib
         self.stream.next_in = UnsafeMutablePointer(mutating: bytes.baseAddress)
         self.stream.avail_in = UInt32(bytes.count)
+        #else
+        self.stream.setInput(bytes)
         #endif
     }
 
@@ -117,7 +123,7 @@ final class DeflateStream {
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int,
         ending: Ending = .none
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         guard count > 0 else { return 0 }
 
         #if SystemZlib
@@ -154,7 +160,28 @@ final class DeflateStream {
 
         return count - Int(self.stream.avail_out)
         #else
-        throw Diagnostic("this build has no compressor")
+        let mode: Deflate.Ending
+
+        switch ending {
+        case .none: mode = .none
+        case .flush: mode = .flush
+        case .finish: mode = .finish
+        }
+
+        // Typed, so the catch binds a DeflateError directly: catching by dynamic cast would
+        // erase it to an existential, which this module cannot spend on every platform it
+        // compiles for — and which crashes the 6.3.3 compiler outright on some of them.
+        do throws(DeflateError) {
+            let produced = try self.stream.deflate(
+                into: destination,
+                count: count,
+                ending: mode
+            )
+            self.isFinished = self.stream.isFinished
+            return produced
+        } catch {
+            throw Diagnostic(error.message, chunk: .idat)
+        }
         #endif
     }
 }

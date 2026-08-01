@@ -39,7 +39,7 @@ extension InfoStore {
     // -- colour ---------------------------------------------------------------
 
     /// The gamma the file was encoded with, scaled by 100000.
-    func parseGamma(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseGamma(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         var reader = ByteReader(payload)
 
         guard payload.count == 4 else {
@@ -53,7 +53,7 @@ extension InfoStore {
     }
 
     /// The white point and primaries, as eight rationals scaled by 100000.
-    func parseChromaticity(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseChromaticity(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 32 else {
             throw Diagnostic("invalid", chunk: .chrm)
         }
@@ -75,7 +75,7 @@ extension InfoStore {
     }
 
     /// Which of the four defined rendering intents the file was prepared for.
-    func parseSrgb(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseSrgb(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 1 else {
             throw Diagnostic("invalid", chunk: .srgb)
         }
@@ -98,7 +98,7 @@ extension InfoStore {
     /// image's value is mirrored into the colour channels, and an image without an alpha
     /// channel reports the image's own bit depth as its alpha precision. Both are
     /// conveniences the reference provides, and clients read them.
-    func parseSignificantBits(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseSignificantBits(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let header = self.header else {
             throw Diagnostic("missing IHDR", chunk: .sbit)
         }
@@ -137,7 +137,7 @@ extension InfoStore {
     // -- palette and transparency ---------------------------------------------
 
     /// The palette, which is required for an indexed image and advisory for others.
-    func parsePalette(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parsePalette(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let header = self.header else {
             throw Diagnostic("missing IHDR", chunk: .plte)
         }
@@ -178,7 +178,7 @@ extension InfoStore {
 
     /// Transparency: one alpha per palette entry for an indexed image, or a single
     /// colour to treat as transparent otherwise.
-    func parseTransparency(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseTransparency(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let header = self.header else {
             throw Diagnostic("missing IHDR", chunk: .trns)
         }
@@ -238,7 +238,7 @@ extension InfoStore {
     /// name a background the image itself could never contain. The reference refuses those
     /// rather than clamping, since compositing against a colour outside the image's range
     /// would produce something the client did not ask for.
-    func parseBackground(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseBackground(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let header = self.header else {
             throw Diagnostic("missing IHDR", chunk: .bkgd)
         }
@@ -313,7 +313,7 @@ extension InfoStore {
 
     /// How often each palette entry is used, for a viewer that has to reduce the
     /// palette and wants to know which entries matter.
-    func parseHistogram(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseHistogram(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         // Sized against the palette, so it cannot precede it.
         guard !self.palette.isEmpty else {
             throw Diagnostic("invalid", chunk: .hist)
@@ -342,7 +342,7 @@ extension InfoStore {
     // -- physical layout ------------------------------------------------------
 
     /// The intended size of a pixel.
-    func parsePhysicalDimensions(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parsePhysicalDimensions(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 9 else {
             throw Diagnostic("invalid", chunk: .phys)
         }
@@ -359,7 +359,7 @@ extension InfoStore {
     }
 
     /// Where the image sits on its page.
-    func parseOffset(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseOffset(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 9 else {
             throw Diagnostic("invalid", chunk: .offs)
         }
@@ -378,7 +378,7 @@ extension InfoStore {
     }
 
     /// When the image was last modified, always in universal time.
-    func parseTimestamp(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseTimestamp(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 7 else {
             throw Diagnostic("invalid", chunk: .time)
         }
@@ -400,7 +400,7 @@ extension InfoStore {
     // -- high dynamic range signalling ----------------------------------------
 
     /// Coding parameters, as indices into published registries.
-    func parseCodePoints(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseCodePoints(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 4 else {
             throw Diagnostic("invalid", chunk: .cicp)
         }
@@ -418,7 +418,7 @@ extension InfoStore {
     }
 
     /// The light levels the content was mastered for.
-    func parseContentLightLevel(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseContentLightLevel(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 8 else {
             throw Diagnostic("invalid", chunk: .clli)
         }
@@ -434,7 +434,7 @@ extension InfoStore {
     }
 
     /// The display the content was mastered on.
-    func parseMasteringDisplay(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseMasteringDisplay(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count == 24 else {
             throw Diagnostic("invalid", chunk: .mdcv)
         }
@@ -460,7 +460,7 @@ extension InfoStore {
     // -- opaque payloads ------------------------------------------------------
 
     /// Metadata in the format cameras use, carried without interpretation.
-    func parseExif(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseExif(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count > 0 else {
             throw Diagnostic("invalid", chunk: .exif)
         }
@@ -483,7 +483,7 @@ extension InfoStore {
     ///
     /// A keyword, two sample values, an equation number, a count, a unit, and that many parameters —
     /// the last of them not terminated, because the chunk's length says where it ends.
-    func parseCalibration(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseCalibration(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let purposeEnd = self.separator(in: payload, from: 0),
               purposeEnd + 10 <= payload.count else {
             throw Diagnostic("malformed", severity: .warning, chunk: .pcal)
@@ -553,7 +553,7 @@ extension InfoStore {
     ///
     /// A name, a depth, and entries of five numbers each — narrower at eight bits than at sixteen, so
     /// the depth is what decides how long an entry is.
-    func parseSuggestedPalette(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseSuggestedPalette(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let nameEnd = self.separator(in: payload, from: 0), nameEnd + 1 < payload.count else {
             throw Diagnostic("malformed", severity: .warning, chunk: .splt)
         }

@@ -75,7 +75,7 @@ final class SequentialWriter {
     /// finish.
     private var startedImageData = false
 
-    func beginFile(context: PngContext) throws {
+    func beginFile(context: PngContext) throws(Diagnostic) {
         guard self.stage == .start else { return }
 
         try context.reserve(.writeStaging, 8)
@@ -87,7 +87,7 @@ final class SequentialWriter {
     }
 
     /// Writes the header chunk, which every other chunk's meaning depends on.
-    func writeHeader(_ fields: Header.Fields, _ header: Header, context: PngContext) throws {
+    func writeHeader(_ fields: Header.Fields, _ header: Header, context: PngContext) throws(Diagnostic) {
         try self.beginFile(context: context)
 
         try context.reserve(.scratch, 13)
@@ -109,7 +109,7 @@ final class SequentialWriter {
     }
 
     /// Writes the palette, which for an indexed image the file is unreadable without.
-    func writePalette(_ info: InfoStore, context: PngContext) throws {
+    func writePalette(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         let entries = info.palette.elements
 
         guard entries.count > 0 else {
@@ -135,7 +135,7 @@ final class SequentialWriter {
     }
 
     /// Compresses one scanline and emits whatever chunks that fills.
-    func writeRow(_ row: UnsafeBufferPointer<UInt8>, context: PngContext) throws {
+    func writeRow(_ row: UnsafeBufferPointer<UInt8>, context: PngContext) throws(Diagnostic) {
         guard let header = context.header else {
             throw Diagnostic("png_write_row called before png_write_info")
         }
@@ -217,7 +217,7 @@ final class SequentialWriter {
         _ row: UnsafeBufferPointer<UInt8>,
         header: Header,
         context: PngContext
-    ) throws -> UnsafeBufferPointer<UInt8> {
+    ) throws(Diagnostic) -> UnsafeBufferPointer<UInt8> {
         guard let program = self.transforms else { return row }
 
         let supplied = program.suppliedShape.rowBytes
@@ -264,7 +264,7 @@ final class SequentialWriter {
     }
 
     /// Pushes the output when the client asked for that every so many rows.
-    private func flushIfDue(context: PngContext) throws {
+    private func flushIfDue(context: PngContext) throws(Diagnostic) {
         guard context.flushEveryRows > 0 else { return }
 
         self.rowsSinceFlush += 1
@@ -280,7 +280,7 @@ final class SequentialWriter {
         stored: Int,
         header: Header,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         try context.reserve(.rowBuffer, stored + 1)
         try context.reserve(.filterScratch, stored * 2)
 
@@ -331,7 +331,7 @@ final class SequentialWriter {
         pass: Int,
         header: Header,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         let width = Adam7.width(ofPass: pass, imageWidth: header.width)
 
         guard width > 0 else { return }
@@ -380,7 +380,7 @@ final class SequentialWriter {
     }
 
     /// Finishes the compressed stream and writes the chunk that ends the file.
-    func writeEnd(_ info: InfoStore?, context: PngContext) throws {
+    func writeEnd(_ info: InfoStore?, context: PngContext) throws(Diagnostic) {
         // Said once, about the image rather than about a row, and said as a fault rather than as a
         // remark: a file whose rows name entries its palette has not got is a file nothing can read
         // properly, so writing one is refused unless the client has said it can live with it.
@@ -415,7 +415,7 @@ final class SequentialWriter {
 
     // -- chunks the client writes itself -------------------------------------
 
-    func beginClientChunk(_ name: ChunkName, length: Int, context: PngContext) throws {
+    func beginClientChunk(_ name: ChunkName, length: Int, context: PngContext) throws(Diagnostic) {
         try self.beginFile(context: context)
 
         var writer = context.chunkWriter
@@ -439,7 +439,7 @@ final class SequentialWriter {
 
     // -- the image data ------------------------------------------------------
 
-    private func startImageData(context: PngContext) throws {
+    private func startImageData(context: PngContext) throws(Diagnostic) {
         guard let header = context.header else { return }
 
         let widest = header.isInterlaced
@@ -479,7 +479,7 @@ final class SequentialWriter {
     private func compress(
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         guard let deflater = self.deflater else { return }
 
         deflater.setInput(bytes)
@@ -494,7 +494,7 @@ final class SequentialWriter {
     /// Both halves are needed and neither is enough: the compressor is holding bytes it has not
     /// decided how to encode yet, and whatever the client writes through is holding bytes it has not
     /// decided when to send.
-    func flush(context: PngContext) throws {
+    func flush(context: PngContext) throws(Diagnostic) {
         if let deflater = self.deflater, self.startedImageData, !deflater.isFinished {
             var produced = 0
 
@@ -507,7 +507,7 @@ final class SequentialWriter {
         self.rowsSinceFlush = 0
     }
 
-    private func finishImageData(context: PngContext) throws {
+    private func finishImageData(context: PngContext) throws(Diagnostic) {
         guard let deflater = self.deflater else { return }
 
         deflater.setInput(UnsafeBufferPointer(start: nil, count: 0))
@@ -529,7 +529,7 @@ final class SequentialWriter {
         _ deflater: DeflateStream,
         context: PngContext,
         ending: DeflateStream.Ending
-    ) throws {
+    ) throws(Diagnostic) {
         _ = try self.drainOnce(deflater, context: context, ending: ending)
     }
 
@@ -538,7 +538,7 @@ final class SequentialWriter {
         _ deflater: DeflateStream,
         context: PngContext,
         ending: DeflateStream.Ending
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         let capacity = context.inputBuffer.count
         let produced = try deflater.deflate(
             into: context.inputBuffer.bytes.baseAddress!,

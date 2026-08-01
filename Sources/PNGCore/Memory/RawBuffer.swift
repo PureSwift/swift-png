@@ -33,7 +33,7 @@ struct RawBuffer {
         self.count = count
     }
 
-    static func allocate(_ count: Int, host: Host) throws -> Self {
+    static func allocate(_ count: Int, host: Host) throws(Diagnostic) -> Self {
         guard count > 0 else { return .empty }
         return Self(base: try host.allocateBytes(count), count: count)
     }

@@ -131,7 +131,7 @@ public struct Header: Sendable {
         ///
         /// Throws only when the payload is not thirteen bytes; anything wrong with
         /// the values themselves is reported through ``problems``.
-        public init(parsing payload: UnsafeBufferPointer<UInt8>) throws {
+        public init(parsing payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
             guard payload.count == Self.storedSize else {
                 throw Diagnostic("Invalid IHDR data")
             }

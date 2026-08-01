@@ -13,6 +13,8 @@
 
 #if SystemZlib
 import CZlib
+#else
+import LZ77
 #endif
 
 /// A zlib stream being decompressed.
@@ -23,9 +25,11 @@ final class InflateStream {
     #if SystemZlib
     private var stream = z_stream()
     private var isInitialized = false
+    #else
+    private let stream = Inflate()
     #endif
 
-    init() throws {
+    init() throws(Diagnostic) {
         #if SystemZlib
         // The size is passed because zlib checks it against its own idea of the
         // structure, which is how it detects a header/library mismatch.
@@ -40,8 +44,6 @@ final class InflateStream {
         }
 
         self.isInitialized = true
-        #else
-        throw Diagnostic("this build has no decompressor")
         #endif
     }
 
@@ -59,7 +61,7 @@ final class InflateStream {
         #if SystemZlib
         return self.stream.avail_in == 0
         #else
-        return true
+        return self.stream.needsInput
         #endif
     }
 
@@ -71,6 +73,8 @@ final class InflateStream {
         #if SystemZlib
         self.stream.next_in = bytes.baseAddress
         self.stream.avail_in = UInt32(bytes.count)
+        #else
+        self.stream.setInput(UnsafeBufferPointer(bytes))
         #endif
     }
 
@@ -82,7 +86,7 @@ final class InflateStream {
     func inflate(
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         guard count > 0 else { return 0 }
 
         #if SystemZlib
@@ -120,7 +124,16 @@ final class InflateStream {
 
         return count - Int(self.stream.avail_out)
         #else
-        throw Diagnostic("this build has no decompressor")
+        // Typed, so the catch binds a DeflateError directly: catching by dynamic cast would
+        // erase it to an existential, which this module cannot spend on every platform it
+        // compiles for — and which crashes the 6.3.3 compiler outright on some of them.
+        do throws(DeflateError) {
+            let produced = try self.stream.inflate(into: destination, count: count)
+            self.isFinished = self.stream.isFinished
+            return produced
+        } catch {
+            throw Diagnostic(error.message, chunk: .idat)
+        }
         #endif
     }
 }

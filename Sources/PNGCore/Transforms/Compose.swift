@@ -86,34 +86,53 @@ extension Transform {
         fromLinear: GammaTable? = nil,
         corrected: GammaTable? = nil
     ) {
+        // One channel at a time through a nested function rather than a loop over key paths:
+        // a key path is a runtime object, which some of the platforms this compiles for cannot
+        // spend, and three calls say the same thing.
+        func compose(
+            _ foreground: inout UInt8,
+            _ alpha: Int,
+            _ screen: Int,
+            _ linear: Int
+        ) {
+            let value = Int(foreground)
+
+            guard let toLinear, let fromLinear, let corrected else {
+                foreground = Self.blend8(value, alpha, screen)
+                return
+            }
+
+            if alpha == 255 {
+                foreground = corrected.values[value]
+            } else if alpha == 0 {
+                foreground = UInt8(truncatingIfNeeded: screen)
+            } else {
+                let blended = Int(Self.blend8(Int(toLinear.values[value]), alpha, linear))
+                foreground = fromLinear.values[blended]
+            }
+        }
+
         for index in palette.indices {
             let alpha = index < alphas.count ? Int(alphas[index]) : 255
 
-            let channels = [
-                (\Rgb8.red, Int(background.screen.red), Int(background.linear.red)),
-                (\Rgb8.green, Int(background.screen.green), Int(background.linear.green)),
-                (\Rgb8.blue, Int(background.screen.blue), Int(background.linear.blue)),
-            ]
-
-            for (path, screen, linear) in channels {
-                let foreground = Int(palette[index][keyPath: path])
-
-                guard let toLinear, let fromLinear, let corrected else {
-                    palette[index][keyPath: path] = Self.blend8(foreground, alpha, screen)
-                    continue
-                }
-
-                if alpha == 255 {
-                    palette[index][keyPath: path] = corrected.values[foreground]
-                } else if alpha == 0 {
-                    palette[index][keyPath: path] = UInt8(truncatingIfNeeded: screen)
-                } else {
-                    let blended = Int(
-                        Self.blend8(Int(toLinear.values[foreground]), alpha, linear)
-                    )
-                    palette[index][keyPath: path] = fromLinear.values[blended]
-                }
-            }
+            compose(
+                &palette[index].red,
+                alpha,
+                Int(background.screen.red),
+                Int(background.linear.red)
+            )
+            compose(
+                &palette[index].green,
+                alpha,
+                Int(background.screen.green),
+                Int(background.linear.green)
+            )
+            compose(
+                &palette[index].blue,
+                alpha,
+                Int(background.screen.blue),
+                Int(background.linear.blue)
+            )
         }
     }
 

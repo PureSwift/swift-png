@@ -44,7 +44,7 @@ final class ChunkLexer {
     /// The bytes land in a tuple on the stack rather than an array, because the
     /// read runs the client's callback and a client may jump out of it; an array
     /// would be abandoned still holding its storage.
-    static func readSignature(host: Host, alreadyConsumed: Int) throws {
+    static func readSignature(host: Host, alreadyConsumed: Int) throws(Diagnostic) {
         guard alreadyConsumed < Self.signature.count else {
             // The client says it has read the whole signature and checked it.
             return
@@ -71,7 +71,7 @@ final class ChunkLexer {
     }
 
     /// Reads the next chunk's length and type.
-    func readHeader(host: Host, context: PngContext? = nil) throws -> ChunkHeader {
+    func readHeader(host: Host, context: PngContext? = nil) throws(Diagnostic) -> ChunkHeader {
         context?.noteIO(0x0020)
 
         var raw = (UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0), UInt8(0))
@@ -148,7 +148,7 @@ final class ChunkLexer {
     func readWholePayload(
         into buffer: UnsafeMutableBufferPointer<UInt8>,
         host: Host
-    ) throws {
+    ) throws(Diagnostic) {
         let count = self.remainingInChunk
         guard count > 0 else { return }
 

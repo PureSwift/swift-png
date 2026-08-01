@@ -16,7 +16,7 @@ extension SequentialWriter {
     ///
     /// These describe the colour the palette entries are in, so a decoder needs them before it has
     /// entries to interpret.
-    func writeBeforePalette(_ info: InfoStore, context: PngContext) throws {
+    func writeBeforePalette(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         if info.isValid(InfoStore.Valid.gama) {
             try self.writeFixed(.gama, info.gamma, context: context)
         }
@@ -77,7 +77,7 @@ extension SequentialWriter {
     /// Where each goes is what its location says.  A chunk that was after the image data has to stay
     /// after it: that is what its being there meant, and moving it would change what the file says
     /// about when it applies.
-    func writeUnknown(_ info: InfoStore, afterImageData: Bool, context: PngContext) throws {
+    func writeUnknown(_ info: InfoStore, afterImageData: Bool, context: PngContext) throws(Diagnostic) {
         for chunk in info.unknownChunks {
             let wasAfterImageData = chunk.location & 0x08 != 0
 
@@ -118,7 +118,7 @@ extension SequentialWriter {
     }
 
     /// The chunks that must follow the palette and precede the image data.
-    func writeAfterPalette(_ info: InfoStore, context: PngContext) throws {
+    func writeAfterPalette(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         guard let header = context.header else { return }
 
         // Transparency, which for an indexed image is one alpha per entry and for the others is the
@@ -245,7 +245,7 @@ extension SequentialWriter {
     }
 
     /// The colour profile: a name, a compression method, and the profile itself deflated.
-    private func writeProfile(_ info: InfoStore, context: PngContext) throws {
+    private func writeProfile(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         let name = info.profileName.bytes
         let profile = info.profile.elements
 
@@ -279,7 +279,7 @@ extension SequentialWriter {
     ///
     /// Every string is terminated except the last parameter, which runs to the end of the chunk — so
     /// the length has to be worked out before anything is written, which is why it is counted first.
-    private func writeCalibration(_ info: InfoStore, context: PngContext) throws {
+    private func writeCalibration(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         let calibration = info.calibration
         let purpose = calibration.purpose.bytes
         let unit = calibration.unit.bytes
@@ -337,7 +337,7 @@ extension SequentialWriter {
     private func writeSuggestedPalette(
         _ palette: SuggestedPalette,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         let name = palette.name.bytes
         let entries = palette.entries.elements
 
@@ -374,7 +374,7 @@ extension SequentialWriter {
     }
 
     /// The timestamp, whose fields are the one place the format uses a two byte year.
-    private func writeTime(_ info: InfoStore, context: PngContext) throws {
+    private func writeTime(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         try self.write(.time, context: context, count: 7) { bytes in
             Self.put16(bytes, 0, info.timestamp.year)
             bytes[2] = info.timestamp.month
@@ -390,7 +390,7 @@ extension SequentialWriter {
         _ name: ChunkName,
         _ value: FixedPoint,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         try self.write(name, context: context, count: 4) { bytes in
             Self.put32(bytes, 0, UInt32(bitPattern: value))
         }
@@ -405,7 +405,7 @@ extension SequentialWriter {
         context: PngContext,
         count: Int,
         fill: (UnsafeMutableBufferPointer<UInt8>) -> Void
-    ) throws {
+    ) throws(Diagnostic) {
         guard count > 0 else { return }
 
         try context.reserve(.scratch, count)

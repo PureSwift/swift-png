@@ -1,0 +1,155 @@
+# embedded.yml - the targets with no operating system under them
+#
+# Most of these build but do not run: there is no host here to run aarch64-none-none-elf or
+# armv6m-none-none-eabi object code on, and the point of `bare-metal` is that the engine still
+# *compiles* under Embedded Swift's restrictions — no existential errors, no key paths, no
+# runtime reflection, no C library assumed. Those are easy to reintroduce by accident from a
+# desktop build that never notices, which is exactly why this runs on every push rather than
+# being checked by hand when someone remembers.
+#
+# `qemu-cortex-m4` and `wasm-embedded` are the exceptions: the former links a bootable firmware
+# image around the armv7em build and actually runs it, under an emulated Cortex-M4F; the latter
+# runs wasm-smoke-test under Wasmtime for wasm32-unknown-wasip1, a hosted target so it needs no
+# firmware image at all. Both check for correctness — a real encode and a real decode, byte-exact
+# — rather than only for a clean link. See Firmware/QEMU and Sources/wasm-smoke-test.
+# Firmware/Hypervisor does the same for arm64-apple-none-macho, run locally rather than in CI
+# (see that directory's own README for why).
+#
+# `pure-swift` runs the compression path on the host, with the system zlib trait switched off:
+# on every one of these targets that path is the only one there is, so a test suite that only
+# ever exercised zlib would say nothing about them.
+
+name: embedded
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The compression module is this package's own, and on a target with no zlib it is load
+  # bearing rather than an alternative, so it is tested in both configurations on a host that
+  # can actually execute the result.
+  pure-swift:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zlib, for the configuration that uses it
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq zlib1g-dev
+
+      - name: Test with the system zlib
+        run: swift test
+
+      - name: Test with the Swift compression path
+        run: swift test --disable-default-traits
+
+  bare-metal:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        # One from each family the toolchain ships an embedded standard library for: a
+        # 64-bit ELF target, a Cortex-M4F, the smallest Cortex-M0 profile — which is the one
+        # that catches anything depending on hardware the others happen to have — and Apple's
+        # own bare-metal arm64, the Mach-O target the m1n1/Asahi bootloader family builds on.
+        # That last one is compile-only for a real reason rather than an oversight: there is no
+        # QEMU machine model for a generic Apple Silicon SoC to boot it on, unlike the ARM
+        # reference board `qemu-cortex-m4` below actually boots.
+        triple:
+          - aarch64-none-none-elf
+          - armv7em-none-none-eabi
+          - armv6m-none-none-eabi
+          - arm64-apple-none-macho
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build for ${{ matrix.triple }}
+        run: ./scripts/build_embedded.sh ${{ matrix.triple }}
+
+      - name: Show what was produced
+        run: ls -l build/embedded/${{ matrix.triple }}
+
+  # The one target checked by actually running it: a firmware image booted under an emulated
+  # Cortex-M4F, checked for a byte-exact encode-then-decode round trip rather than only for a
+  # clean link. armv7em rather than one of the matrix above's other triples because it is the
+  # one with a QEMU machine model (mps2-an386) to boot it on.
+  qemu-cortex-m4:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the ARM toolchain and QEMU
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq gcc-arm-none-eabi qemu-system-arm
+
+      - name: Build the firmware
+        run: ./Firmware/QEMU/build.sh
+
+      - name: Boot it and check the round trip
+        run: >
+          ./Firmware/QEMU/run.sh
+          build/embedded/armv7em-none-none-eabi/firmware/firmware.elf
+
+  # wasm32-unknown-wasip1 is hosted rather than bare metal, so unlike the bare-metal matrix's
+  # compile-only entries, the round trip here is run for real: WASI gives it a real malloc/free,
+  # so wasm-smoke-test needs none of the custom shims the ARM firmware images do. Wasmtime's exit
+  # code is a trustworthy pass/fail signal either way, verified locally against both outcomes: a
+  # clean run exits 0, and a deliberate failure (fatalError, which lowers to a WASM `unreachable`
+  # trap) is reported by Wasmtime with a distinct nonzero exit rather than being swallowed.
+  wasm-embedded:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install curl and xz, for the Wasmtime installer
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq curl xz-utils
+
+      # The checksum is required rather than optional, and it is pinned here rather than
+      # fetched: an SDK that installs whatever the URL happens to be serving is not a fixed
+      # thing to have tested against.
+      - name: Install the WebAssembly SDK
+        run: >
+          swift sdk install
+          "https://download.swift.org/swift-6.3.3-release/wasm-sdk/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE_wasm.artifactbundle.tar.gz"
+          --checksum cabfa08b73bb8ac783927ecd15fa386e99d0c139c5f232445067bcf58379cae7
+
+      # wasmtime.dev's own installer script edits a shell profile to put itself on PATH, and
+      # errors out if it can't find one — which this container's $HOME reliably has none of.
+      # We only ever invoke the binary by absolute path (see the run step below), so nothing
+      # here needs PATH edited; fetching the release archive directly sidesteps the installer's
+      # profile-detection entirely instead of fighting it.
+      - name: Install Wasmtime
+        run: |
+          curl -sSfL -o /tmp/wasmtime.tar.xz \
+            https://github.com/bytecodealliance/wasmtime/releases/download/v27.0.0/wasmtime-v27.0.0-x86_64-linux.tar.xz
+          mkdir -p "$HOME/.wasmtime/bin"
+          tar xf /tmp/wasmtime.tar.xz -C "$HOME/.wasmtime/bin" --strip-components=1 \
+            wasmtime-v27.0.0-x86_64-linux/wasmtime
+
+      - name: Build the engine for embedded WebAssembly
+        run: >
+          swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded
+          --target PNGCore --disable-default-traits
+
+      - name: Build the WASI round trip
+        run: >
+          swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded
+          --product wasm-smoke-test --disable-default-traits
+
+      - name: Run it under Wasmtime and check the round trip
+        run: >
+          "$HOME/.wasmtime/bin/wasmtime"
+          .build/wasm32-unknown-wasip1/debug/wasm-smoke-test.wasm
