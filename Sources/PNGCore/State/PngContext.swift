@@ -426,7 +426,7 @@ public final class PngContext {
     ///
     /// The previous contents are not preserved: every use of this replaces a buffer
     /// whose contents are already spent.
-    func reserve(_ buffer: BufferSlot, _ count: Int) throws {
+    func reserve(_ buffer: BufferSlot, _ count: Int) throws(Diagnostic) {
         guard count > self[buffer].count else { return }
 
         let fresh = try RawBuffer.allocate(count, host: self.host)
@@ -442,7 +442,7 @@ public final class PngContext {
     // reporting: they throw, and the boundary turns that into the client's error
     // handler as the last thing it does.
 
-    public func readInfo(into info: InfoStore) throws {
+    public func readInfo(into info: InfoStore) throws(Diagnostic) {
         try self.reader.readInfo(
             into: info,
             context: self,
@@ -455,7 +455,7 @@ public final class PngContext {
         self.headerInfo = info
     }
 
-    public func startReadImage() throws {
+    public func startReadImage() throws(Diagnostic) {
         try self.reader.startRows(context: self)
     }
 
@@ -599,7 +599,7 @@ public final class PngContext {
 
     /// Resolves the pipeline without the client having asked, for a client that set transforms and
     /// went straight to reading rows.
-    func resolveTransforms() throws {
+    func resolveTransforms() throws(Diagnostic) {
         // A progressive read fills in the same structure by a different route, so either is the one
         // to resolve against.
         guard let info = self.headerInfo ?? self.headerInfoForProgressive else {
@@ -610,12 +610,12 @@ public final class PngContext {
     }
 
     /// Resolves the pipeline at the client's request, recording that it was asked for.
-    public func updateInfoForClient(_ info: InfoStore) throws {
+    public func updateInfoForClient(_ info: InfoStore) throws(Diagnostic) {
         try self.updateInfo(info)
         self.clientUpdatedInfo = true
     }
 
-    public func updateInfo(_ info: InfoStore) throws {
+    public func updateInfo(_ info: InfoStore) throws(Diagnostic) {
         guard let header = self.header else {
             throw Diagnostic("png_read_update_info called before png_read_info")
         }
@@ -843,7 +843,7 @@ public final class PngContext {
     ///
     /// Passes silently when the header has not been read: there is nothing to check against yet, and
     /// the pipeline checks again when it is built.
-    public func validateShift(_ bits: SignificantBits) throws {
+    public func validateShift(_ bits: SignificantBits) throws(Diagnostic) {
         guard let header = self.header else { return }
 
         try TransformProgram.validateShift(bits, header: header)
@@ -855,7 +855,7 @@ public final class PngContext {
     ///
     /// The fields are checked here rather than taken on trust, and the check is the reader's: an
     /// encoder that will not read back its own output is worse than one that refuses to write.
-    public func writeHeader(_ fields: Header.Fields) throws {
+    public func writeHeader(_ fields: Header.Fields) throws(Diagnostic) {
         guard fields.problems.isEmpty else {
             throw Diagnostic("Invalid IHDR data")
         }
@@ -867,7 +867,7 @@ public final class PngContext {
     }
 
     /// Writes the eight bytes that begin a file, if they have not been written.
-    public func writeSignature() throws {
+    public func writeSignature() throws(Diagnostic) {
         try self.writer.beginFile(context: self)
     }
 
@@ -875,7 +875,7 @@ public final class PngContext {
     ///
     /// Only for an indexed image: a palette is meaningful for others as a suggestion, and this library
     /// does not invent one the client did not ask for.
-    public func writePalette(_ info: InfoStore) throws {
+    public func writePalette(_ info: InfoStore) throws(Diagnostic) {
         guard let header = self.header else { return }
 
         try self.writer.writeBeforePalette(info, context: self)
@@ -891,7 +891,7 @@ public final class PngContext {
         try self.writer.writeTextBeforeRows(info, context: self)
     }
 
-    public func writeRow(_ row: UnsafePointer<UInt8>?) throws {
+    public func writeRow(_ row: UnsafePointer<UInt8>?) throws(Diagnostic) {
         guard let row else { throw Diagnostic("png_write_row given no row") }
 
         // Sized for what the client is handing over rather than for what the file stores: a client
@@ -907,7 +907,7 @@ public final class PngContext {
     }
 
     /// Writes every row of an image the client holds whole.
-    public func writeImage(rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>) throws {
+    public func writeImage(rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>) throws(Diagnostic) {
         guard let header = self.header else {
             throw Diagnostic("png_write_image called before png_write_info")
         }
@@ -921,7 +921,7 @@ public final class PngContext {
     public var flushEveryRows = 0
 
     /// Starts a chunk the client will fill in itself.
-    public func beginChunk(_ name: ChunkName, length: Int) throws {
+    public func beginChunk(_ name: ChunkName, length: Int) throws(Diagnostic) {
         try self.writer.beginClientChunk(name, length: length, context: self)
     }
 
@@ -934,7 +934,7 @@ public final class PngContext {
     }
 
     /// Empties the compressor and asks the caller to push whatever it is holding.
-    public func flushOutput() throws {
+    public func flushOutput() throws(Diagnostic) {
         try self.writer.flush(context: self)
     }
 
@@ -942,7 +942,7 @@ public final class PngContext {
     ///
     /// On the context because the answer has to outlive the call, and a client is entitled to hold it
     /// until the next one — which is exactly why the call is deprecated.
-    public func timestampBuffer() throws -> UnsafeMutablePointer<CChar> {
+    public func timestampBuffer() throws(Diagnostic) -> UnsafeMutablePointer<CChar> {
         try self.reserve(.timeText, 32)
 
         return self.timeText.bytes.baseAddress!
@@ -965,7 +965,7 @@ public final class PngContext {
         }
     }
 
-    public func writeEnd(_ info: InfoStore?) throws {
+    public func writeEnd(_ info: InfoStore?) throws(Diagnostic) {
         try self.writer.writeEnd(info, context: self)
     }
 
@@ -985,7 +985,7 @@ public final class PngContext {
     // -- reading what has arrived --------------------------------------------
 
     /// Hands the state machine everything that has arrived, and reports what it did not take.
-    public func processData(_ bytes: UnsafeBufferPointer<UInt8>, info: InfoStore?) throws {
+    public func processData(_ bytes: UnsafeBufferPointer<UInt8>, info: InfoStore?) throws(Diagnostic) {
         let machine = self.progressive ?? ProgressiveReader()
 
         self.progressive = machine
@@ -1045,14 +1045,14 @@ public final class PngContext {
         }
     }
 
-    public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws {
+    public func readRow(into destination: UnsafeMutablePointer<UInt8>?) throws(Diagnostic) {
         try self.reader.readRow(into: destination, context: self)
     }
 
     /// Decodes the whole image, resolving interlacing.
     public func readImage(
         rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>
-    ) throws {
+    ) throws(Diagnostic) {
         try self.reader.readImage(rows: rows, context: self)
     }
 
@@ -1082,7 +1082,7 @@ public final class PngContext {
         UInt8(min(self.reader.pass, Adam7.passCount - 1))
     }
 
-    public func readEnd(into info: InfoStore?) throws {
+    public func readEnd(into info: InfoStore?) throws(Diagnostic) {
         try self.reader.readEnd(info: info, context: self)
     }
 
