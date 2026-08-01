@@ -1,6 +1,6 @@
 // main.swift - how long the engine takes when driven from Swift
 //
-// The C benchmark next door times the published API, boundary and all; this one calls PNGCore
+// The C benchmark next door times the published API, boundary and all; this one calls PNG
 // directly, which is what the Swift library will do.  There is no per-row crossing into C and no
 // opaque-pointer lookup here, so parity with the reference is not the bar — beating it is.
 //
@@ -11,7 +11,7 @@
 // usage: pngbench-swift <file.png> [rounds] [transform,transform,...]
 
 import Foundation
-import PNGCore
+import PNG
 
 // -- the host ----------------------------------------------------------------
 //
@@ -26,8 +26,8 @@ final class Console {
     var written = 0
 }
 
-func makeHost(_ console: Console) -> PNGCore.Host {
-    PNGCore.Host(
+func makeHost(_ console: Console) -> PNG.Host {
+    PNG.Host(
         owner: Unmanaged.passUnretained(console).toOpaque(),
         allocate: { _, size in malloc(Int(size)) },
         deallocate: { _, memory in free(memory) },
