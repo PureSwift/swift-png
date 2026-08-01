@@ -89,7 +89,7 @@ final class ProgressiveReader {
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext,
         info: InfoStore?
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         var offset = 0
 
         self.isPaused = false
@@ -129,7 +129,7 @@ final class ProgressiveReader {
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext,
         info: InfoStore?
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         switch self.state {
         case .signature:
             return try self.readSignature(bytes, context: context)
@@ -158,7 +158,7 @@ final class ProgressiveReader {
     private func readSignature(
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         // What the client said it had already read and checked itself.
         let consumed = context.signatureBytesConsumed
         let expected = 8 - consumed
@@ -226,7 +226,7 @@ final class ProgressiveReader {
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext,
         info: InfoStore?
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         let taken = min(8 - self.gathered, bytes.count)
 
         try context.reserve(.scratch, 8)
@@ -280,7 +280,7 @@ final class ProgressiveReader {
         length: Int,
         context: PngContext,
         info: InfoStore?
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         let taken = min(length - self.gathered, bytes.count)
 
         for index in 0 ..< taken {
@@ -304,7 +304,7 @@ final class ProgressiveReader {
         remaining: Int,
         context: PngContext,
         info: InfoStore?
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         let taken = min(remaining, bytes.count)
 
         self.crc.update(UnsafeBufferPointer(start: bytes.baseAddress, count: taken))
@@ -327,7 +327,7 @@ final class ProgressiveReader {
         name: ChunkName,
         context: PngContext,
         info: InfoStore?
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         let taken = min(4 - self.gathered, bytes.count)
 
         try context.reserve(.scratch, max(4, context.scratch.count))
@@ -369,7 +369,7 @@ final class ProgressiveReader {
         _ name: ChunkName,
         context: PngContext,
         info: InfoStore?
-    ) throws {
+    ) throws(Diagnostic) {
         switch name {
         case .ihdr:
             guard let info, let length = self.lastPayloadLength else { return }
@@ -464,7 +464,7 @@ final class ProgressiveReader {
     ///
     /// The moment the header is complete as far as the client is concerned: every chunk before the
     /// image data has been seen, so this is when its callback can read them.
-    private func beginImageData(context: PngContext, info: InfoStore?) throws {
+    private func beginImageData(context: PngContext, info: InfoStore?) throws(Diagnostic) {
         guard !self.announcedInfo else { return }
 
         self.announcedInfo = true
@@ -517,7 +517,7 @@ final class ProgressiveReader {
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext,
         info: InfoStore?
-    ) throws {
+    ) throws(Diagnostic) {
         guard let header = context.header, let inflater = context.inflater else { return }
 
         // Nothing more can be decompressed, but the chunk is still delivering — and what it delivers
@@ -600,7 +600,7 @@ final class ProgressiveReader {
     /// Not the same as a stream that finished early.  One that ends properly having produced too few
     /// rows is a complete stream describing less than the header promised — every row it did carry
     /// is delivered and the client is left to notice the shortfall, which is what both libraries do.
-    private func noteImageDataEnded(context: PngContext) throws {
+    private func noteImageDataEnded(context: PngContext) throws(Diagnostic) {
         guard self.announcedInfo, !self.imageDataFailed, self.pass < Adam7.passCount,
               let inflater = context.inflater, !inflater.isFinished else {
             return
@@ -686,7 +686,7 @@ final class ProgressiveReader {
     }
 
     /// Reconstructs one row, transforms it, and hands it to the client.
-    private func deliverRow(stored: Int, header: Header, context: PngContext) throws {
+    private func deliverRow(stored: Int, header: Header, context: PngContext) throws(Diagnostic) {
         let raw = context.rowBuffer.bytes
 
         guard let filter = Filter(rawValue: raw[0]) else {
@@ -835,7 +835,7 @@ final class ProgressiveReader {
     }
 
     /// Tells the client the image is complete.
-    private func finishImageData(context: PngContext, info: InfoStore?) throws {
+    private func finishImageData(context: PngContext, info: InfoStore?) throws(Diagnostic) {
         context.inflater?.release()
         context.inflater = nil
 
