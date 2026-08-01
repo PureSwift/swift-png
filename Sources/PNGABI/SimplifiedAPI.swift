@@ -353,20 +353,19 @@ public func swift_swift_image_write(
     }
 
     // Sixteen bit input is light, and a sixteen bit file can hold it as it stands: the file simply
-    // says so, through a gamma of one.  Nothing is converted, so nothing here has to be.
+    // says so, through a gamma of one.  Coverage is the one thing that still has to be undone, since
+    // these formats keep it multiplied into the colour and the format does not — that happens a row
+    // at a time below, in exact arithmetic that needs no table.
     //
-    // The two cases that *are* conversions are the ones still refused.  Narrowing to eight bits means
-    // encoding the light for a display on the way down.  And coverage, in these formats, is already
-    // multiplied into the colour, which is not what the format stores — so a file has to have that
-    // undone first.  Both need a pass over the row that this does not have yet.
+    // Narrowing to eight bits is the case still refused.  It is not the depth that is the problem but
+    // the encoding: light on the way down to eight bits has to go through the display's curve, and
+    // the reference does that through a pair of baked tables approximating it piecewise.  Computing
+    // the curve exactly instead lands within a count or two rather than on the answer, which is the
+    // same finish the coarse gamma table reaches — so this says so rather than being nearly right.
     let writes16Bit = format.isLinear && convert_to_8_bit == 0
 
     if format.isLinear, convert_to_8_bit != 0 {
         swift_c_error(png_ptr, "png_image: narrowing on write not implemented")
-    }
-
-    if format.isLinear, format.hasAlpha {
-        swift_c_error(png_ptr, "png_image: premultiplied alpha on write not implemented")
     }
 
     let width = Int(image.pointee.width)
@@ -462,14 +461,91 @@ public func swift_swift_image_write(
         ? buffer.advanced(by: -stride * (height - 1))
         : buffer
 
-    for row in 0 ..< height {
-        let source = first.advanced(by: stride * row)
-            .assumingMemoryBound(to: UInt8.self)
+    if writes16Bit, format.hasAlpha {
+        // The row has to be taken apart before it is written, so it needs somewhere to go: the
+        // client's buffer is its own and is not written to.
+        let samples = width * format.channels
+        let staging = UnsafeMutableBufferPointer<UInt16>.allocate(capacity: samples)
+        defer { staging.deallocate() }
 
-        png_write_row(png_ptr, source)
+        for row in 0 ..< height {
+            let source = first.advanced(by: stride * row)
+                .assumingMemoryBound(to: UInt16.self)
+
+            unpremultiply(
+                source,
+                into: staging.baseAddress!,
+                width: width,
+                colorChannels: format.hasColor ? 3 : 1,
+                alphaFirst: format.alphaFirst
+            )
+
+            staging.baseAddress!.withMemoryRebound(to: UInt8.self, capacity: samples * 2) {
+                png_write_row(png_ptr, $0)
+            }
+        }
+    } else {
+        for row in 0 ..< height {
+            let source = first.advanced(by: stride * row)
+                .assumingMemoryBound(to: UInt8.self)
+
+            png_write_row(png_ptr, source)
+        }
     }
 
     png_write_end(png_ptr, info_ptr)
 
     return 1
+}
+
+/// Takes the coverage back out of the colour, which is what the format stores.
+///
+/// The linear formats hold colour already multiplied by coverage — convenient to composite with and
+/// not what a file holds, so it has to be undone on the way in.  The arithmetic is exact and is the
+/// reference's own: a reciprocal to fifteen bits of precision, which is enough that every sample
+/// divides and rounds to the same number rather than to one near it.
+///
+/// The layout is left alone.  A row whose coverage comes first stays that way and is reordered by the
+/// ordinary request, the same as a row that needed nothing undone.
+private func unpremultiply(
+    _ source: UnsafePointer<UInt16>,
+    into destination: UnsafeMutablePointer<UInt16>,
+    width: Int,
+    colorChannels: Int,
+    alphaFirst: Bool
+) {
+    let stride = colorChannels + 1
+
+    // Where the coverage sits relative to the colour, so that one loop serves both arrangements.
+    let alphaOffset = alphaFirst ? 0 : colorChannels
+    let colorOffset = alphaFirst ? 1 : 0
+
+    for pixel in 0 ..< width {
+        let base = pixel * stride
+        let alpha = source[base + alphaOffset]
+
+        destination[base + alphaOffset] = alpha
+
+        // Only worth computing between the two ends: nothing covered divides by zero, and fully
+        // covered is already the answer.
+        let reciprocal: UInt32 = alpha > 0 && alpha < 65535
+            ? ((UInt32(0xFFFF) << 15) + UInt32(alpha >> 1)) / UInt32(alpha)
+            : 0
+
+        for channel in 0 ..< colorChannels {
+            let index = base + colorOffset + channel
+            let component = source[index]
+
+            if component >= alpha {
+                // Including the fully transparent pixel, whose colour is unrecoverable.  Full
+                // intensity rather than none: a transparent run next to a nearly transparent one
+                // compresses better without a cliff between them, and nothing displays either.
+                destination[index] = 65535
+            } else if component > 0, alpha < 65535 {
+                destination[index] = UInt16((UInt32(component) * reciprocal + 16384) >> 15)
+            } else {
+                destination[index] = component
+            }
+        }
+    }
 }
