@@ -1,4 +1,4 @@
-/* spng_memory.c - allocation
+/* swift_memory.c - allocation
  *
  * A client can install its own allocator, and every allocation the library makes
  * on its behalf has to go through it.  That is not just a courtesy: a client may
@@ -10,7 +10,7 @@
  * Swift's allocator, even for memory a client never sees.
  */
 
-#include "spng_internal.h"
+#include "swift_internal.h"
 
 #include <stdlib.h>
 
@@ -18,7 +18,7 @@
  * a zero-sized request rather than returning a pointer that cannot be written.
  */
 static int
-spng_size_is_valid(png_alloc_size_t size)
+swift_size_is_valid(png_alloc_size_t size)
 {
    return size > 0 && size <= PNG_SIZE_MAX;
 }
@@ -28,7 +28,7 @@ png_malloc_default(png_const_structrp png_ptr, png_alloc_size_t size)
 {
    png_voidp memory;
 
-   if (!spng_size_is_valid(size))
+   if (!swift_size_is_valid(size))
       return NULL;
 
    memory = malloc((size_t)size);
@@ -51,9 +51,9 @@ png_free_default(png_const_structrp png_ptr, png_voidp ptr)
  * a failure.
  */
 static png_voidp
-spng_malloc_base(png_const_structrp png_ptr, png_alloc_size_t size)
+swift_malloc_base(png_const_structrp png_ptr, png_alloc_size_t size)
 {
-   if (png_ptr == NULL || !spng_size_is_valid(size))
+   if (png_ptr == NULL || !swift_size_is_valid(size))
       return NULL;
 
    if (png_ptr->malloc_fn != NULL)
@@ -73,7 +73,7 @@ spng_malloc_base(png_const_structrp png_ptr, png_alloc_size_t size)
 png_voidp PNGAPI
 png_malloc(png_const_structrp png_ptr, png_alloc_size_t size)
 {
-   png_voidp memory = spng_malloc_base(png_ptr, size);
+   png_voidp memory = swift_malloc_base(png_ptr, size);
 
    if (memory == NULL)
       png_error(png_ptr, "out of memory");
@@ -84,7 +84,7 @@ png_malloc(png_const_structrp png_ptr, png_alloc_size_t size)
 png_voidp PNGAPI
 png_malloc_warn(png_const_structrp png_ptr, png_alloc_size_t size)
 {
-   png_voidp memory = spng_malloc_base(png_ptr, size);
+   png_voidp memory = swift_malloc_base(png_ptr, size);
 
    if (memory == NULL)
       png_warning(png_ptr, "out of memory");
@@ -171,19 +171,19 @@ png_get_mem_ptr(png_const_structrp png_ptr)
  * report the failure from the boundary where nothing is live.
  */
 png_voidp
-spng_c_malloc(png_const_structrp png_ptr, png_alloc_size_t size)
+swift_c_malloc(png_const_structrp png_ptr, png_alloc_size_t size)
 {
-   return spng_malloc_base(png_ptr, size);
+   return swift_malloc_base(png_ptr, size);
 }
 
 png_voidp
-spng_c_malloc_warn(png_const_structrp png_ptr, png_alloc_size_t size)
+swift_c_malloc_warn(png_const_structrp png_ptr, png_alloc_size_t size)
 {
    return png_malloc_warn(png_ptr, size);
 }
 
 void
-spng_c_free(png_const_structrp png_ptr, png_voidp ptr)
+swift_c_free(png_const_structrp png_ptr, png_voidp ptr)
 {
    png_free(png_ptr, ptr);
 }
