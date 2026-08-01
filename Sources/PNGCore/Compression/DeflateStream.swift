@@ -12,6 +12,8 @@
 
 #if SystemZlib
 import CZlib
+#else
+import LZ77
 #endif
 
 /// How the image data is to be compressed.
@@ -42,6 +44,8 @@ final class DeflateStream {
     #if SystemZlib
     private var stream = z_stream()
     private var isInitialized = false
+    #else
+    private let stream: Deflate
     #endif
 
     init(settings: CompressionSettings) throws {
@@ -65,7 +69,7 @@ final class DeflateStream {
 
         self.isInitialized = true
         #else
-        throw Diagnostic("this build has no compressor")
+        self.stream = Deflate(level: settings.level)
         #endif
     }
 
@@ -83,7 +87,7 @@ final class DeflateStream {
         #if SystemZlib
         return self.stream.avail_in == 0
         #else
-        return true
+        return self.stream.needsInput
         #endif
     }
 
@@ -94,6 +98,8 @@ final class DeflateStream {
         #if SystemZlib
         self.stream.next_in = UnsafeMutablePointer(mutating: bytes.baseAddress)
         self.stream.avail_in = UInt32(bytes.count)
+        #else
+        self.stream.setInput(bytes)
         #endif
     }
 
@@ -154,7 +160,25 @@ final class DeflateStream {
 
         return count - Int(self.stream.avail_out)
         #else
-        throw Diagnostic("this build has no compressor")
+        let mode: Deflate.Ending
+
+        switch ending {
+        case .none: mode = .none
+        case .flush: mode = .flush
+        case .finish: mode = .finish
+        }
+
+        do {
+            let produced = try self.stream.deflate(
+                into: destination,
+                count: count,
+                ending: mode
+            )
+            self.isFinished = self.stream.isFinished
+            return produced
+        } catch let error as DeflateError {
+            throw Diagnostic(error.message, chunk: .idat)
+        }
         #endif
     }
 }
