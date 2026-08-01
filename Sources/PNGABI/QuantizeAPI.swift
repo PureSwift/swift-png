@@ -9,7 +9,7 @@
 // renumbered or how a colour is to find its entry.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Fits the image into `maximum_colors` colours, and says how.
 ///
