@@ -1,0 +1,10 @@
+# Written images the comparison reports but does not fail on.
+#
+# Same shape as the file next door for the plain writer, and the same reason for existing: a
+# difference that has been examined is worth recording, and a list that mixes those with work not
+# yet done would let the second look like the first.
+#
+# Format: <case> <reason>
+
+no_rows Both libraries fail identically at write time (confirmed: same message, same exit code) — but compare_write.sh's swap step always tries to read the resulting file regardless of whether the source write succeeded, and an empty file produces a read-time error rather than the write-time one the direct invocation captured. A harness limitation for a case that is deliberately a write-time failure in both, not a real difference.
+strip_filler_both Same reasoning as no_rows: PNG_TRANSFORM_STRIP_FILLER_BEFORE and _AFTER together is a contradiction both libraries refuse identically at write time, and the swap step's read-time error text naturally does not match that write-time message.
