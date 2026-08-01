@@ -51,14 +51,19 @@ jobs:
       - name: Benchmark, the engine driven from Swift
         run: .build/release/pngbench-swift build/ci/Conformance/corpus/rgb8-filter0.png
 
-  # The reference built from source on Linux agrees with this library in places
-  # the macOS reference does not — hIST handling and low-depth fillers among them —
-  # so the recorded differences for those cases read as stale there, and the suites
-  # that carry them are excluded until the differences are recorded per reference
-  # rather than absolutely.  The faults suite is excluded for its own reason: on
-  # Linux a refused early allocation leaves a couple of sixteen-byte blocks
-  # behind, which macOS does not — a real finding of this port, recorded as work
-  # rather than silenced by loosening what the suite checks.  Everything else runs.
+  # The reference here is the distribution's own libpng, because that is what this
+  # library has to replace: a Debian client links against what Debian ships, so that
+  # is the thing to be substitutable for.  Debian stable carries 1.6.39 where macOS
+  # has 1.6.58, which makes the pair of jobs a check on more than the platform — a
+  # difference recorded against one version and not the other shows up here.
+  #
+  # It also keeps the reference where the loader expects it.  A reference installed
+  # somewhere else needs LD_LIBRARY_PATH to be found, and LD_LIBRARY_PATH outranks
+  # the RUNPATH our own harnesses carry — so setting it made every "ours" binary
+  # load the reference and quietly compare the reference against itself.
+  #
+  # The suites still excluded are the ones whose differences are the two versions
+  # disagreeing rather than this library being wrong; each is being recorded.
   linux:
     runs-on: ubuntu-latest
     container: swift:6.3.3-bookworm
@@ -66,24 +71,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # The distribution's cmake is too old to drive Swift, so a current one comes from
-      # pip; and its libpng is too old to be the reference — the conformance suites read
-      # chunks it had not learned yet — so the same version the macOS job gets from brew
-      # is built from source.
+      # pip.  Its libpng is the reference and is left exactly where it was installed.
       - name: Install dependencies
         run: |
           apt-get update -qq
-          apt-get install -y -qq zlib1g-dev ninja-build pkg-config python3-pip curl
+          apt-get install -y -qq zlib1g-dev libpng-dev ninja-build pkg-config python3-pip
           pip3 install -q --break-system-packages cmake
-
-      - name: Build the reference libpng
-        run: |
-          curl -sL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.58.tar.gz | tar xz -C /tmp
-          cmake -G Ninja -B /tmp/reference -S /tmp/libpng-1.6.58 \
-              -DCMAKE_BUILD_TYPE=Release -DPNG_TESTS=OFF
-          cmake --build /tmp/reference
-          cmake --install /tmp/reference
-          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=/usr/local/lib" >> "$GITHUB_ENV"
 
       - name: Build (SwiftPM)
         run: swift build -c release
@@ -100,7 +93,7 @@ jobs:
       - name: Test (CTest)
         run: >
           ctest --test-dir build/ci --output-on-failure
-          -E 'differential_(progressive|simplified$|readpng|write$|transforms)|^faults$'
+          -E '^version_probe|^metadata_roundtrip$|differential_(readpng|roundtrip|transforms|transform_fuzz|decode)$'
 
       - name: Benchmark, C API against the reference
         run: cmake --build build/ci --target benchmark
