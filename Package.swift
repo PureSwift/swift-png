@@ -92,6 +92,11 @@ let package = Package(
         ),
 
         .testTarget(
+            name: "LZ77Tests",
+            dependencies: ["LZ77"],
+            path: "Tests/LZ77Tests"
+        ),
+        .testTarget(
             name: "PNGCoreTests",
             dependencies: ["PNGCore"],
             path: "Tests/PNGCoreTests"
