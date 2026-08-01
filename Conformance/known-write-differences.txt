@@ -4,6 +4,11 @@
 # examined is worth recording, and a list that mixes those with work not yet done would let the second
 # look like the first.
 #
+# A line may begin with a guard naming the reference versions it is a claim about, as in
+# "[>1.6.39] case reason".  An entry with no guard is a claim about every reference.  A guard that
+# does not hold makes the entry inactive: it neither exempts a difference nor counts as stale,
+# because it is not saying anything about the reference in the room.  See scripts/known_differences.sh.
+#
 # Format: <case> <reason>
 
-hist_palette The reference's reader refuses hIST wherever it appears, so a file carrying one reads back differently whichever library wrote it. Recorded for decoding in known-differences.txt, where the reasoning is set out; this case exists to keep the chunk out of the ones that can be compared.
+[>1.6.39] hist_palette The reference's reader refuses hIST wherever it appears, so a file carrying one reads back differently whichever library wrote it. Recorded for decoding in known-differences.txt, where the reasoning is set out; this case exists to keep the chunk out of the ones that can be compared.
