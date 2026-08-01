@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 /// The expected values here were measured from the reference rather than reasoned out.
 ///
