@@ -249,7 +249,7 @@ public final class InfoStore {
     public func reserveExportTable(
         _ slot: ExportSlot,
         byteCount: Int
-    ) throws -> UnsafeMutableRawPointer? {
+    ) throws(Diagnostic) -> UnsafeMutableRawPointer? {
         guard byteCount > 0 else { return nil }
 
         if self.exportSlots[slot.rawValue].count < byteCount {
@@ -406,7 +406,7 @@ extension InfoStore {
     ///
     /// Rebuilt each time rather than kept in step with the strings, because it is a view of them: a
     /// stale array would point at storage a later call had replaced.
-    public func buildCalibrationPointers() throws {
+    public func buildCalibrationPointers() throws(Diagnostic) {
         let count = self.calibration.parameters.count
 
         self.calibration.parameterPointers.deallocate(host: self.host)
@@ -423,7 +423,7 @@ extension InfoStore {
     }
 
     /// The same for the chunks kept as unknown.
-    public func buildUnknownChunkArray() throws {
+    public func buildUnknownChunkArray() throws(Diagnostic) {
         let count = self.unknownChunks.count
 
         self.unknownChunkArray.deallocate(host: self.host)
@@ -447,7 +447,7 @@ extension InfoStore {
     }
 
     /// The same for the suggested palettes, which a client reads as one contiguous array.
-    public func buildSuggestedPaletteArray() throws {
+    public func buildSuggestedPaletteArray() throws(Diagnostic) {
         let count = self.suggestedPalettes.count
 
         self.suggestedPaletteArray.deallocate(host: self.host)
@@ -482,7 +482,7 @@ extension InfoStore {
     ///
     /// One allocation for the rows and one for the pointers to them, rather than one per row: a client
     /// that frees them itself frees the array, and the reference's own arrangement is the same.
-    public func allocateRows(rowBytes: Int) throws {
+    public func allocateRows(rowBytes: Int) throws(Diagnostic) {
         guard let header = self.header, header.height > 0, rowBytes > 0 else { return }
 
         // Cleared as well as freed, which every field here does and which is not tidiness: this runs
