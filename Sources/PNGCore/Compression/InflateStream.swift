@@ -29,7 +29,7 @@ final class InflateStream {
     private let stream = Inflate()
     #endif
 
-    init() throws {
+    init() throws(Diagnostic) {
         #if SystemZlib
         // The size is passed because zlib checks it against its own idea of the
         // structure, which is how it detects a header/library mismatch.
@@ -86,7 +86,7 @@ final class InflateStream {
     func inflate(
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         guard count > 0 else { return 0 }
 
         #if SystemZlib
@@ -124,11 +124,14 @@ final class InflateStream {
 
         return count - Int(self.stream.avail_out)
         #else
-        do {
+        // Typed, so the catch binds a DeflateError directly: catching by dynamic cast would
+        // erase it to an existential, which this module cannot spend on every platform it
+        // compiles for — and which crashes the 6.3.3 compiler outright on some of them.
+        do throws(DeflateError) {
             let produced = try self.stream.inflate(into: destination, count: count)
             self.isFinished = self.stream.isFinished
             return produced
-        } catch let error as DeflateError {
+        } catch {
             throw Diagnostic(error.message, chunk: .idat)
         }
         #endif
