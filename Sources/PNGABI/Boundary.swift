@@ -24,7 +24,7 @@ func attempt(_ png_ptr: png_structrp?, _ body: (PngContext) throws -> Void) {
     } catch let diagnostic as Diagnostic {
         report(diagnostic, to: png_ptr)
     } catch {
-        spng_c_error(png_ptr, "internal error")
+        swift_c_error(png_ptr, "internal error")
     }
 }
 
@@ -37,7 +37,7 @@ func attempt(
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
 
     guard let info_ptr, let info = InfoStore.from(info_ptr) else {
-        spng_c_error(png_ptr, "no info structure")
+        swift_c_error(png_ptr, "no info structure")
     }
 
     do {
@@ -45,7 +45,7 @@ func attempt(
     } catch let diagnostic as Diagnostic {
         report(diagnostic, to: png_ptr)
     } catch {
-        spng_c_error(png_ptr, "internal error")
+        swift_c_error(png_ptr, "internal error")
     }
 }
 
@@ -61,9 +61,9 @@ func report(_ diagnostic: Diagnostic, to png_ptr: png_structrp) {
 
     guard var chunkName = diagnostic.chunk?.text else {
         switch diagnostic.severity {
-        case .error: spng_c_error(png_ptr, message)
-        case .benign: spng_c_benign_error(png_ptr, message)
-        case .warning: spng_c_warning(png_ptr, message)
+        case .error: swift_c_error(png_ptr, message)
+        case .benign: swift_c_benign_error(png_ptr, message)
+        case .warning: swift_c_warning(png_ptr, message)
         }
         return
     }
@@ -72,8 +72,8 @@ func report(_ diagnostic: Diagnostic, to png_ptr: png_structrp) {
         let chunk = UnsafeRawPointer(name).assumingMemoryBound(to: CChar.self)
 
         switch diagnostic.severity {
-        case .error: spng_c_chunk_error(png_ptr, chunk, message)
-        case .benign, .warning: spng_c_chunk_warning(png_ptr, chunk, message)
+        case .error: swift_c_chunk_error(png_ptr, chunk, message)
+        case .benign, .warning: swift_c_chunk_warning(png_ptr, chunk, message)
         }
     }
 }
@@ -88,7 +88,7 @@ private func stage(
     _ message: StaticString,
     into png_ptr: png_structrp
 ) -> UnsafePointer<CChar> {
-    let capacity = Int(SPNG_MESSAGE_MAX) - 1
+    let capacity = Int(SWIFT_MESSAGE_MAX) - 1
 
     let source = message.hasPointerRepresentation ? message.utf8Start : nil
     let count = min(source == nil ? 0 : message.utf8CodeUnitCount, capacity)
