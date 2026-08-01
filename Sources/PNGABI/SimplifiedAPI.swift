@@ -353,20 +353,13 @@ public func swift_swift_image_write(
     }
 
     // Sixteen bit input is light, and a sixteen bit file can hold it as it stands: the file simply
-    // says so, through a gamma of one.  Coverage is the one thing that still has to be undone, since
-    // these formats keep it multiplied into the colour and the format does not — that happens a row
-    // at a time below, in exact arithmetic that needs no table.
+    // says so, through a gamma of one.  Asked to narrow it to eight, the light has to go through the
+    // display's curve on the way down, which is what the vendored table in SRGBTable.swift is for.
     //
-    // Narrowing to eight bits is the case still refused.  It is not the depth that is the problem but
-    // the encoding: light on the way down to eight bits has to go through the display's curve, and
-    // the reference does that through a pair of baked tables approximating it piecewise.  Computing
-    // the curve exactly instead lands within a count or two rather than on the answer, which is the
-    // same finish the coarse gamma table reaches — so this says so rather than being nearly right.
+    // Either way coverage has to come back out of the colour, since these formats keep it multiplied
+    // in and the format does not.  Both happen a row at a time below.
     let writes16Bit = format.isLinear && convert_to_8_bit == 0
-
-    if format.isLinear, convert_to_8_bit != 0 {
-        swift_c_error(png_ptr, "png_image: narrowing on write not implemented")
-    }
+    let narrows = format.isLinear && convert_to_8_bit != 0
 
     let width = Int(image.pointee.width)
     let height = Int(image.pointee.height)
@@ -484,6 +477,28 @@ public func swift_swift_image_write(
                 png_write_row(png_ptr, $0)
             }
         }
+    } else if narrows {
+        // Light on the way down to eight bits, and the coverage taken back out of it if there is
+        // any.  One row's worth of bytes, since what leaves is half what arrives.
+        let samples = width * format.channels
+        let staging = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: samples)
+        defer { staging.deallocate() }
+
+        for row in 0 ..< height {
+            let source = first.advanced(by: stride * row)
+                .assumingMemoryBound(to: UInt16.self)
+
+            narrow(
+                source,
+                into: staging.baseAddress!,
+                width: width,
+                colorChannels: format.hasColor ? 3 : 1,
+                hasAlpha: format.hasAlpha,
+                alphaFirst: format.alphaFirst
+            )
+
+            png_write_row(png_ptr, staging.baseAddress!)
+        }
     } else {
         for row in 0 ..< height {
             let source = first.advanced(by: stride * row)
@@ -545,6 +560,77 @@ private func unpremultiply(
                 destination[index] = UInt16((UInt32(component) * reciprocal + 16384) >> 15)
             } else {
                 destination[index] = component
+            }
+        }
+    }
+}
+
+/// Takes light down to eight bits, undoing the pre-multiplication on the way if there is coverage.
+///
+/// Two things happen per sample and the order matters: the coverage comes out first, in light, and
+/// only then does the result go through the display's curve.  Doing it the other way round would be
+/// dividing encoded numbers, which are not proportional to anything.
+///
+/// The arithmetic is the reference's throughout, including where it declines to be exact.  A sample
+/// at or above its own coverage is full intensity rather than the ratio, and coverage that would
+/// round to nothing takes the colour with it — both so that a nearly transparent run does not
+/// develop a cliff against a fully transparent one, which costs compression and shows nothing.
+private func narrow(
+    _ source: UnsafePointer<UInt16>,
+    into destination: UnsafeMutablePointer<UInt8>,
+    width: Int,
+    colorChannels: Int,
+    hasAlpha: Bool,
+    alphaFirst: Bool
+) {
+    guard hasAlpha else {
+        // Nothing multiplied in, so the samples only have to be scaled into the range the table is
+        // built over and looked up.
+        for sample in 0 ..< width * colorChannels {
+            destination[sample] = sRGBFromLinear(UInt32(source[sample]) &* 255)
+        }
+
+        return
+    }
+
+    let stride = colorChannels + 1
+    let alphaOffset = alphaFirst ? 0 : colorChannels
+    let colorOffset = alphaFirst ? 1 : 0
+
+    for pixel in 0 ..< width {
+        let base = pixel * stride
+        let alpha = UInt32(source[base + alphaOffset])
+
+        // The eight bit coverage the file will carry, rounded the way the reference rounds it.
+        let alphaByte = UInt8(truncatingIfNeeded: (alpha &* 255 &+ 32895) >> 16)
+
+        destination[base + alphaOffset] = alphaByte
+
+        // Only between the two ends, as when staying at sixteen bits — and to a different scale,
+        // since the result feeds the table rather than another sixteen bit sample.
+        let reciprocal: UInt32 = alphaByte > 0 && alphaByte < 255
+            ? (((0xFFFF &* 0xFF) << 7) &+ (alpha >> 1)) / alpha
+            : 0
+
+        for channel in 0 ..< colorChannels {
+            let index = base + colorOffset + channel
+            var component = UInt32(source[index])
+
+            if component >= alpha || alpha < 128 {
+                // Including a fully transparent pixel, whose colour is unrecoverable.
+                destination[index] = 255
+            } else if component > 0 {
+                // Coverage that rounds to full is left alone rather than divided by very nearly one,
+                // which would cost a count for nothing.  65407 is the first value that rounds up.
+                if alpha < 65407 {
+                    component = (component &* reciprocal &+ 64) >> 7
+                } else {
+                    component &*= 255
+                }
+
+                destination[index] = sRGBFromLinear(component)
+            } else {
+                destination[index] = 0
             }
         }
     }
