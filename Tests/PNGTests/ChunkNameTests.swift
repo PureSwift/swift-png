@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 @Suite("Chunk type codes")
 struct ChunkNameTests {

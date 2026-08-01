@@ -6,7 +6,7 @@ import Glibc
 
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 /// These check the parsers directly, without a stream, so a fault in one is not confused
 /// with a fault in the framing around it.

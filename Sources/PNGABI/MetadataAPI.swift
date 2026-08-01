@@ -11,7 +11,7 @@
 // stored integer, so the two answers cannot drift apart.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Runs an update against the info structure.
 private func update(_ info_ptr: png_inforp?, _ body: (InfoStore) -> Void) {

@@ -94,11 +94,11 @@ function(spng_add_swift_module name)
 endfunction()
 
 spng_add_swift_module(LZ77)
-spng_add_swift_module(PNGCore)
+spng_add_swift_module(PNG)
 spng_add_swift_module(PNGABI)
 
-target_link_libraries(PNGCore PUBLIC LZ77)
-target_link_libraries(PNGABI PUBLIC PNGCore)
+target_link_libraries(PNG PUBLIC LZ77)
+target_link_libraries(PNGABI PUBLIC PNG)
 
 # Only the boundary module sees the C API.
 target_compile_options(PNGABI PRIVATE
@@ -106,15 +106,15 @@ target_compile_options(PNGABI PRIVATE
     "SHELL:-Xcc -fmodule-map-file=${SPNG_MODULE_MAP}")
 
 if(SPNG_USE_SYSTEM_ZLIB)
-    target_compile_definitions(PNGCore PRIVATE SystemZlib)
+    target_compile_definitions(PNG PRIVATE SystemZlib)
 
-    # The module map has to be visible to everything that imports PNGCore, not just
-    # to PNGCore itself: a clang module a Swift module depends on has to be
+    # The module map has to be visible to everything that imports PNG, not just
+    # to PNG itself: a clang module a Swift module depends on has to be
     # loadable wherever that Swift module is imported.
     set(SPNG_ZLIB_MODULE_MAP
         ${CMAKE_CURRENT_SOURCE_DIR}/Sources/CZlib/module.modulemap)
 
-    foreach(target PNGCore PNGABI)
+    foreach(target PNG PNGABI)
         target_compile_options(${target} PRIVATE
             "SHELL:-Xcc -fmodule-map-file=${SPNG_ZLIB_MODULE_MAP}")
     endforeach()
@@ -189,7 +189,7 @@ else()
     # archive raised its undefined references contributes nothing to them.
     target_link_options(png16 PRIVATE
         "LINKER:--whole-archive,$<TARGET_FILE:PNGABI>,--no-whole-archive"
-        "LINKER:$<TARGET_FILE:PNGCore>"
+        "LINKER:$<TARGET_FILE:PNG>"
         "LINKER:$<TARGET_FILE:LZ77>")
 
     if(SPNG_STATIC_STDLIB)

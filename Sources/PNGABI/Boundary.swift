@@ -10,7 +10,7 @@
 // called setjmp.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Runs an engine operation and reports a failure the way the C API does.
 ///

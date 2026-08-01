@@ -10,7 +10,7 @@
 // reads are built here, out of storage the info structure owns, rather than assembled on a frame.
 
 import CPNG
-import PNGCore
+import PNG
 
 @c @implementation
 public func png_set_pCAL(

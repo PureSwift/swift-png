@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 /// These check two things the differential comparison cannot check directly.
 ///

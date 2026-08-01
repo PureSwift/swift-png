@@ -9,7 +9,7 @@
 // one has a value of its own.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Turns one of the library's own behaviours on or off, reporting what it was.
 ///

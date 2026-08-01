@@ -50,9 +50,9 @@ the library, which is worth doing on platforms that do not ship one.
 
 ## Platforms without a C library underneath
 
-`PNGCore` and the `LZ77` module it compresses through have no dependency on zlib, libc, or an
+`PNG` and the `LZ77` module it compresses through have no dependency on zlib, libc, or an
 operating system, and compile under Embedded Swift for targets that have none of the three:
-WebAssembly, and bare-metal ARM. Building `PNG`/`PNGCore` for one of these disables the
+WebAssembly, and bare-metal ARM. Building `PNG` for one of these disables the
 `SystemZlib` trait (`swift build --disable-default-traits ...`), which switches DEFLATE and
 INFLATE to the from-scratch, zlib-compatible codec in `LZ77` — the same code path exercised by
 `swift test --disable-default-traits` on every hosted platform, so it is not only ever tested on
@@ -73,11 +73,10 @@ All of this is what `.github/workflows/embedded.yml` checks on every push.
 ## How it is put together
 
 ```
-CPNG          the published C API, and the parts that have to be C:
-              error dispatch and the jump boundary, allocation, callbacks
-  PNGABI      one @c function per published entry point
-    PNGCore   the engine: chunks, row pipeline, transforms, compression
-      PNG     the Swift API
+CPNG        the published C API, and the parts that have to be C:
+            error dispatch and the jump boundary, allocation, callbacks
+  PNGABI    one @c function per published entry point
+    PNG     the engine: chunks, row pipeline, transforms, compression
 ```
 
 Two decisions shape everything else.

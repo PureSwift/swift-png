@@ -8,7 +8,7 @@
 // an extension this library does not gets to read it.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Says what to do with chunks this library does not know.
 ///

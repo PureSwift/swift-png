@@ -1,6 +1,6 @@
 // main.swift - proof that the embedded WASM build is correct, not only that it links
 //
-// The `wasm-embedded` CI job compiles PNGCore for wasm32-unknown-wasip1 under Embedded Swift,
+// The `wasm-embedded` CI job compiles PNG for wasm32-unknown-wasip1 under Embedded Swift,
 // which catches every restriction that target imposes — but a clean compile says nothing about
 // whether the result actually produces the right bytes. This is the WASM counterpart to
 // Firmware/QEMU and Firmware/Hypervisor: the same encode-then-decode round trip, run for real.
@@ -10,10 +10,10 @@
 // sysroot behind it, so `WASILibc` is importable even under `-enable-experimental-feature
 // Embedded` and supplies real `malloc`/`free` directly. There is nothing here that would not
 // also compile as an ordinary (non-embedded) executable; what makes this a check on Embedded
-// Swift specifically is that it is *built* with that flag, against the same PNGCore object code
+// Swift specifically is that it is *built* with that flag, against the same PNG object code
 // the CI job already produces.
 
-import PNGCore
+import PNG
 
 #if canImport(WASILibc)
 import WASILibc

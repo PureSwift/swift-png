@@ -6,7 +6,7 @@
 // client that asks too early.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Runs a query against the info structure, answering `fallback` when there is
 /// nothing to query.

@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 /// A whole file written and read back through the engine, with no C API and no file system:
 /// bytes go out through a host callback into an array and come back in the same way.

@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 @Suite("Image header")
 struct HeaderTests {

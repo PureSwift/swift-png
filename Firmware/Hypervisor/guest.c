@@ -171,7 +171,7 @@ static uint64_t l1_table[512] __attribute__((aligned(4096)));
 int reset_entry(void) {
     __asm__ volatile("msr vbar_el1, %0" ::"r"(vector_table));
 
-    // PNGCore's gamma correction uses Double arithmetic, which on AArch64 means SIMD/FP register
+    // PNG's gamma correction uses Double arithmetic, which on AArch64 means SIMD/FP register
     // access — trapped by default at EL1 until CPACR_EL1.FPEN is set, the same requirement the
     // Cortex-M firmware's CPACR FPU-enable step exists for.
     uint64_t cpacr;

@@ -142,7 +142,7 @@ jobs:
       - name: Build the engine for embedded WebAssembly
         run: >
           swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded
-          --target PNGCore --disable-default-traits
+          --target PNG --disable-default-traits
 
       - name: Build the WASI round trip
         run: >

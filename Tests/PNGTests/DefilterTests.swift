@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 /// The reconstruction has to invert exactly what an encoder's prediction did, so each
 /// case is checked against a prediction computed independently here rather than

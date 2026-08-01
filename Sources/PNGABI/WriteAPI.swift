@@ -6,7 +6,7 @@
 // palette before the image data, and nothing at all after the end.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Writes the eight bytes that begin a file.
 ///

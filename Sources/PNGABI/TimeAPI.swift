@@ -9,7 +9,7 @@
 // it as one would be inventing a date the file did not contain.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// The month names the header form uses, which are English and fixed.
 ///
