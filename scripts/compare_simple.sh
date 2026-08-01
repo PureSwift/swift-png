@@ -26,6 +26,13 @@ formats="header 0x00 0x01 0x02 0x03 0x11 0x12 0x13 0x21 0x23 0x04 0x05 0x06 0x07
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# A recorded difference is not always a fact about every libpng: some are facts about the version
+# in the room.  Entries guarded by a reference version are dropped here when the guard does not
+# hold, so they neither exempt nor go stale.  See known_differences.sh.
+. "$(dirname "$0")/known_differences.sh"
+spng_active_differences "$known" "$work/known-active"
+known="$work/known-active"
+
 failures=0
 exempt=0
 count=0
