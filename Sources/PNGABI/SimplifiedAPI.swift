@@ -125,11 +125,11 @@ public func swift_swift_image_finish_read(
     // saying so.
     let fileHasAlpha = header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)
 
-    // Removing coverage means compositing, and what onto is the client's answer.  A colour it named
-    // is a colour to blend against; nothing named means blending against whatever its buffer already
-    // holds, which the reference does with machinery of its own rather than through the ordinary
-    // requests — so that one is refused and the other is not.
-    if !format.hasAlpha, fileHasAlpha, background == nil {
+    // Removing coverage means compositing, and what onto is the client's answer — at eight bits.  At
+    // sixteen the alpha-mode step already composites against black as part of turning the channel
+    // into premultiplied light, so there is nothing left for a background to name; the reference does
+    // not look at one there either.  Only the eight bit case needs one supplied.
+    if !format.hasAlpha, fileHasAlpha, background == nil, !format.isLinear {
         swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
     }
 
@@ -143,18 +143,18 @@ public func swift_swift_image_finish_read(
         swift_c_error(png_ptr, "png_image: discarding colour and alpha together not implemented")
     }
 
-    // A linear result is always a conversion, even from a sixteen bit file: the file's samples are
-    // encoded for a display and this format's are light.  And a sixteen bit file read at eight bits is
-    // the same conversion the other way.
-    if format.isLinear || header.bitDepth == 16 {
-        swift_c_error(png_ptr, "png_image: light conversion not implemented")
-    }
+    // What a file with no gAMA of its own is assumed to have been encoded with.  A sixteen bit file
+    // is taken to hold light already, unless the client said otherwise through the flag the API
+    // provides for exactly this; everything else is taken to be encoded for the usual display.
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
 
     let passes = requestConversion(
         png_ptr,
         info_ptr,
         from: header,
         to: format,
+        assumesLinearInput: assumesLinearInput,
         background: background
     )
 
@@ -200,18 +200,45 @@ private func requestConversion(
     _ info_ptr: png_inforp?,
     from header: Header,
     to format: SimplifiedFormat,
+    assumesLinearInput: Bool,
     background: png_const_colorp?
 ) -> Int {
     // Everything starts by becoming samples: an indexed row is indices, a transparent colour is not a
     // channel, and anything below eight bits is not a byte.
     png_set_expand(png_ptr)
 
-    // The depth the client asked for.  Sixteen bit output is linear light, eight bit output is
-    // encoded for a display, and this is where that is settled — the conversion between them is the
-    // gamma machinery's, not a matter of moving bits.
+    let fileHasAlpha = header.colorType.hasAlpha
+        || (info_ptr.flatMap { InfoStore.from($0)?.isValid(PNG_INFO_tRNS) } ?? false)
+
+    // Two calls, and the first is only about the *input*.
+    //
+    // What this call sets that the second cannot is the gamma the file is assumed to have been
+    // encoded with when the file itself does not say — and only the first such call sets it, since a
+    // file that carries its own gAMA is believed over any default.  So the assumption has to be
+    // stated before the output is asked for, or the output request's own gamma becomes the input
+    // assumption too, and every sample is then corrected by the wrong curve.  That is a whole-image
+    // error rather than a low-bit one, which is what makes leaving it out obvious rather than subtle.
+    png_set_alpha_mode_fixed(
+        png_ptr,
+        PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+
+    // Now the depth and arrangement the client asked for.  Sixteen bit output is linear light, eight
+    // bit output is encoded for a display, and this is where that is settled — the conversion between
+    // them is the gamma machinery's, not a matter of moving bits.
     if format.isLinear {
         png_set_expand_16(png_ptr)
-        png_set_alpha_mode(png_ptr, PNG_ALPHA_PNG, 1.0)
+
+        // Associated (premultiplied) alpha when the file carries any coverage, matching the
+        // reference's own choice: the colour channels come out already composited against black,
+        // which is what makes a plain strip below — rather than a compose — the way to drop the
+        // channel.  A file with no coverage has nothing to premultiply against.
+        png_set_alpha_mode_fixed(
+            png_ptr,
+            fileHasAlpha ? PNG_ALPHA_STANDARD : PNG_ALPHA_PNG,
+            png_fixed_point(PNG_FP_1)
+        )
     } else {
         png_set_scale_16(png_ptr)
 
@@ -231,10 +258,11 @@ private func requestConversion(
         png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
     }
 
-    let fileHasAlpha = header.colorType.hasAlpha
-        || (info_ptr.flatMap { InfoStore.from($0)?.isValid(PNG_INFO_tRNS) } ?? false)
-
-    if !format.hasAlpha, fileHasAlpha, let background {
+    if !format.hasAlpha, fileHasAlpha, format.isLinear {
+        // The alpha-mode request above already composited the colour against black as part of
+        // premultiplying it; the channel itself is all that is left to remove.
+        png_set_strip_alpha(png_ptr)
+    } else if !format.hasAlpha, fileHasAlpha, let background {
         // Named in the sRGB the API speaks, and handed on at the depth the blend will happen at —
         // which is the row's, and the row's is eight bits here because a file with more is refused
         // above.  A colour widened for sixteen bits and given to an eight bit blend is not a darker
