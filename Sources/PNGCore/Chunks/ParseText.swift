@@ -41,7 +41,7 @@ extension InfoStore {
     /// The entry is passed in fully built: every string it holds is already allocated, so
     /// there is nothing here that can fail part way and leave a half-formed entry in the
     /// array.
-    public func appendText(_ entry: TextEntry) throws {
+    public func appendText(_ entry: TextEntry) throws(Diagnostic) {
         self.textEntries.append(entry)
     }
 
@@ -57,7 +57,7 @@ extension InfoStore {
     private func validateKeyword(
         _ keyword: UnsafeBufferPointer<UInt8>,
         chunk: ChunkName
-    ) throws {
+    ) throws(Diagnostic) {
         guard keyword.count >= 1, keyword.count <= 79 else {
             throw Diagnostic("invalid keyword", chunk: chunk)
         }
@@ -83,7 +83,7 @@ extension InfoStore {
     }
 
     /// A keyword and an uncompressed value.
-    func parseText(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseText(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let end = self.separator(in: payload, from: 0) else {
             throw Diagnostic("malformed", chunk: .text)
         }
@@ -110,7 +110,7 @@ extension InfoStore {
     }
 
     /// A keyword and a compressed value.
-    func parseCompressedText(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseCompressedText(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let end = self.separator(in: payload, from: 0) else {
             throw Diagnostic("malformed", chunk: .ztxt)
         }
@@ -159,7 +159,7 @@ extension InfoStore {
 
     /// A keyword, a language tag, a translated keyword, and a value that may be
     /// compressed.
-    func parseInternationalText(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseInternationalText(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let keywordEnd = self.separator(in: payload, from: 0) else {
             throw Diagnostic("malformed", chunk: .itxt)
         }
