@@ -9,7 +9,7 @@
 // lowers them; one that has to read anything raises them and takes its chances.
 
 import CPNG
-import PNGCore
+import PNG
 
 @c @implementation
 public func png_set_user_limits(
