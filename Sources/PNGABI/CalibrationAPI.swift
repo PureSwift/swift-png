@@ -29,11 +29,11 @@ public func png_set_pCAL(
     // The four equations the format defines.  A fifth is not an equation this library could apply, and
     // writing it would produce a file no decoder could read, so it is refused rather than stored.
     guard let equation = Calibration.Equation(rawValue: UInt8(truncatingIfNeeded: type)) else {
-        spng_c_error(png_structp(mutating: png_ptr), "Invalid pCAL equation type")
+        swift_c_error(png_structp(mutating: png_ptr), "Invalid pCAL equation type")
     }
 
     guard Int(nparams) == equation.parameterCount else {
-        spng_c_error(png_structp(mutating: png_ptr), "Invalid pCAL parameter count")
+        swift_c_error(png_structp(mutating: png_ptr), "Invalid pCAL parameter count")
     }
 
     updateAllocating(png_ptr, info_ptr) { info in
