@@ -109,7 +109,7 @@ public func png_set_filter(_ png_ptr: png_structrp?, _ method: Int32, _ filters:
     // The single filter method the format defines.  Anything else describes a file this library
     // cannot write, so the request is refused rather than approximated.
     guard method == 0 else {
-        spng_c_error(png_ptr, "Unknown custom filter method")
+        swift_c_error(png_ptr, "Unknown custom filter method")
     }
 
     // Negative asks for the default, which is all of them.
@@ -150,12 +150,12 @@ public func png_set_compression_window_bits(_ png_ptr: png_structrp?, _ window_b
     var bits = window_bits
 
     if bits > 15 {
-        spng_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
         bits = 15
     }
 
     if bits < 8 {
-        spng_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
         bits = 8
     }
 
@@ -168,7 +168,7 @@ public func png_set_compression_method(_ png_ptr: png_structrp?, _ method: Int32
 
     // The one method zlib defines.  The reference warns and carries on with it.
     if method != 8 {
-        spng_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
+        swift_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
     }
 
     context.compression.method = 8
@@ -229,12 +229,12 @@ public func png_set_text_compression_window_bits(_ png_ptr: png_structrp?, _ win
     var bits = window_bits
 
     if bits > 15 {
-        spng_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
         bits = 15
     }
 
     if bits < 8 {
-        spng_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
         bits = 8
     }
 
@@ -246,7 +246,7 @@ public func png_set_text_compression_method(_ png_ptr: png_structrp?, _ method: 
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
 
     if method != 8 {
-        spng_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
+        swift_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
     }
 
     context.textCompression.method = 8
