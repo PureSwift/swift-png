@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The one thing loader.c needs beyond what any macOS process already has: permission to
+         create a VM through Hypervisor.framework. Ad-hoc code signing with this entitlement is
+         enough to grant it on the machine that built it, which is all a local smoke test needs. -->
+    <key>com.apple.security.hypervisor</key>
+    <true/>
+</dict>
+</plist>
