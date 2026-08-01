@@ -27,7 +27,10 @@ toolchain=$(dirname "$(dirname "$swiftc")")
 
 if [ ! -d "$toolchain/usr/lib/swift/embedded/$triple" ] \
     && [ ! -d "$toolchain/lib/swift/embedded/$triple" ]; then
-    for candidate in "$HOME"/Library/Developer/Toolchains/*.xctoolchain; do
+    # Both locations, for the same reason scripts/build_embedded.sh checks both: a per-user
+    # install and the official .pkg installer's system-wide one do not land in the same place.
+    for candidate in "$HOME"/Library/Developer/Toolchains/*.xctoolchain \
+                     /Library/Developer/Toolchains/*.xctoolchain; do
         if [ -d "$candidate/usr/lib/swift/embedded/$triple" ]; then
             swiftc="$candidate/usr/bin/swiftc"
             break
