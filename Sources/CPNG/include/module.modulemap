@@ -1,4 +1,4 @@
 module CPNG {
-    header "spng_internal.h"
+    header "swift_internal.h"
     export *
 }
