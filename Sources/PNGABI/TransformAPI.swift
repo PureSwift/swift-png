@@ -9,7 +9,7 @@
 // Putting the logic here would make the answer depend on the call order.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Records a request against the control structure.
 private func request(_ png_ptr: png_structrp?, _ flags: TransformFlags) {
