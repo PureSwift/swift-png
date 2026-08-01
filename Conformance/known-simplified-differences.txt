@@ -41,3 +41,76 @@ unimplemented Every conversion this library refuses is recorded here as one thin
 # same reason: the reference takes the colour to light at sixteen bits and this library does it at
 # eight, so the two disagree about the colour rather than about the blend.  Driven both ways round
 # above so that the line between them stays visible.
+
+# -- the coarse gamma table, reached through this API -------------------------
+#
+# Every entry below is a sixteen bit file, and every one differs by a count or two in the low
+# byte and nowhere else.  This is the difference already set out at length in
+# known-transform-differences.txt: a table over sixteen bit samples would need 65536 entries per
+# image, so the reference builds a coarser one and looks samples up in it, losing the low bits on
+# purpose, while this library computes each sample exactly.  Nothing about this API is involved
+# beyond it being another way to reach that table — no eight bit file differs here at all.
+#
+# Listed one image and format at a time rather than as a class, so that a real regression on a
+# sixteen bit file still fails rather than landing in a catch-all.
+gray16-filter2.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
