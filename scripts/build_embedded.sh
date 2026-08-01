@@ -63,15 +63,15 @@ echo "building LZ77 for $triple"
 ar=$( (command -v llvm-ar || xcrun --find llvm-ar || command -v ar) 2>/dev/null | head -1 )
 "$ar" rcs "$output/libLZ77.a" "$output/LZ77.o"
 
-echo "building PNGCore for $triple"
+echo "building PNG for $triple"
 # shellcheck disable=SC2086
 "$swiftc" $flags \
-    -module-name PNGCore \
+    -module-name PNG \
     -I "$output" \
-    -emit-module -emit-module-path "$output/PNGCore.swiftmodule" \
-    -c -o "$output/PNGCore.o" \
-    $(find "$root/Sources/PNGCore" -name '*.swift')
+    -emit-module -emit-module-path "$output/PNG.swiftmodule" \
+    -c -o "$output/PNG.o" \
+    $(find "$root/Sources/PNG" -name '*.swift')
 
-"$ar" rcs "$output/libPNGCore.a" "$output/PNGCore.o"
+"$ar" rcs "$output/libPNG.a" "$output/PNG.o"
 
-echo "wrote $output/libLZ77.a and $output/libPNGCore.a"
+echo "wrote $output/libLZ77.a and $output/libPNG.a"
