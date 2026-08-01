@@ -1,7 +1,7 @@
 // shim.c - what a hosted C library would otherwise provide
 //
 // Two different things live here, and the distinction matters. The Host abstraction in
-// Sources/PNGCore/Memory/Host.swift is how this library gets its buffers everywhere it runs —
+// Sources/PNG/Memory/Host.swift is how this library gets its buffers everywhere it runs —
 // that seam is what lets this file hand it a bump allocator instead of a real one. But Embedded
 // Swift's own runtime — allocating a class instance, zero-filling a struct, seeding the
 // Hashable salt — reaches for a small fixed set of POSIX- and EABI-shaped C symbols directly,
@@ -26,7 +26,7 @@ void write0(const char *s);
 void write_uint(uint32_t value);
 void exit_semihosting(int code);
 
-// Not static: this is also what App.swift hands to PNGCore as its Host allocator, separately
+// Not static: this is also what App.swift hands to PNG as its Host allocator, separately
 // from the posix_memalign path Embedded Swift's own runtime uses for class instances.
 void *bump_malloc(size_t size) {
     size = (size + 15) & ~((size_t)15);
