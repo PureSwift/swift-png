@@ -12,7 +12,7 @@
 // the stack.
 
 import CPNG
-import PNGCore
+import PNG
 
 private func makeHost(_ png_ptr: png_structrp) -> Host {
     Host(
