@@ -1,0 +1,84 @@
+# embedded.yml - the targets with no operating system under them
+#
+# These build but do not run: there is no host here to run a Cortex-M object on, and the point
+# of the job is that the engine still *compiles* under Embedded Swift's restrictions — no
+# existential errors, no key paths, no runtime reflection, no C library assumed. Those are easy
+# to reintroduce by accident from a desktop build that never notices, which is exactly why this
+# runs on every push rather than being checked by hand when someone remembers.
+#
+# What does run is the pure-Swift compression path on the host, with the system zlib trait
+# switched off: on these targets that path is the only one there is, so a test suite that only
+# ever exercised zlib would say nothing about them.
+
+name: embedded
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The compression module is this package's own, and on a target with no zlib it is load
+  # bearing rather than an alternative, so it is tested in both configurations on a host that
+  # can actually execute the result.
+  pure-swift:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zlib, for the configuration that uses it
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq zlib1g-dev
+
+      - name: Test with the system zlib
+        run: swift test
+
+      - name: Test with the Swift compression path
+        run: swift test --disable-default-traits
+
+  bare-metal:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        # One from each family the toolchain ships an embedded standard library for: a
+        # 64-bit ELF target, a Cortex-M4F, and the smallest Cortex-M0 profile — which is the
+        # one that catches anything depending on hardware the others happen to have.
+        triple:
+          - aarch64-none-none-elf
+          - armv7em-none-none-eabi
+          - armv6m-none-none-eabi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build for ${{ matrix.triple }}
+        run: ./scripts/build_embedded.sh ${{ matrix.triple }}
+
+      - name: Show what was produced
+        run: ls -l build/embedded/${{ matrix.triple }}
+
+  wasm-embedded:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      # The checksum is required rather than optional, and it is pinned here rather than
+      # fetched: an SDK that installs whatever the URL happens to be serving is not a fixed
+      # thing to have tested against.
+      - name: Install the WebAssembly SDK
+        run: >
+          swift sdk install
+          "https://download.swift.org/swift-6.3.3-release/wasm-sdk/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE_wasm.artifactbundle.tar.gz"
+          --checksum cabfa08b73bb8ac783927ecd15fa386e99d0c139c5f232445067bcf58379cae7
+
+      - name: Build the engine for embedded WebAssembly
+        run: >
+          swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded
+          --target PNGCore --disable-default-traits
