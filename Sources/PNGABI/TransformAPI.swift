@@ -153,7 +153,7 @@ public func png_set_shift(_ png_ptr: png_structrp?, _ true_bits: png_const_color
     } catch let diagnostic as Diagnostic {
         report(diagnostic, to: png_ptr)
     } catch {
-        spng_c_error(png_ptr, "internal error")
+        swift_c_error(png_ptr, "internal error")
     }
 
     context.shiftBits = bits
@@ -394,7 +394,7 @@ public func png_set_alpha_mode_fixed(
     // behaviour, and a client meeting it is being told its two requests do not compose.
     if alphaMode != .png,
        context.transformFlags.contains(.compose) || context.alphaModeComposes {
-        spng_c_error(png_ptr, "conflicting calls to set alpha mode and background")
+        swift_c_error(png_ptr, "conflicting calls to set alpha mode and background")
     }
 
     context.alphaMode = alphaMode
