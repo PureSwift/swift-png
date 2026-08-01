@@ -112,6 +112,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runner's own Xcode-bundled Swift does not ship the embedded standard library for
+      # arm64-apple-none-macho — only a standalone swift.org toolchain does. Installed system-
+      # wide, which is where scripts/build_embedded.sh and Firmware/Hypervisor/build.sh both
+      # know to look for it.
+      - name: Install a Swift toolchain with the embedded standard library
+        run: |
+          curl -sSL -o /tmp/swift.pkg \
+              "https://download.swift.org/swift-6.3.3-release/xcode/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE-osx.pkg"
+          sudo installer -pkg /tmp/swift.pkg -target /
+          rm /tmp/swift.pkg
+
       - name: Build the firmware and the host loader
         run: ./Firmware/Hypervisor/build.sh
 
