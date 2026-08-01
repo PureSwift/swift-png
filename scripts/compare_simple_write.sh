@@ -30,9 +30,15 @@ fi
 # whether two roundings agree depends on where the quotient falls between two integers.  A few hundred
 # samples visit too few of those places for a difference of one count to show up; a quarter of a
 # million visit enough.
+#
+# The `narrow` cases ask for that same sixteen bit input to come down to an eight bit file, which is
+# a conversion rather than a container: the light goes through the display's curve on the way.  Its
+# own large case is there for the same reason as the one above.
 cases="0x00:13:7 0x01:13:7 0x02:13:7 0x03:13:7 0x11:13:7 0x12:13:7 0x13:13:7 0x21:13:7 0x23:13:7
 0x02:1:1 0x03:256:2 0x00:2:64 0x04:13:7 0x06:13:7 0x06:1:1 0x04:2:64
 0x05:13:7 0x07:13:7 0x07:1:1 0x05:2:64 0x25:13:7 0x27:13:7 0x07:256:256
+0x04:13:7:narrow 0x06:13:7:narrow 0x05:13:7:narrow 0x07:13:7:narrow
+0x25:13:7:narrow 0x27:13:7:narrow 0x06:1:1:narrow 0x07:256:256:narrow
 0x02:13:7:memory 0x03:13:7:memory 0x13:5:3:memory 0x06:13:7:memory 0x07:13:7:memory"
 
 work=$(mktemp -d)
