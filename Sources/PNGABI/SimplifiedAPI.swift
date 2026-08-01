@@ -12,7 +12,7 @@
 // not a matter of moving bits about.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// What a client asks for, as the flags the API defines.
 struct SimplifiedFormat {
