@@ -5,6 +5,11 @@
 # reason to put a name here; that is what an unimplemented function reporting itself
 # unimplemented is for.
 #
+# A line may begin with a guard naming the reference versions it is a claim about, as in
+# "[>1.6.39] case reason".  An entry with no guard is a claim about every reference.  A guard that
+# does not hold makes the entry inactive: it neither exempts a difference nor counts as stale,
+# because it is not saying anything about the reference in the room.  See scripts/known_differences.sh.
+#
 # Format: <image name> <reason>
 
-meta-palette-hist.png The reference build refuses hIST wherever it appears in the stream, before or after PLTE and with or without other chunks between, reporting "out of place" or "invalid". Since it never accepts the chunk, its own png_get_hIST can never report anything, which makes the behaviour a defect rather than a rule. This library accepts a histogram that follows the palette it is sized against, as the format defines.
+[>1.6.39] meta-palette-hist.png Newer reference builds refuse hIST wherever it appears in the stream, before or after PLTE and with or without other chunks between, reporting "out of place" or "invalid" — so their own png_get_hIST can never report anything. Probed rather than assumed: 1.6.39, which Debian stable ships, accepts the chunk and agrees with this library, while 1.6.58 refuses it, which places the change between them and makes it a regression in libpng rather than a rule. This library accepts a histogram that follows the palette it is sized against, as the format defines.
