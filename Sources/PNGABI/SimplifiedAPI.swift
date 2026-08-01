@@ -34,7 +34,7 @@ struct SimplifiedFormat {
 
 /// Reads the header and describes the image in the API's own terms.
 @c
-public func spng_swift_image_read_header(
+public func swift_swift_image_read_header(
     _ image: png_imagep?,
     _ control: png_controlp?
 ) -> Int32 {
@@ -92,7 +92,7 @@ public func spng_swift_image_read_header(
 
 /// Reads the image into the client's buffer, in the format it asked for.
 @c
-public func spng_swift_image_finish_read(
+public func swift_swift_image_finish_read(
     _ image: png_imagep?,
     _ control: png_controlp?,
     _ background: png_const_colorp?,
@@ -110,7 +110,7 @@ public func spng_swift_image_finish_read(
     // The messages below are short on purpose.  What a client is handed is a sixty four byte buffer,
     // and a sentence cut off in the middle of a word says less than it meant to.
     guard !format.isColormapped else {
-        spng_c_error(png_ptr, "png_image: colour-mapped output not implemented")
+        swift_c_error(png_ptr, "png_image: colour-mapped output not implemented")
     }
 
     guard let info = InfoStore.from(info_ptr), let header = info.header else { return 0 }
@@ -130,18 +130,18 @@ public func spng_swift_image_finish_read(
     // holds, which the reference does with machinery of its own rather than through the ordinary
     // requests — so that one is refused and the other is not.
     if !format.hasAlpha, fileHasAlpha, background == nil {
-        spng_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
+        swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
     }
 
     if !format.hasColor, header.colorType.hasColor || header.colorType.isIndexed {
-        spng_c_error(png_ptr, "png_image: discarding colour not implemented")
+        swift_c_error(png_ptr, "png_image: discarding colour not implemented")
     }
 
     // A linear result is always a conversion, even from a sixteen bit file: the file's samples are
     // encoded for a display and this format's are light.  And a sixteen bit file read at eight bits is
     // the same conversion the other way.
     if format.isLinear || header.bitDepth == 16 {
-        spng_c_error(png_ptr, "png_image: light conversion not implemented")
+        swift_c_error(png_ptr, "png_image: light conversion not implemented")
     }
 
     let passes = requestConversion(
@@ -160,7 +160,7 @@ public func spng_swift_image_finish_read(
     let height = Int(image.pointee.height)
 
     guard abs(stride) >= minimum else {
-        spng_c_error(png_ptr, "png_image: row stride too small")
+        swift_c_error(png_ptr, "png_image: row stride too small")
     }
 
     let first = stride < 0
@@ -299,7 +299,7 @@ extension SimplifiedFormat {
 /// The mirror of the reader, and simpler, because there is only one file to choose: the format the
 /// client named decides the colour type and the depth, and nothing about the file is a judgement call.
 @c
-public func spng_swift_image_write(
+public func swift_swift_image_write(
     _ image: png_imagep?,
     _ control: png_controlp?,
     _ buffer: UnsafeRawPointer?,
@@ -315,25 +315,25 @@ public func spng_swift_image_write(
     let format = SimplifiedFormat(raw: image.pointee.format)
 
     guard !format.isColormapped else {
-        spng_c_error(png_ptr, "png_image: colour-mapped input not implemented")
+        swift_c_error(png_ptr, "png_image: colour-mapped input not implemented")
     }
 
     // Sixteen bit input is light and a file's samples are encoded, so writing one as the other is the
     // same conversion the reader refuses — and asking for it to be narrowed on the way is that
     // conversion by another name.
     guard !format.isLinear else {
-        spng_c_error(png_ptr, "png_image: light conversion not implemented")
+        swift_c_error(png_ptr, "png_image: light conversion not implemented")
     }
 
     guard convert_to_8_bit == 0 || !format.isLinear else {
-        spng_c_error(png_ptr, "png_image: narrowing on write not implemented")
+        swift_c_error(png_ptr, "png_image: narrowing on write not implemented")
     }
 
     let width = Int(image.pointee.width)
     let height = Int(image.pointee.height)
 
     guard width > 0, height > 0 else {
-        spng_c_error(png_ptr, "png_image: no image to write")
+        swift_c_error(png_ptr, "png_image: no image to write")
     }
 
     // The colour type the format implies.  There is no choosing here: a client that said its pixels
@@ -375,7 +375,7 @@ public func spng_swift_image_write(
     let stride = row_stride == 0 ? minimum : Int(row_stride) * format.bytesPerChannel
 
     guard abs(stride) >= minimum else {
-        spng_c_error(png_ptr, "png_image: row stride too small")
+        swift_c_error(png_ptr, "png_image: row stride too small")
     }
 
     // A negative stride says the client holds the image bottom-up, which is its business: the file is
