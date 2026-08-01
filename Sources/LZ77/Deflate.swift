@@ -108,7 +108,7 @@ public final class Deflate {
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int,
         ending: Ending = .none
-    ) throws -> Int {
+    ) throws(DeflateError) -> Int {
         guard count > 0 else { return 0 }
 
         self.takeInput()
