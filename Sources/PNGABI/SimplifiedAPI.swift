@@ -119,7 +119,7 @@ public func swift_swift_image_finish_read(
     //
     // Every one of these changes the light rather than the arrangement: taking coverage away means
     // compositing, taking colour away means averaging, and moving between eight bits and sixteen means
-    // moving between an encoding and the light it encodes.  The reference does all three through a
+    // moving between an encoding and the light it encodes.  The reference does most of these through a
     // wider intermediate than the ordinary requests can be made to use, and the results differ in the
     // low bits — so producing them would be producing something nearly right, which is worse than
     // saying so.
@@ -133,8 +133,14 @@ public func swift_swift_image_finish_read(
         swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
     }
 
-    if !format.hasColor, header.colorType.hasColor || header.colorType.isIndexed {
-        swift_c_error(png_ptr, "png_image: discarding colour not implemented")
+    // Discarding colour is ordinary averaging — png_set_rgb_to_gray, the same call every other
+    // caller of this library reaches for — *except* when the file also carries coverage: the
+    // reference's simplified reader can't run its rgb-to-gray transform and its alpha handling in
+    // the same pass without a second, gamma-aware compositing step of its own (a known limitation
+    // it works around rather than one this project should also take on), so that combination is
+    // still refused.  A file with no alpha at all has nothing for that workaround to matter to.
+    if !format.hasColor, (header.colorType.hasColor || header.colorType.isIndexed), fileHasAlpha {
+        swift_c_error(png_ptr, "png_image: discarding colour and alpha together not implemented")
     }
 
     // A linear result is always a conversion, even from a sixteen bit file: the file's samples are
