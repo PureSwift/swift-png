@@ -1,13 +1,18 @@
 # embedded.yml - the targets with no operating system under them
 #
-# These build but do not run: there is no host here to run a Cortex-M object on, and the point
-# of the job is that the engine still *compiles* under Embedded Swift's restrictions — no
-# existential errors, no key paths, no runtime reflection, no C library assumed. Those are easy
-# to reintroduce by accident from a desktop build that never notices, which is exactly why this
-# runs on every push rather than being checked by hand when someone remembers.
+# Most of these build but do not run: there is no host here to run aarch64-none-none-elf or
+# armv6m-none-none-eabi object code on, and the point of `bare-metal` is that the engine still
+# *compiles* under Embedded Swift's restrictions — no existential errors, no key paths, no
+# runtime reflection, no C library assumed. Those are easy to reintroduce by accident from a
+# desktop build that never notices, which is exactly why this runs on every push rather than
+# being checked by hand when someone remembers.
 #
-# What does run is the pure-Swift compression path on the host, with the system zlib trait
-# switched off: on these targets that path is the only one there is, so a test suite that only
+# `qemu-cortex-m4` is the exception: it links a bootable firmware around the armv7em build and
+# boots it under an emulated Cortex-M4F, so that one target is checked for correctness — a real
+# encode, a real decode, byte-exact — rather than only for a clean link. See Firmware/QEMU.
+#
+# `pure-swift` runs the compression path on the host, with the system zlib trait switched off:
+# on every one of these targets that path is the only one there is, so a test suite that only
 # ever exercised zlib would say nothing about them.
 
 name: embedded
@@ -62,6 +67,29 @@ jobs:
 
       - name: Show what was produced
         run: ls -l build/embedded/${{ matrix.triple }}
+
+  # The one target checked by actually running it: a firmware image booted under an emulated
+  # Cortex-M4F, checked for a byte-exact encode-then-decode round trip rather than only for a
+  # clean link. armv7em rather than one of the matrix above's other triples because it is the
+  # one with a QEMU machine model (mps2-an386) to boot it on.
+  qemu-cortex-m4:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the ARM toolchain and QEMU
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq gcc-arm-none-eabi qemu-system-arm
+
+      - name: Build the firmware
+        run: ./Firmware/QEMU/build.sh
+
+      - name: Boot it and check the round trip
+        run: >
+          ./Firmware/QEMU/run.sh
+          build/embedded/armv7em-none-none-eabi/firmware/firmware.elf
 
   wasm-embedded:
     runs-on: ubuntu-latest
