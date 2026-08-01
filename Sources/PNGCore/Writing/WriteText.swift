@@ -15,15 +15,15 @@ extension SequentialWriter {
     ///
     /// Called twice, before and after the image data, because the format allows text in both places
     /// and a client that set some before writing rows means those to appear before them.
-    func writeTextBeforeRows(_ info: InfoStore, context: PngContext) throws {
+    func writeTextBeforeRows(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         try self.writeText(info, context: context)
     }
 
-    func writeTextAfterRows(_ info: InfoStore, context: PngContext) throws {
+    func writeTextAfterRows(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         try self.writeText(info, context: context)
     }
 
-    private func writeText(_ info: InfoStore, context: PngContext) throws {
+    private func writeText(_ info: InfoStore, context: PngContext) throws(Diagnostic) {
         while self.textWritten < info.textEntries.count {
             let entry = info.textEntries[self.textWritten]
 
@@ -35,7 +35,7 @@ extension SequentialWriter {
         }
     }
 
-    private func writeTextEntry(_ entry: TextEntry, context: PngContext) throws {
+    private func writeTextEntry(_ entry: TextEntry, context: PngContext) throws(Diagnostic) {
         let keyword = entry.keyword.bytes
         let text = entry.text.bytes
 
@@ -81,7 +81,7 @@ extension SequentialWriter {
     }
 
     /// The international form, which carries a language and a translated keyword as well.
-    private func writeInternational(_ entry: TextEntry, context: PngContext) throws {
+    private func writeInternational(_ entry: TextEntry, context: PngContext) throws(Diagnostic) {
         let keyword = entry.keyword.bytes
         let language = entry.language.bytes
         let translated = entry.translatedKeyword.bytes
@@ -136,7 +136,7 @@ extension SequentialWriter {
     func compressed(
         _ bytes: UnsafeBufferPointer<UInt8>,
         context: PngContext
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         let stream = try DeflateStream(settings: context.textCompression)
 
         defer { stream.release() }
