@@ -126,14 +126,18 @@ jobs:
           "https://download.swift.org/swift-6.3.3-release/wasm-sdk/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE_wasm.artifactbundle.tar.gz"
           --checksum cabfa08b73bb8ac783927ecd15fa386e99d0c139c5f232445067bcf58379cae7
 
+      # wasmtime.dev's own installer script edits a shell profile to put itself on PATH, and
+      # errors out if it can't find one — which this container's $HOME reliably has none of.
+      # We only ever invoke the binary by absolute path (see the run step below), so nothing
+      # here needs PATH edited; fetching the release archive directly sidesteps the installer's
+      # profile-detection entirely instead of fighting it.
       - name: Install Wasmtime
-        # The installer appends its PATH setup to a shell profile, and errors out if it can't
-        # find one to write to — which a container job's $HOME starts without. We invoke the
-        # binary by absolute path below regardless, so the profile edit itself is moot; it just
-        # needs somewhere to land without failing the step.
         run: |
-          touch "$HOME/.profile"
-          curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version v27.0.0
+          curl -sSfL -o /tmp/wasmtime.tar.xz \
+            https://github.com/bytecodealliance/wasmtime/releases/download/v27.0.0/wasmtime-v27.0.0-x86_64-linux.tar.xz
+          mkdir -p "$HOME/.wasmtime/bin"
+          tar xf /tmp/wasmtime.tar.xz -C "$HOME/.wasmtime/bin" --strip-components=1 \
+            wasmtime-v27.0.0-x86_64-linux/wasmtime
 
       - name: Build the engine for embedded WebAssembly
         run: >
