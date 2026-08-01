@@ -352,15 +352,21 @@ public func swift_swift_image_write(
         swift_c_error(png_ptr, "png_image: colour-mapped input not implemented")
     }
 
-    // Sixteen bit input is light and a file's samples are encoded, so writing one as the other is the
-    // same conversion the reader refuses — and asking for it to be narrowed on the way is that
-    // conversion by another name.
-    guard !format.isLinear else {
-        swift_c_error(png_ptr, "png_image: light conversion not implemented")
+    // Sixteen bit input is light, and a sixteen bit file can hold it as it stands: the file simply
+    // says so, through a gamma of one.  Nothing is converted, so nothing here has to be.
+    //
+    // The two cases that *are* conversions are the ones still refused.  Narrowing to eight bits means
+    // encoding the light for a display on the way down.  And coverage, in these formats, is already
+    // multiplied into the colour, which is not what the format stores — so a file has to have that
+    // undone first.  Both need a pass over the row that this does not have yet.
+    let writes16Bit = format.isLinear && convert_to_8_bit == 0
+
+    if format.isLinear, convert_to_8_bit != 0 {
+        swift_c_error(png_ptr, "png_image: narrowing on write not implemented")
     }
 
-    guard convert_to_8_bit == 0 || !format.isLinear else {
-        swift_c_error(png_ptr, "png_image: narrowing on write not implemented")
+    if format.isLinear, format.hasAlpha {
+        swift_c_error(png_ptr, "png_image: premultiplied alpha on write not implemented")
     }
 
     let width = Int(image.pointee.width)
@@ -386,17 +392,55 @@ public func swift_swift_image_write(
         info_ptr,
         png_uint_32(width),
         png_uint_32(height),
-        8,
+        writes16Bit ? 16 : 8,
         colorType,
         PNG_INTERLACE_NONE,
         PNG_COMPRESSION_TYPE_DEFAULT,
         PNG_FILTER_TYPE_DEFAULT
     )
 
+    // What space the samples are in, said in the file rather than left to be assumed.  A reader that
+    // guesses gets this right anyway — the guess is the same — but a file that says so is readable by
+    // something that does not guess the same way, which is the point of writing it down.
+    let colorsIsSRGB = image.pointee.flags
+        & png_uint_32(PNG_IMAGE_FLAG_COLORSPACE_NOT_sRGB) == 0
+
+    if writes16Bit {
+        // Light, held as it stands: a gamma of one says the samples are already linear.  The
+        // primaries are still sRGB's, which the gamma alone would not say.
+        png_set_gAMA_fixed(png_ptr, info_ptr, png_fixed_point(PNG_FP_1))
+
+        if colorsIsSRGB {
+            png_set_cHRM_fixed(
+                png_ptr, info_ptr,
+                31270, 32900,   // white
+                64000, 33000,   // red
+                30000, 60000,   // green
+                15000, 6000     // blue
+            )
+        }
+    } else if colorsIsSRGB {
+        png_set_sRGB(png_ptr, info_ptr, PNG_sRGB_INTENT_PERCEPTUAL)
+    } else {
+        // Eight bit samples are encoded for a display whatever their primaries are, so the curve is
+        // still worth writing down even when the sRGB chunk would be wrong.
+        png_set_gAMA_fixed(png_ptr, info_ptr, 45455)
+    }
+
     png_write_info(png_ptr, info_ptr)
 
     // The client's rows are in the arrangement it named, and the file's are in the format's own.  Both
     // of these are their own inverses, which is why the same calls serve here as when reading.
+    //
+    // Asked for after the header is written rather than before, which is the opposite of the reading
+    // side and is the reference's own ordering: the header describes the file, and these describe the
+    // rows on their way into it.
+    if writes16Bit, SimplifiedFormat.isLittleEndian {
+        // The client hands over numbers in this machine's order; the file stores them in the
+        // format's.
+        png_set_swap(png_ptr)
+    }
+
     if format.isReversed {
         png_set_bgr(png_ptr)
     }
