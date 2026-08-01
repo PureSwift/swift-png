@@ -7,11 +7,13 @@
 # desktop build that never notices, which is exactly why this runs on every push rather than
 # being checked by hand when someone remembers.
 #
-# `qemu-cortex-m4` is the exception: it links a bootable firmware image around the armv7em
-# build and actually runs it, under an emulated Cortex-M4F, so that target is checked for
-# correctness — a real encode and a real decode, byte-exact — rather than only for a clean
-# link. See Firmware/QEMU. Firmware/Hypervisor does the same for arm64-apple-none-macho, run
-# locally rather than in CI (see that directory's own README for why).
+# `qemu-cortex-m4` and `wasm-embedded` are the exceptions: the former links a bootable firmware
+# image around the armv7em build and actually runs it, under an emulated Cortex-M4F; the latter
+# runs wasm-smoke-test under Wasmtime for wasm32-unknown-wasip1, a hosted target so it needs no
+# firmware image at all. Both check for correctness — a real encode and a real decode, byte-exact
+# — rather than only for a clean link. See Firmware/QEMU and Sources/wasm-smoke-test.
+# Firmware/Hypervisor does the same for arm64-apple-none-macho, run locally rather than in CI
+# (see that directory's own README for why).
 #
 # `pure-swift` runs the compression path on the host, with the system zlib trait switched off:
 # on every one of these targets that path is the only one there is, so a test suite that only
@@ -98,11 +100,22 @@ jobs:
           ./Firmware/QEMU/run.sh
           build/embedded/armv7em-none-none-eabi/firmware/firmware.elf
 
+  # wasm32-unknown-wasip1 is hosted rather than bare metal, so unlike the bare-metal matrix's
+  # compile-only entries, the round trip here is run for real: WASI gives it a real malloc/free,
+  # so wasm-smoke-test needs none of the custom shims the ARM firmware images do. Wasmtime's exit
+  # code is a trustworthy pass/fail signal either way, verified locally against both outcomes: a
+  # clean run exits 0, and a deliberate failure (fatalError, which lowers to a WASM `unreachable`
+  # trap) is reported by Wasmtime with a distinct nonzero exit rather than being swallowed.
   wasm-embedded:
     runs-on: ubuntu-latest
     container: swift:6.3.3-bookworm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install curl and xz, for the Wasmtime installer
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq curl xz-utils
 
       # The checksum is required rather than optional, and it is pinned here rather than
       # fetched: an SDK that installs whatever the URL happens to be serving is not a fixed
@@ -113,7 +126,20 @@ jobs:
           "https://download.swift.org/swift-6.3.3-release/wasm-sdk/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE_wasm.artifactbundle.tar.gz"
           --checksum cabfa08b73bb8ac783927ecd15fa386e99d0c139c5f232445067bcf58379cae7
 
+      - name: Install Wasmtime
+        run: curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version v27.0.0
+
       - name: Build the engine for embedded WebAssembly
         run: >
           swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded
           --target PNGCore --disable-default-traits
+
+      - name: Build the WASI round trip
+        run: >
+          swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded
+          --product wasm-smoke-test --disable-default-traits
+
+      - name: Run it under Wasmtime and check the round trip
+        run: >
+          "$HOME/.wasmtime/bin/wasmtime"
+          .build/wasm32-unknown-wasip1/debug/wasm-smoke-test.wasm
