@@ -2,7 +2,7 @@
 # build.sh - link a bootable smoke test for a target with no operating system
 #
 # scripts/build_embedded.sh proves the engine *compiles* under Embedded Swift's restrictions;
-# this proves the object code it produces is correct — a real ARM ELF, containing PNGCore and
+# this proves the object code it produces is correct — a real ARM ELF, containing PNG and
 # LZ77 exactly as a client embedding them would, booted under an emulator and checked for a
 # byte-exact round trip rather than merely for a clean compile.
 #
@@ -17,7 +17,7 @@ output="${1:-$root/build/embedded/$triple/firmware}"
 
 mkdir -p "$output"
 
-echo "building LZ77 and PNGCore for $triple"
+echo "building LZ77 and PNG for $triple"
 "$root/scripts/build_embedded.sh" "$triple" "$output/libs"
 
 swiftc=$(xcrun --find swiftc 2>/dev/null || command -v swiftc)
@@ -52,7 +52,7 @@ echo "linking"
     -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -nostdlib -nostartfiles -ffreestanding \
     -Os -T "$here/link.ld" -Wl,--gc-sections \
     "$here/startup.c" "$here/shim.c" "$here/main.c" \
-    "$output/App.o" "$output/libs/PNGCore.o" "$output/libs/LZ77.o" \
+    "$output/App.o" "$output/libs/PNG.o" "$output/libs/LZ77.o" \
     -lgcc \
     -o "$output/firmware.elf"
 
