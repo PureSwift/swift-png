@@ -53,9 +53,27 @@ int main(int argc, char **argv)
         * (((format & PNG_FORMAT_FLAG_LINEAR) != 0) ? 2 : 1);
    pixels = malloc(size != 0 ? size : 1);
 
-   /* Deliberately not smooth, so that a channel written into the wrong place is visible. */
-   for (k = 0; k < size; k++)
-      pixels[k] = (png_byte)((k * 37 + (k & 7) * 29) & 0xFF);
+   /* Deliberately not smooth, so that a channel written into the wrong place is visible — and
+    * deliberately not periodic either.
+    *
+    * The obvious pattern to write here is a short arithmetic one, and it hides things.  Undoing a
+    * pre-multiplication rounds, and whether two roundings agree depends on where the quotient falls
+    * between two integers; a pattern with a period of a few bytes visits almost none of those places,
+    * so an arithmetic difference of one count in a few thousand samples never comes up.  A generator
+    * that wanders over the whole range does, given enough pixels.
+    *
+    * Fixed seed and plain integer arithmetic, so every run and every platform sees the same image and
+    * a failure is reproducible from the case name alone.
+    */
+   {
+      png_uint_32 state = 0x9E3779B9u;
+
+      for (k = 0; k < size; k++)
+      {
+         state = state * 1664525u + 1013904223u;
+         pixels[k] = (png_byte)((state >> 16) & 0xFF);
+      }
+   }
 
    memset(&image, 0, sizeof image);
    image.version = PNG_IMAGE_VERSION;
