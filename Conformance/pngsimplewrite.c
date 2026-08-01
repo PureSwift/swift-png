@@ -8,7 +8,7 @@
  * the only thing worth looking at — and it is read back through the same simplified API, which is
  * what a client of it would do.
  *
- * usage: pngsimplewrite <output.png> <format> <width> <height> [memory]
+ * usage: pngsimplewrite <output.png> <format> <width> <height> [memory|narrow]
  */
 
 #include <png.h>
@@ -34,17 +34,24 @@ int main(int argc, char **argv)
    size_t size;
    size_t k;
    int to_memory;
+   int narrow;
 
    if (argc < 5)
    {
-      fprintf(stderr, "usage: pngsimplewrite <output.png> <format> <width> <height> [memory]\n");
+      fprintf(stderr,
+              "usage: pngsimplewrite <output.png> <format> <width> <height> [memory|narrow]\n");
       return 2;
    }
 
    format = (png_uint_32)strtol(argv[2], NULL, 0);
    width = (png_uint_32)atoi(argv[3]);
    height = (png_uint_32)atoi(argv[4]);
-   to_memory = argc > 5;
+   /* The fifth argument names what to do beyond writing: "memory" goes through a buffer rather than
+    * a file, and "narrow" asks for sixteen bit input to be brought down to an eight bit file, which
+    * is a conversion rather than a choice of container.
+    */
+   to_memory = argc > 5 && strcmp(argv[5], "memory") == 0;
+   narrow = argc > 5 && strcmp(argv[5], "narrow") == 0;
 
    /* A linear format's samples are two bytes each, and they are light rather than encoded — which is
     * why the buffer is sized from the depth as well as the channel count.
@@ -86,7 +93,7 @@ int main(int argc, char **argv)
       png_alloc_size_t needed = 0;
 
       /* Asked for the size first, with nowhere to put the bytes, which is how a client finds out. */
-      if (png_image_write_to_memory(&image, NULL, &needed, 0, pixels, 0, NULL) == 0)
+      if (png_image_write_to_memory(&image, NULL, &needed, narrow, pixels, 0, NULL) == 0)
       {
          printf("sizing failed: %s\n", image.message);
          free(pixels);
@@ -109,7 +116,7 @@ int main(int argc, char **argv)
          image.height = height;
          image.format = format;
 
-         if (png_image_write_to_memory(&image, block, &room, 0, pixels, 0, NULL) == 0)
+         if (png_image_write_to_memory(&image, block, &room, narrow, pixels, 0, NULL) == 0)
          {
             printf("write failed: %s\n", image.message);
             free(block);
@@ -130,7 +137,7 @@ int main(int argc, char **argv)
          free(block);
       }
    }
-   else if (png_image_write_to_file(&image, argv[1], 0, pixels, 0, NULL) == 0)
+   else if (png_image_write_to_file(&image, argv[1], narrow, pixels, 0, NULL) == 0)
    {
       printf("write failed: %s\n", image.message);
       free(pixels);
