@@ -19,10 +19,13 @@ if [ ! -x "$ours" ] || [ ! -x "$reference" ] || [ ! -d "$corpus" ]; then
     exit 2
 fi
 
-# The header alone, then every format the API defines that is not colour-mapped, then the one
-# colour-mapped case that is implemented: an opaque greyscale file into a greyscale colour map.
+# The header alone, then every format the API defines that is not colour-mapped, then the two
+# colour-mapped cases that are implemented: an opaque greyscale file into a greyscale colour map,
+# and an opaque RGB file into the reference's fixed six-by-six-by-six colour cube (0x8a asks for
+# the cube in BGR order, the one variation worth driving since the cube's entries are stored
+# differently for it rather than merely read differently).
 formats="header 0x00 0x01 0x02 0x03 0x11 0x12 0x13 0x21 0x23 0x04 0x05 0x06 0x07
-0x02:bg 0x12:bg 0x00:bg 0x11:bg 0x02:bg0 0x12:bg0 0x08"
+0x02:bg 0x12:bg 0x00:bg 0x11:bg 0x02:bg0 0x12:bg0 0x08 0x0a 0x8a"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
