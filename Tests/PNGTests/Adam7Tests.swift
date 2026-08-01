@@ -1,6 +1,6 @@
 import Testing
 
-@testable import PNGCore
+@testable import PNG
 
 /// The pass geometry is checked against the definition rather than against itself: the
 /// expected pass sizes here are counted from the eight-by-eight grid the format specifies,
