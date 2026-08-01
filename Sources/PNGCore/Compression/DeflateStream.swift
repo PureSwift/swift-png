@@ -48,7 +48,7 @@ final class DeflateStream {
     private let stream: Deflate
     #endif
 
-    init(settings: CompressionSettings) throws {
+    init(settings: CompressionSettings) throws(Diagnostic) {
         #if SystemZlib
         // The window is given negated by callers who want a raw stream; here it is always positive,
         // since the format's image data is a zlib stream complete with its header and check value.
@@ -123,7 +123,7 @@ final class DeflateStream {
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int,
         ending: Ending = .none
-    ) throws -> Int {
+    ) throws(Diagnostic) -> Int {
         guard count > 0 else { return 0 }
 
         #if SystemZlib
@@ -168,7 +168,10 @@ final class DeflateStream {
         case .finish: mode = .finish
         }
 
-        do {
+        // Typed, so the catch binds a DeflateError directly: catching by dynamic cast would
+        // erase it to an existential, which this module cannot spend on every platform it
+        // compiles for — and which crashes the 6.3.3 compiler outright on some of them.
+        do throws(DeflateError) {
             let produced = try self.stream.deflate(
                 into: destination,
                 count: count,
@@ -176,7 +179,7 @@ final class DeflateStream {
             )
             self.isFinished = self.stream.isFinished
             return produced
-        } catch let error as DeflateError {
+        } catch {
             throw Diagnostic(error.message, chunk: .idat)
         }
         #endif
