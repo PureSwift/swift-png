@@ -127,7 +127,13 @@ jobs:
           --checksum cabfa08b73bb8ac783927ecd15fa386e99d0c139c5f232445067bcf58379cae7
 
       - name: Install Wasmtime
-        run: curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version v27.0.0
+        # The installer appends its PATH setup to a shell profile, and errors out if it can't
+        # find one to write to — which a container job's $HOME starts without. We invoke the
+        # binary by absolute path below regardless, so the profile edit itself is moot; it just
+        # needs somewhere to land without failing the step.
+        run: |
+          touch "$HOME/.profile"
+          curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version v27.0.0
 
       - name: Build the engine for embedded WebAssembly
         run: >
