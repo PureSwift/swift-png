@@ -9,7 +9,7 @@
 // array afterwards, which is only true if we took a copy of it.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Runs an update that allocates, reporting a failure through the control structure.
 ///
