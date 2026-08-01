@@ -35,6 +35,22 @@ unimplemented Every conversion this library refuses is recorded here as one thin
 # Written out, the whole conversion lands within about three counts of the reference on the corpus —
 # near enough to look right and not near enough to be it, which is the same finish as the coarse gamma
 # table next door and wants the same answer, the construction rather than a fit to it.
+#
+# That last sentence has since been answered, and the answer is that there is no construction to find.
+#
+# The reference builds its linear-to-sRGB tables with a numerical search (contrib/tools/makesRGB.c):
+# it fits a piecewise linear approximation to the curve and then walks each of the five hundred and
+# twelve entries trying to reduce how many inputs come out wrong.  The search stops short of zero.
+# The committed tables still disagree with the correctly rounded curve at three hundred and eight of
+# the sixty five thousand five hundred and thirty six inputs the generator itself checks, always by
+# one count.  So the table is not an approximation *of* the curve that a better computation would
+# beat — it is the definition of what the reference outputs, its own departures from the curve
+# included, and no closed form reproduces it.  Computing the curve exactly instead disagrees on about
+# half a percent of the range, always by one.
+#
+# The tables are therefore vendored, in Sources/PNGABI/SRGBTable.swift, the same way and under the
+# same licence as the headers.  What that closed is recorded here rather than in the entries below,
+# because the reasoning is what stops the question being reopened.
 
 # Removing coverage against a colour the client named is implemented and agrees with the reference
 # exactly when that colour is black.  Against any other colour it differs in the low bits, and for the
