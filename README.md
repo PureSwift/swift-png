@@ -25,10 +25,11 @@ conversions, the channel rearrangements, the filler, the shift, gamma correction
 to greyscale, compositing against a background, alpha mode, and quantisation.
 
 What is left is a few of the convenience `png_image_*` API's shortcuts: colour-mapped output and
-input, discarding alpha onto a buffer with no background named, discarding colour from a file that
-also carries coverage, and narrowing sixteen bit input on write. Each of those refuses outright and
-says why, rather than producing an answer that is nearly right; the general read and write API
-these shortcuts sit in front of has no such gap.
+input; on read, discarding alpha onto a buffer with no background named, and discarding colour from
+a file that also carries coverage; on write, narrowing sixteen bit input to eight, and input whose
+coverage is already multiplied into the colour. Each of those refuses outright and says why, rather
+than producing an answer that is nearly right; the general read and write API these shortcuts sit
+in front of has no such gap.
 
 ## Building
 
