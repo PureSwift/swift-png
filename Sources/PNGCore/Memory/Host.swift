@@ -163,7 +163,7 @@ extension Host {
     /// The caller's allocator reports its own failure and does not return, so a
     /// nil result means it returned nil without reporting, which is a broken
     /// allocator rather than an out-of-memory condition we can describe.
-    func allocateBytes(_ count: Int) throws -> UnsafeMutableRawPointer {
+    func allocateBytes(_ count: Int) throws(Diagnostic) -> UnsafeMutableRawPointer {
         guard let memory = self.allocate(self.owner, UInt(count)) else {
             throw Diagnostic("out of memory")
         }
