@@ -183,7 +183,7 @@ public func png_set_IHDR(
         // failure. The info structure's own host is used, since it is the one whose
         // allocator and callbacks belong to this client.
         problems.report(to: info.host)
-        spng_c_error(png_structp(mutating: png_ptr), "Invalid IHDR data")
+        swift_c_error(png_structp(mutating: png_ptr), "Invalid IHDR data")
     }
 
     info.header = Header(fields)
