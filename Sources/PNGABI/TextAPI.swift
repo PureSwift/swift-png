@@ -128,6 +128,6 @@ public func png_set_text(
         report(diagnostic, to: png_structp(mutating: png_ptr))
     } catch {
         guard let png_ptr else { return }
-        spng_c_error(png_structp(mutating: png_ptr), "out of memory")
+        swift_c_error(png_structp(mutating: png_ptr), "out of memory")
     }
 }
