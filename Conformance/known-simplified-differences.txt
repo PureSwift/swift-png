@@ -142,3 +142,8 @@ rgba16-filter1.png 0x12:bg The reference's sixteen bit gamma table is coarser th
 rgba16-filter1.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through composing onto the buffer with no background named, rather than one of the
+# ordinary formats above, but the same file and the same cause.  0x12 is the BGR order of 0x02.
+rgba16-filter1.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
