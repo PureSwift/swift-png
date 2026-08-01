@@ -1,7 +1,66 @@
 #if canImport(Darwin)
 import Darwin
-#else
+#elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(WASILibc)
+import WASILibc
+#else
+// A target with no C library at all — bare metal, or an embedded sandbox without a libm.
+// The correction still needs a power function, so a small one is defined below in terms of
+// exp and log series that converge fast over this file's narrow domain: bases in (0, 1] and
+// exponents within the range gamma curves use.  Where a libm exists it is preferred, because
+// the conformance suites pin this library's tables to the reference's, and the reference
+// computes through the platform's own pow.
+private func pow(_ base: Double, _ exponent: Double) -> Double {
+    guard base > 0 else { return base == 0 ? 0 : .nan }
+    guard exponent != 0 else { return 1 }
+
+    // pow(b, e) = exp(e * ln b), with ln computed through atanh for stability near 1:
+    // ln(x) = 2 atanh((x-1)/(x+1)), and the atanh series converges quickly because
+    // |(x-1)/(x+1)| < 1 for every positive x once x is scaled into [0.5, 2) by pulling
+    // out powers of two.
+    var mantissa = base
+    var exponent2 = 0
+
+    while mantissa >= 2 { mantissa /= 2; exponent2 += 1 }
+    while mantissa < 0.5 { mantissa *= 2; exponent2 -= 1 }
+
+    let z = (mantissa - 1) / (mantissa + 1)
+    let zSquared = z * z
+    var term = z
+    var atanh = 0.0
+
+    for index in 0 ..< 32 {
+        atanh += term / Double(2 * index + 1)
+        term *= zSquared
+    }
+
+    let ln2 = 0.693147180559945309417232121458176568
+    let logarithm = 2 * atanh + Double(exponent2) * ln2
+    var x = exponent * logarithm
+
+    // exp by scaling into a small range and squaring back up, so the series stays short.
+    var squarings = 0
+
+    while x > 0.5 { x /= 2; squarings += 1 }
+    while x < -0.5 { x /= 2; squarings += 1 }
+
+    var sum = 1.0
+    var factorTerm = 1.0
+
+    for index in 1 ..< 24 {
+        factorTerm *= x / Double(index)
+        sum += factorTerm
+    }
+
+    for _ in 0 ..< squarings {
+        sum *= sum
+    }
+
+    return sum
+}
 #endif
 
 // Gamma.swift - correcting for the encoding curve
