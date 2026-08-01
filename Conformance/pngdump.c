@@ -142,15 +142,26 @@ dump_metadata(png_structp png_ptr, png_infop info_ptr)
    png_bytep exif;
    png_charp scale_width;
    png_charp scale_height;
+   /* These chunks postdate the oldest reference this harness is compiled against,
+    * so their printing is conditional on the headers knowing them.  A reference
+    * that does not is expected to read them as unknown chunks, and what it prints
+    * then is a recorded difference rather than a compile error here.
+    */
+#ifdef PNG_cICP_SUPPORTED
    png_byte primaries;
    png_byte transfer;
    png_byte matrix;
    png_byte range;
+#endif
+#ifdef PNG_cLLI_SUPPORTED
    png_uint_32 max_cll;
    png_uint_32 max_fall;
-   png_fixed_point chrm[8];
+#endif
+   png_fixed_point chrm[8]; /* shared with cHRM, which every reference knows */
+#ifdef PNG_mDCV_SUPPORTED
    png_uint_32 max_lum;
    png_uint_32 min_lum;
+#endif
    size_t index;
 
    if (png_get_gAMA_fixed(png_ptr, info_ptr, &fixed_gamma) != 0)
@@ -281,13 +292,17 @@ dump_metadata(png_structp png_ptr, png_infop info_ptr)
    if (png_get_sCAL_s(png_ptr, info_ptr, &unit, &scale_width, &scale_height) != 0)
       printf("scal unit=%d width=%s height=%s\n", unit, scale_width, scale_height);
 
+#ifdef PNG_cICP_SUPPORTED
    if (png_get_cICP(png_ptr, info_ptr, &primaries, &transfer, &matrix, &range) != 0)
       printf("cicp primaries=%d transfer=%d matrix=%d range=%d\n", primaries, transfer,
           matrix, range);
+#endif
 
+#ifdef PNG_cLLI_SUPPORTED
    if (png_get_cLLI_fixed(png_ptr, info_ptr, &max_cll, &max_fall) != 0)
       printf("clli max_cll=%lu max_fall=%lu\n", (unsigned long)max_cll,
           (unsigned long)max_fall);
+#endif
 
    {
       png_textp text = NULL;
@@ -317,6 +332,7 @@ dump_metadata(png_structp png_ptr, png_infop info_ptr)
       }
    }
 
+#ifdef PNG_mDCV_SUPPORTED
    if (png_get_mDCV_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3],
        &chrm[4], &chrm[5], &chrm[6], &chrm[7], &max_lum, &min_lum) != 0)
    {
@@ -325,6 +341,7 @@ dump_metadata(png_structp png_ptr, png_infop info_ptr)
          printf(" %ld", (long)chrm[index]);
       printf(" max=%lu min=%lu\n", (unsigned long)max_lum, (unsigned long)min_lum);
    }
+#endif
 }
 
 /* Rows are printed as hex.  Comparing them byte for byte is the point of the

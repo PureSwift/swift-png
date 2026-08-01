@@ -75,6 +75,16 @@ let package = Package(
             path: "Sources/LZ77"
         ),
 
+        // Times the engine driven from Swift, over the same images and in the same
+        // output format as Conformance/pngbench.c, so the two read side by side.
+        // The C benchmark's bar is parity with the reference; with no boundary to
+        // cross, this one's is beating it.
+        .executableTarget(
+            name: "pngbench-swift",
+            dependencies: ["PNGCore"],
+            path: "Sources/pngbench-swift"
+        ),
+
         .systemLibrary(
             name: "CZlib",
             path: "Sources/CZlib",

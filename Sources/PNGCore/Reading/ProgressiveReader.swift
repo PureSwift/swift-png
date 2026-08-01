@@ -164,7 +164,7 @@ final class ProgressiveReader {
         let expected = 8 - consumed
         let taken = min(expected - self.gathered, bytes.count)
 
-        try context.reserve(\.scratch, 8)
+        try context.reserve(.scratch, 8)
 
         for index in 0 ..< taken {
             context.scratch.bytes[self.gathered + index] = bytes[index]
@@ -229,7 +229,7 @@ final class ProgressiveReader {
     ) throws -> Int {
         let taken = min(8 - self.gathered, bytes.count)
 
-        try context.reserve(\.scratch, 8)
+        try context.reserve(.scratch, 8)
 
         for index in 0 ..< taken {
             context.scratch.bytes[self.gathered + index] = bytes[index]
@@ -267,7 +267,7 @@ final class ProgressiveReader {
             self.noteUnfinishedImageData(context: context)
             try self.noteImageDataEnded(context: context)
 
-            try context.reserve(\.scratch, max(length, 8))
+            try context.reserve(.scratch, max(length, 8))
             self.enter(.chunkData(name, length: length))
         }
 
@@ -330,7 +330,7 @@ final class ProgressiveReader {
     ) throws -> Int {
         let taken = min(4 - self.gathered, bytes.count)
 
-        try context.reserve(\.scratch, max(4, context.scratch.count))
+        try context.reserve(.scratch, max(4, context.scratch.count))
 
         // The checksum is staged separately from the payload, which is still in the scratch buffer:
         // the chunk cannot be parsed until its checksum has been seen.
@@ -500,8 +500,8 @@ final class ProgressiveReader {
             }
         }
 
-        try context.reserve(\.rowBuffer, largest + 1)
-        try context.reserve(\.previousRow, widest)
+        try context.reserve(.rowBuffer, largest + 1)
+        try context.reserve(.previousRow, widest)
         context.previousRow.bytes.baseAddress!.update(repeating: 0, count: widest)
 
         context.inflater = try InflateStream()

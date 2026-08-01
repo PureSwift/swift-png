@@ -84,6 +84,13 @@ function(spng_add_swift_module name)
         POSITION_INDEPENDENT_CODE ON
         Swift_MODULE_NAME ${name}
         Swift_COMPILATION_MODE ${SPNG_COMPILATION_MODE})
+
+    # The API's own contract is one structure per thread, so the dynamic
+    # bookkeeping that catches overlapping exclusive accesses at run time has
+    # nothing to catch; what it costs is measurable on every row.  Debug builds
+    # keep the checking.
+    target_compile_options(${name} PRIVATE
+        $<$<CONFIG:Release>:-enforce-exclusivity=unchecked>)
 endfunction()
 
 spng_add_swift_module(LZ77)
@@ -129,7 +136,9 @@ target_include_directories(png16
     PUBLIC $<BUILD_INTERFACE:${SPNG_INCLUDE_DIR}>
            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libpng${SPNG_ABI_SONAME}>)
 
-target_link_libraries(png16 PRIVATE PNGABI)
+# The engine's archives reach the link differently per format, so they are added in
+# the platform branches below.
+add_dependencies(png16 PNGABI)
 
 if(SPNG_USE_SYSTEM_ZLIB)
     target_link_libraries(png16 PRIVATE ZLIB::ZLIB)
@@ -162,9 +171,27 @@ if(APPLE)
     # client bind to something outside the published API.
     target_link_options(png16 PRIVATE
         "LINKER:-exported_symbols_list,${SPNG_EXPORT_LIST}")
+
+    target_link_libraries(png16 PRIVATE PNGABI)
 else()
     target_link_options(png16 PRIVATE
         "LINKER:--version-script=${SPNG_VERSION_SCRIPT}")
+
+    # The published entry points live in the boundary archive and nothing inside the
+    # library calls them, so an ELF link would drop their objects as unreferenced —
+    # ld64 resolves the export list from the archive, but GNU ld versions only what
+    # is already in the link.  The whole archive is what the dynamic symbol table
+    # is made from, and the version script then hides everything unpublished.
+    #
+    # The engine's archives follow *in these options* rather than through
+    # target_link_libraries: the driver places linker options and libraries in
+    # separate runs of the final command, and an archive scanned before the whole
+    # archive raised its undefined references contributes nothing to them.
+    target_link_options(png16 PRIVATE
+        "LINKER:--whole-archive,$<TARGET_FILE:PNGABI>,--no-whole-archive"
+        "LINKER:$<TARGET_FILE:PNGCore>"
+        "LINKER:$<TARGET_FILE:LZ77>")
+
     if(SPNG_STATIC_STDLIB)
         target_link_options(png16 PRIVATE -static-stdlib)
     endif()

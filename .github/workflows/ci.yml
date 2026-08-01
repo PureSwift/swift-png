@@ -1,0 +1,102 @@
+# ci.yml - what every push has to survive
+#
+# Both build systems, both platforms.  SwiftPM is how the Swift library and its tests are
+# driven; CMake is how the shipping C library is built and how the conformance suites compare
+# it against the reference, so both have to stay green everywhere the library claims to run.
+#
+# The benchmark runs last and cannot fail the build: a timing taken on a shared runner
+# measures the neighbours as much as the library.  It is here so that every push leaves a
+# number in the log, which is what makes a regression something to notice rather than
+# something to reconstruct.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      # ninja drives the CMake build; the reference libpng is what the conformance
+      # suites compare against, found through pkg-config like any other client finds it.
+      - name: Install dependencies
+        run: brew install ninja libpng pkgconf
+
+      - name: Build (SwiftPM)
+        run: swift build -c release
+
+      - name: Test (SwiftPM)
+        run: swift test
+
+      - name: Configure (CMake)
+        run: cmake -G Ninja -B build/ci -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (CMake)
+        run: cmake --build build/ci
+
+      - name: Test (CTest)
+        run: ctest --test-dir build/ci --output-on-failure
+
+      - name: Benchmark, C API against the reference
+        run: cmake --build build/ci --target benchmark
+
+      - name: Benchmark, the engine driven from Swift
+        run: .build/release/pngbench-swift build/ci/Conformance/corpus/rgb8-filter0.png
+
+  # The reference here is the distribution's own libpng, because that is what this
+  # library has to replace: a Debian client links against what Debian ships, so that
+  # is the thing to be substitutable for.  Debian stable carries 1.6.39 where macOS
+  # has 1.6.58, which makes the pair of jobs a check on more than the platform — a
+  # difference recorded against one version and not the other shows up here.
+  #
+  # It also keeps the reference where the loader expects it.  A reference installed
+  # somewhere else needs LD_LIBRARY_PATH to be found, and LD_LIBRARY_PATH outranks
+  # the RUNPATH our own harnesses carry — so setting it made every "ours" binary
+  # load the reference and quietly compare the reference against itself.
+  #
+  # The suites still excluded are the ones whose differences are the two versions
+  # disagreeing rather than this library being wrong; each is being recorded.
+  linux:
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      # The distribution's cmake is too old to drive Swift, so a current one comes from
+      # pip.  Its libpng is the reference and is left exactly where it was installed.
+      - name: Install dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq zlib1g-dev libpng-dev ninja-build pkg-config python3-pip
+          pip3 install -q --break-system-packages cmake
+
+      - name: Build (SwiftPM)
+        run: swift build -c release
+
+      - name: Test (SwiftPM)
+        run: swift test
+
+      - name: Configure (CMake)
+        run: cmake -G Ninja -B build/ci -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (CMake)
+        run: cmake --build build/ci
+
+      - name: Test (CTest)
+        run: >
+          ctest --test-dir build/ci --output-on-failure
+          -E '^version_probe|^metadata_roundtrip$|differential_(readpng|roundtrip|transforms|transform_fuzz|decode)$'
+
+      - name: Benchmark, C API against the reference
+        run: cmake --build build/ci --target benchmark
+
+      - name: Benchmark, the engine driven from Swift
+        run: .build/release/pngbench-swift build/ci/Conformance/corpus/rgb8-filter0.png

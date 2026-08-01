@@ -62,8 +62,26 @@ public final class PngContext {
 
     var inflater: InflateStream?
 
-    let reader = SequentialReader()
-    let writer = SequentialWriter()
+    // Made on first use rather than up front: a structure reads or writes, never both, and the
+    // machinery for the direction not taken was two allocations paid by every context.
+    private var readerStorage: SequentialReader?
+    private var writerStorage: SequentialWriter?
+
+    var reader: SequentialReader {
+        if let reader = self.readerStorage { return reader }
+
+        let reader = SequentialReader()
+        self.readerStorage = reader
+        return reader
+    }
+
+    var writer: SequentialWriter {
+        if let writer = self.writerStorage { return writer }
+
+        let writer = SequentialWriter()
+        self.writerStorage = writer
+        return writer
+    }
 
     /// The state machine a progressive read runs on, made only when one is started.
     ///
@@ -333,14 +351,22 @@ public final class PngContext {
         self.inflater?.release()
         self.inflater = nil
 
-        self.writer.deflater?.release()
-        self.writer.deflater = nil
+        // Through the storage rather than the accessor, which would make a writer just to find it
+        // has nothing to release.
+        self.writerStorage?.deflater?.release()
+        self.writerStorage?.deflater = nil
 
-        for buffer in [self.rowBuffer, self.previousRow, self.inputBuffer, self.scratch,
-                       self.writeStaging, self.textStaging, self.filterScratch,
-                       self.writeRowBuffer, self.timeText] {
-            buffer.deallocate(host: self.host)
-        }
+        // One call each rather than a loop over a listing of them: the listing would be an array,
+        // allocated on every destruction to name buffers that are usually all empty.
+        self.rowBuffer.deallocate(host: self.host)
+        self.previousRow.deallocate(host: self.host)
+        self.inputBuffer.deallocate(host: self.host)
+        self.scratch.deallocate(host: self.host)
+        self.writeStaging.deallocate(host: self.host)
+        self.textStaging.deallocate(host: self.host)
+        self.filterScratch.deallocate(host: self.host)
+        self.writeRowBuffer.deallocate(host: self.host)
+        self.timeText.deallocate(host: self.host)
 
         self.rowBuffer = .empty
         self.previousRow = .empty
@@ -353,6 +379,43 @@ public final class PngContext {
         self.timeText = .empty
     }
 
+    /// The buffers `reserve` can grow, named so that reaching one is a switch rather
+    /// than a key path: a key path is resolved through the runtime on every access,
+    /// and this is called per chunk and per row.
+    enum BufferSlot {
+        case rowBuffer, previousRow, inputBuffer, scratch, writeStaging
+        case textStaging, filterScratch, writeRowBuffer, timeText
+    }
+
+    private subscript(slot: BufferSlot) -> RawBuffer {
+        get {
+            switch slot {
+            case .rowBuffer: self.rowBuffer
+            case .previousRow: self.previousRow
+            case .inputBuffer: self.inputBuffer
+            case .scratch: self.scratch
+            case .writeStaging: self.writeStaging
+            case .textStaging: self.textStaging
+            case .filterScratch: self.filterScratch
+            case .writeRowBuffer: self.writeRowBuffer
+            case .timeText: self.timeText
+            }
+        }
+        set {
+            switch slot {
+            case .rowBuffer: self.rowBuffer = newValue
+            case .previousRow: self.previousRow = newValue
+            case .inputBuffer: self.inputBuffer = newValue
+            case .scratch: self.scratch = newValue
+            case .writeStaging: self.writeStaging = newValue
+            case .textStaging: self.textStaging = newValue
+            case .filterScratch: self.filterScratch = newValue
+            case .writeRowBuffer: self.writeRowBuffer = newValue
+            case .timeText: self.timeText = newValue
+            }
+        }
+    }
+
     /// Ensures `buffer` holds at least `count` bytes, replacing it if not.
     ///
     /// The order matters and is the reason this is a method here rather than one on
@@ -363,16 +426,13 @@ public final class PngContext {
     ///
     /// The previous contents are not preserved: every use of this replaces a buffer
     /// whose contents are already spent.
-    func reserve(
-        _ buffer: ReferenceWritableKeyPath<PngContext, RawBuffer>,
-        _ count: Int
-    ) throws {
-        guard count > self[keyPath: buffer].count else { return }
+    func reserve(_ buffer: BufferSlot, _ count: Int) throws {
+        guard count > self[buffer].count else { return }
 
         let fresh = try RawBuffer.allocate(count, host: self.host)
-        let previous = self[keyPath: buffer]
+        let previous = self[buffer]
 
-        self[keyPath: buffer] = fresh
+        self[buffer] = fresh
         previous.deallocate(host: self.host)
     }
 
@@ -485,12 +545,15 @@ public final class PngContext {
                 return result
             }
 
-            let table = GammaTable(exponent: exponent)
+            // The same arithmetic the eight bit table is built from, applied to the four samples
+            // here rather than through a table: tabulating all two hundred and fifty six to read
+            // four made every update of the description pay for a blend that mostly never happens.
+            let gamma = Double(exponent) * 1e-5
 
-            result.red = UInt16(table.values[Int(color.red & 0xFF)])
-            result.green = UInt16(table.values[Int(color.green & 0xFF)])
-            result.blue = UInt16(table.values[Int(color.blue & 0xFF)])
-            result.gray = UInt16(table.values[Int(color.gray & 0xFF)])
+            result.red = UInt16(GammaTable.correct8(UInt8(color.red & 0xFF), gamma: gamma))
+            result.green = UInt16(GammaTable.correct8(UInt8(color.green & 0xFF), gamma: gamma))
+            result.blue = UInt16(GammaTable.correct8(UInt8(color.blue & 0xFF), gamma: gamma))
+            result.gray = UInt16(GammaTable.correct8(UInt8(color.gray & 0xFF), gamma: gamma))
 
             return result
         }
@@ -880,7 +943,7 @@ public final class PngContext {
     /// On the context because the answer has to outlive the call, and a client is entitled to hold it
     /// until the next one — which is exactly why the call is deprecated.
     public func timestampBuffer() throws -> UnsafeMutablePointer<CChar> {
-        try self.reserve(\.timeText, 32)
+        try self.reserve(.timeText, 32)
 
         return self.timeText.bytes.baseAddress!
             .withMemoryRebound(to: CChar.self, capacity: 32) { $0 }

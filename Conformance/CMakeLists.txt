@@ -357,4 +357,19 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:pngdump_reference>
                 ${SPNG_CORPUS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/known-differences.txt)
+
+    # Which libpng the comparisons are against, for the recorded differences that are claims about
+    # a version rather than about libpng.  Passed in the environment rather than as an argument so
+    # that the scripts that never look at it do not grow a parameter they ignore.
+    set_property(TEST
+            metadata_roundtrip
+            quantize
+            differential_progressive
+            differential_simplified
+            differential_readpng
+            differential_roundtrip
+            differential_write
+            differential_transforms
+            differential_decode
+        APPEND PROPERTY ENVIRONMENT "SPNG_REFERENCE_VERSION=${SPNG_REFERENCE_VERSION}")
 endif()

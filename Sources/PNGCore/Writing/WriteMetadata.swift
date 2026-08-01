@@ -408,7 +408,7 @@ extension SequentialWriter {
     ) throws {
         guard count > 0 else { return }
 
-        try context.reserve(\.scratch, count)
+        try context.reserve(.scratch, count)
 
         let bytes = UnsafeMutableBufferPointer(
             start: context.scratch.bytes.baseAddress,

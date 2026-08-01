@@ -322,6 +322,32 @@ struct TransformProgram {
         if flags.contains(.swapBytes) {
             self.steps.append(.swapBytes)
         }
+
+        // A step that reshapes the row declines by shape alone, and the shapes are all known now —
+        // `advance` walks them with the same guards the kernels use.  One that declines here would
+        // decline on every row, so it is dropped, and an image none of the requests apply to gets
+        // the same empty pipeline the reference resolves for it rather than paying a guard per
+        // step per row.
+        var shape = RowInfo(header)
+        self.steps = self.steps.filter { step in
+            self.advance(&shape, through: step, hasTransparency: hasTransparency)
+                || !Self.reshapes(step)
+        }
+    }
+
+    /// Whether a step is one whose work is exactly its change to the row's shape.
+    ///
+    /// The others are never pruned.  Most read more than the shape, so whether they have work can
+    /// only be known at the row; the fitting is the odd one out, reshaping rows of colour but also
+    /// remapping rows that are already indices, which changes no shape and is still work.
+    private static func reshapes(_ step: Step) -> Bool {
+        switch step {
+        case .composeTransparentColor, .encodeAlpha, .alphaMode, .invertMono, .invertAlpha,
+             .shift, .gamma, .bgr, .packSwap, .swapAlpha, .swapBytes, .quantize:
+            false
+        default:
+            true
+        }
     }
 
     var isEmpty: Bool { self.steps.isEmpty }
@@ -530,98 +556,113 @@ struct TransformProgram {
     ///
     /// The conditions here mirror the guards in the kernels, because a step that declines to run
     /// must not be reported as having changed the shape.
+    ///
+    /// Says whether the step ran, which is what lets the pipeline prune the ones that never will.
+    @discardableResult
     private func advance(
         _ info: inout RowInfo,
         through step: Step,
         hasTransparency: Bool
-    ) {
+    ) -> Bool {
         switch step {
         case .expandPalette:
-            guard info.colorType.isIndexed else { return }
+            guard info.colorType.isIndexed else { return false }
             info.colorType = hasTransparency ? .rgba : .rgb
             info.channels = hasTransparency ? 4 : 3
             info.bitDepth = 8
             info.resize()
+            return true
 
         case .expandGrayTo8:
-            guard info.colorType == .grayscale, info.bitDepth < 8 else { return }
+            guard info.colorType == .grayscale, info.bitDepth < 8 else { return false }
             info.bitDepth = 8
             info.resize()
+            return true
 
         case .expandTransparency:
             guard !info.colorType.hasAlpha, !info.colorType.isIndexed, info.bitDepth >= 8 else {
-                return
+                return false
             }
             info.colorType = info.colorType.hasColor ? .rgba : .grayscaleAlpha
             info.channels += 1
             info.resize()
+            return true
 
         case .stripAlpha:
-            guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
+            guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return false }
             info.colorType = info.colorType.hasColor ? .rgb : .grayscale
             info.channels -= 1
             info.resize()
+            return true
 
         case .rgbToGray:
             guard info.colorType.hasColor, !info.colorType.isIndexed, info.bitDepth >= 8 else {
-                return
+                return false
             }
             let hadAlpha = info.colorType.hasAlpha
             info.colorType = hadAlpha ? .grayscaleAlpha : .grayscale
             info.channels = hadAlpha ? 2 : 1
             info.resize()
+            return true
 
         case .compose:
-            guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
+            guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return false }
             info.colorType = info.colorType.hasColor ? .rgb : .grayscale
             info.channels -= 1
             info.resize()
+            return true
 
         case .grayToRgb:
-            guard !info.colorType.hasColor, info.bitDepth >= 8 else { return }
+            guard !info.colorType.hasColor, info.bitDepth >= 8 else { return false }
             let hadAlpha = info.colorType.hasAlpha
             info.colorType = hadAlpha ? .rgba : .rgb
             info.channels = hadAlpha ? 4 : 3
             info.resize()
+            return true
 
         case .scale16, .strip16:
-            guard info.bitDepth == 16 else { return }
+            guard info.bitDepth == 16 else { return false }
             info.bitDepth = 8
             info.resize()
+            return true
 
         case .expand16:
-            guard info.bitDepth == 8 else { return }
+            guard info.bitDepth == 8 else { return false }
             info.bitDepth = 16
             info.resize()
+            return true
 
         case .quantize:
             guard self.quantizesToIndices, info.bitDepth == 8,
-                  info.colorType == .rgb || info.colorType == .rgba else { return }
+                  info.colorType == .rgb || info.colorType == .rgba else { return false }
             info.colorType = .palette
             info.channels = 1
             info.resize()
+            return true
 
         case .packing:
-            guard info.bitDepth < 8 else { return }
+            guard info.bitDepth < 8 else { return false }
             info.bitDepth = 8
             info.resize()
+            return true
 
         case let .filler(_, _, countsAsAlpha):
             guard info.bitDepth >= 8, !info.colorType.hasAlpha, !info.colorType.isIndexed,
                   info.channels < 4
-            else { return }
+            else { return false }
             info.channels += 1
             if countsAsAlpha {
                 info.colorType = info.colorType.hasColor ? .rgba : .grayscaleAlpha
             }
             info.resize()
+            return true
 
         case .composeTransparentColor,
              .encodeAlpha,
              .alphaMode, .invertMono, .invertAlpha, .shift, .gamma, .bgr, .packSwap, .swapAlpha,
              .swapBytes:
             // These rearrange bytes without changing the shape.
-            return
+            return false
         }
     }
 }

@@ -165,32 +165,91 @@ enum Transform {
     static func grayToRgb(_ row: UnsafeMutableBufferPointer<UInt8>, _ info: inout RowInfo) {
         guard !info.colorType.hasColor, info.bitDepth >= 8 else { return }
 
-        let width = info.bitDepth / 8
         let hadAlpha = info.colorType.hasAlpha
-        let sourceChannels = info.channels
-        let targetChannels = hadAlpha ? 4 : 3
+        let pixels = info.width
+        let base = row.baseAddress!
 
-        // Backwards: three channels where there was one.
-        for pixel in stride(from: info.width - 1, through: 0, by: -1) {
-            let source = pixel * sourceChannels * width
-            let target = pixel * targetChannels * width
+        // Backwards, three channels where there was one, with a loop per layout: picking the shape
+        // once out here rather than per byte in there is most of the speed of this kernel, and a
+        // pair of moving pointers is the rest of it.
+        switch (info.bitDepth, hadAlpha) {
+        case (8, false):
+            var source = base + pixels
+            var target = base + pixels * 3
 
-            for byte in stride(from: width - 1, through: 0, by: -1) {
-                let alpha = hadAlpha ? row[source + width + byte] : 0
-                let gray = row[source + byte]
+            for _ in 0 ..< pixels {
+                source -= 1
+                target -= 3
 
-                row[target + byte] = gray
-                row[target + width + byte] = gray
-                row[target + 2 * width + byte] = gray
+                let gray = source[0]
 
-                if hadAlpha {
-                    row[target + 3 * width + byte] = alpha
-                }
+                target[0] = gray
+                target[1] = gray
+                target[2] = gray
+            }
+
+        case (8, true):
+            var source = base + pixels * 2
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 4
+
+                let gray = source[0]
+                let alpha = source[1]
+
+                target[0] = gray
+                target[1] = gray
+                target[2] = gray
+                target[3] = alpha
+            }
+
+        case (_, false):
+            var source = base + pixels * 2
+            var target = base + pixels * 6
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 6
+
+                let hi = source[0]
+                let lo = source[1]
+
+                target[0] = hi
+                target[1] = lo
+                target[2] = hi
+                target[3] = lo
+                target[4] = hi
+                target[5] = lo
+            }
+
+        case (_, true):
+            var source = base + pixels * 4
+            var target = base + pixels * 8
+
+            for _ in 0 ..< pixels {
+                source -= 4
+                target -= 8
+
+                let hi = source[0]
+                let lo = source[1]
+                let alphaHi = source[2]
+                let alphaLo = source[3]
+
+                target[0] = hi
+                target[1] = lo
+                target[2] = hi
+                target[3] = lo
+                target[4] = hi
+                target[5] = lo
+                target[6] = alphaHi
+                target[7] = alphaLo
             }
         }
 
         info.colorType = hadAlpha ? .rgba : .rgb
-        info.channels = targetChannels
+        info.channels = hadAlpha ? 4 : 3
         info.resize()
     }
 
@@ -236,27 +295,180 @@ enum Transform {
         let width = info.bitDepth / 8
         let sourceChannels = info.channels
         let targetChannels = sourceChannels + 1
+        let pixels = info.width
+        let base = row.baseAddress!
 
         // The value is given at sixteen bits; at eight only the low byte is used.
         let high = UInt8(truncatingIfNeeded: value >> 8)
         let low = UInt8(truncatingIfNeeded: value)
 
-        for pixel in stride(from: info.width - 1, through: 0, by: -1) {
-            let source = pixel * sourceChannels * width
-            let target = pixel * targetChannels * width
+        // Backwards, with a loop per layout and the filler's place chosen out here, for the same
+        // reason as the kernel above: the shape has to be settled before the loop starts.
+        switch (width, sourceChannels, afterColor) {
+        case (1, 1, true):
+            var source = base + pixels
+            var target = base + pixels * 2
 
-            let colorOffset = afterColor ? 0 : width
-            let fillerOffset = afterColor ? sourceChannels * width : 0
+            for _ in 0 ..< pixels {
+                source -= 1
+                target -= 2
 
-            for byte in stride(from: sourceChannels * width - 1, through: 0, by: -1) {
-                row[target + colorOffset + byte] = row[source + byte]
+                let gray = source[0]
+
+                target[0] = gray
+                target[1] = low
             }
 
-            if width == 2 {
-                row[target + fillerOffset] = high
-                row[target + fillerOffset + 1] = low
-            } else {
-                row[target + fillerOffset] = low
+        case (1, 1, false):
+            var source = base + pixels
+            var target = base + pixels * 2
+
+            for _ in 0 ..< pixels {
+                source -= 1
+                target -= 2
+
+                let gray = source[0]
+
+                target[0] = low
+                target[1] = gray
+            }
+
+        case (1, 3, true):
+            var source = base + pixels * 3
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 3
+                target -= 4
+
+                let red = source[0]
+                let green = source[1]
+                let blue = source[2]
+
+                target[0] = red
+                target[1] = green
+                target[2] = blue
+                target[3] = low
+            }
+
+        case (1, 3, false):
+            var source = base + pixels * 3
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 3
+                target -= 4
+
+                let red = source[0]
+                let green = source[1]
+                let blue = source[2]
+
+                target[0] = low
+                target[1] = red
+                target[2] = green
+                target[3] = blue
+            }
+
+        case (2, 1, true):
+            var source = base + pixels * 2
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 4
+
+                let hi = source[0]
+                let lo = source[1]
+
+                target[0] = hi
+                target[1] = lo
+                target[2] = high
+                target[3] = low
+            }
+
+        case (2, 1, false):
+            var source = base + pixels * 2
+            var target = base + pixels * 4
+
+            for _ in 0 ..< pixels {
+                source -= 2
+                target -= 4
+
+                target[2] = source[0]
+                target[3] = source[1]
+                target[0] = high
+                target[1] = low
+            }
+
+        case (2, 3, true):
+            var source = base + pixels * 6
+            var target = base + pixels * 8
+
+            for _ in 0 ..< pixels {
+                source -= 6
+                target -= 8
+
+                let byte0 = source[0]
+                let byte1 = source[1]
+                let byte2 = source[2]
+                let byte3 = source[3]
+                let byte4 = source[4]
+                let byte5 = source[5]
+
+                target[0] = byte0
+                target[1] = byte1
+                target[2] = byte2
+                target[3] = byte3
+                target[4] = byte4
+                target[5] = byte5
+                target[6] = high
+                target[7] = low
+            }
+
+        case (2, 3, false):
+            var source = base + pixels * 6
+            var target = base + pixels * 8
+
+            for _ in 0 ..< pixels {
+                source -= 6
+                target -= 8
+
+                let byte0 = source[0]
+                let byte1 = source[1]
+                let byte2 = source[2]
+                let byte3 = source[3]
+                let byte4 = source[4]
+                let byte5 = source[5]
+
+                target[2] = byte0
+                target[3] = byte1
+                target[4] = byte2
+                target[5] = byte3
+                target[6] = byte4
+                target[7] = byte5
+                target[0] = high
+                target[1] = low
+            }
+
+        default:
+            // A shape outside the usual eight — a second filler on a row that already has one.
+            for pixel in stride(from: pixels - 1, through: 0, by: -1) {
+                let source = pixel * sourceChannels * width
+                let target = pixel * targetChannels * width
+
+                let colorOffset = afterColor ? 0 : width
+                let fillerOffset = afterColor ? sourceChannels * width : 0
+
+                for byte in stride(from: sourceChannels * width - 1, through: 0, by: -1) {
+                    row[target + colorOffset + byte] = row[source + byte]
+                }
+
+                if width == 2 {
+                    row[target + fillerOffset] = high
+                    row[target + fillerOffset + 1] = low
+                } else {
+                    row[target + fillerOffset] = low
+                }
             }
         }
 
