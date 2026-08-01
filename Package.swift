@@ -6,7 +6,9 @@ import PackageDescription
 //
 // `PNG` is a Swift library with a Swift API and no C dependencies.  `CPNG` is
 // the same engine behind the published libpng C API, built so that a program
-// compiled against libpng can link or load it unchanged.
+// compiled against libpng can link or load it unchanged.  `PNG` is that engine
+// itself — chunks, row pipeline, transforms, compression — rather than a
+// separate wrapper around it; nothing sits between it and a Swift client.
 //
 // SwiftPM drives development, the Swift library, and the test suites.  The
 // shipping C library is built by CMakeLists.txt, because the install name,
@@ -48,24 +50,18 @@ let package = Package(
         // in the vendored header.
         .target(
             name: "PNGABI",
-            dependencies: ["CPNG", "PNGCore"],
+            dependencies: ["CPNG", "PNG"],
             path: "Sources/PNGABI"
         ),
 
-        // The engine.  No Foundation, and no knowledge of the C API.
+        // The engine, and the Swift API: chunks, row pipeline, transforms,
+        // compression.  No Foundation, and no knowledge of the C API.
         .target(
-            name: "PNGCore",
+            name: "PNG",
             dependencies: [
                 "LZ77",
                 .target(name: "CZlib", condition: .when(traits: ["SystemZlib"])),
             ],
-            path: "Sources/PNGCore"
-        ),
-
-        // The Swift API.
-        .target(
-            name: "PNG",
-            dependencies: ["PNGCore"],
             path: "Sources/PNG"
         ),
 
@@ -81,7 +77,7 @@ let package = Package(
         // cross, this one's is beating it.
         .executableTarget(
             name: "pngbench-swift",
-            dependencies: ["PNGCore"],
+            dependencies: ["PNG"],
             path: "Sources/pngbench-swift"
         ),
 
@@ -92,7 +88,7 @@ let package = Package(
         // (nothing here is WASI-specific beyond which libc it reaches for malloc/free through).
         .executableTarget(
             name: "wasm-smoke-test",
-            dependencies: ["PNGCore"],
+            dependencies: ["PNG"],
             path: "Sources/wasm-smoke-test"
         ),
 
@@ -106,11 +102,6 @@ let package = Package(
             name: "LZ77Tests",
             dependencies: ["LZ77"],
             path: "Tests/LZ77Tests"
-        ),
-        .testTarget(
-            name: "PNGCoreTests",
-            dependencies: ["PNGCore"],
-            path: "Tests/PNGCoreTests"
         ),
         .testTarget(
             name: "PNGTests",
