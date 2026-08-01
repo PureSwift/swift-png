@@ -85,6 +85,17 @@ let package = Package(
             path: "Sources/pngbench-swift"
         ),
 
+        // A round trip, run for real under wasm32-unknown-wasip1 — the WASM counterpart to the
+        // firmware images under Firmware/QEMU and Firmware/Hypervisor, proving the embedded
+        // build is correct rather than only that it compiles. Also builds and runs on every
+        // hosted platform this package supports, which is a useful sanity check on its own
+        // (nothing here is WASI-specific beyond which libc it reaches for malloc/free through).
+        .executableTarget(
+            name: "wasm-smoke-test",
+            dependencies: ["PNGCore"],
+            path: "Sources/wasm-smoke-test"
+        ),
+
         .systemLibrary(
             name: "CZlib",
             path: "Sources/CZlib",
