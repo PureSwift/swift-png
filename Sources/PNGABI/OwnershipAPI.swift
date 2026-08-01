@@ -9,7 +9,7 @@
 // twice is freed twice — and a block freed by neither is simply lost.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Says who will free the named data.
 ///
