@@ -1,16 +1,21 @@
 # Whole-image reads the comparison reports but does not fail on.
 #
+# A line may begin with a guard naming the reference versions it is a claim about, as in
+# "[>1.6.39] case reason".  An entry with no guard is a claim about every reference.  A guard that
+# does not hold makes the entry inactive: it neither exempts a difference nor counts as stale,
+# because it is not saying anything about the reference in the room.  See scripts/known_differences.sh.
+#
 # Format: <image> <transform-mask> <reason>
 
-meta-palette-hist.png 0x0000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x0001 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x0002 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x0004 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x0010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x2000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x4000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x8000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x0014 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x2010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x4010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
-meta-palette-hist.png 0x00c0 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x0000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x0001 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x0002 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x0004 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x0010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x2000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x4000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x8000 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x0014 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x2010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x4010 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
+[>1.6.39] meta-palette-hist.png 0x00c0 The reference refuses hIST wherever it appears, which is recorded for decoding in known-differences.txt where the reasoning is set out.
