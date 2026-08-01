@@ -10,10 +10,13 @@ That includes the details substitution actually depends on: the complete exporte
 symbol set and nothing beyond it, the versioned library name, and the Mach-O
 compatibility version or ELF symbol version that the dynamic loader checks.
 
-Status: 200 of the 201 published functions are implemented, and the one that is not
-(`png_set_strip_error_numbers`) reports that it is not rather than answering wrongly. Both
-reading and writing work, sequentially and interlaced, both ways a client can ask for an
-interlaced image; every colour type, every bit depth from 1 to 16, every filter. The control
+Status: every published function this build's configuration exports is implemented — 256 of
+256, the same count `png.h` and the reference build agree on once the functions gated out by
+this build's `pnglibconf.h` (`png_set_strip_error_numbers` among them, behind
+`PNG_ERROR_NUMBERS_SUPPORTED`, which neither build turns on) are set aside; a raw text search
+of the header that skips those guards overcounts. Both reading and writing work, sequentially
+and interlaced, both ways a client can ask for an interlaced image; every colour type, every
+bit depth from 1 to 16, every filter. The control
 structure lifecycle, the allocator and stream callbacks, and every metadata chunk with its
 accessors all work: the palette and transparency, the colour and gamma chunks, the embedded
 profile, the physical layout, the timestamp, the camera metadata, the high dynamic range
