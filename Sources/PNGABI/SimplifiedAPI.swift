@@ -170,9 +170,26 @@ public func swift_swift_image_finish_read(
     // Removing coverage means compositing, and what onto is the client's answer — at eight bits.  At
     // sixteen the alpha-mode step already composites against black as part of turning the channel
     // into premultiplied light, so there is nothing left for a background to name; the reference does
-    // not look at one there either.  Only the eight bit case needs one supplied.
+    // not look at one there either.  Only the eight bit case needs one supplied — or, now, nothing at
+    // all: naming none is itself an answer, the client's own buffer, and that case is built below
+    // rather than refused.  Not for an indexed source, and not combined with colour reduced to grey
+    // or the reverse — both stay their own, still-refused cases.
     if !format.hasAlpha, fileHasAlpha, background == nil, !format.isLinear {
-        swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
+        guard !header.colorType.isIndexed,
+            format.hasColor == header.colorType.hasColor else {
+            swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
+        }
+
+        // What a file with no gAMA of its own is assumed to have been encoded with — the same
+        // question requestConversion answers below, asked again here since a source with real
+        // coverage to remove never reaches that call at all.
+        let assumesLinearInput = header.bitDepth == 16
+            && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+        return readComposite(
+            image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header, format: format,
+            assumesLinearInput: assumesLinearInput, buffer: buffer, rowStride: row_stride
+        )
     }
 
     // Discarding colour is ordinary averaging — png_set_rgb_to_gray, the same call every other
@@ -592,6 +609,118 @@ private func readIndexRows(
             let destination = first.advanced(by: stride * row).assumingMemoryBound(to: UInt8.self)
 
             png_read_row(png_ptr, destination, nil)
+        }
+    }
+
+    png_read_end(png_ptr, nil)
+
+    return 1
+}
+
+/// Reads a file with coverage of its own, into a client's own buffer, removing that coverage by
+/// blending each pixel into whatever the buffer already held there rather than a colour the client
+/// named — which is what asking for no colour at all, while the file has some, means.
+///
+/// The reference's own arrangement for this (`PNG_ALPHA_OPTIMIZED`) is already the engine's: an
+/// opaque pixel is corrected as it always is, a wholly transparent one is left alone rather than
+/// blended into nothing, and a partly covered one comes back as light rather than as an encoded
+/// sample, still at eight bits — not sixteen, since compositing an eight bit value against another
+/// only ever needs the precision the two of them have. The reference calls this a linear eight bit
+/// value, which sounds grander than it is: it is a blend of two encoded bytes, weighted by
+/// coverage, that has not been put back through the display's curve yet — that step happens once,
+/// below, after the buffer's own byte is folded in, rather than twice.
+private func readComposite(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    format: SimplifiedFormat,
+    assumesLinearInput: Bool,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32
+) -> Int32 {
+    png_set_expand(png_ptr)
+
+    // The two-call sequence the ordinary reader also needs (see requestConversion): the first call
+    // seeds the gamma a file with no gAMA of its own is assumed to have been encoded with, and only
+    // the first such call sets it — the second, real request would otherwise become the assumption
+    // too.  A sixteen bit source defaults to being assumed already linear; getting this wrong for
+    // one is not a low-bit difference, it is every sample corrected by the wrong curve.
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_OPTIMIZED, png_fixed_point(PNG_DEFAULT_sRGB))
+    png_set_scale_16(png_ptr)
+
+    // Colour reduced to grey or the reverse is a separate, still-refused case (see the caller); the
+    // shape asked for always matches the file's own here.
+    if format.isReversed {
+        png_set_bgr(png_ptr)
+    }
+
+    png_read_update_info(png_ptr, info_ptr)
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+    let colorChannels = format.hasColor ? 3 : 1
+    let channels = colorChannels + 1
+    let stride = rowStride == 0 ? width * colorChannels : Int(rowStride) * colorChannels
+
+    guard abs(stride) >= width * colorChannels else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    let passes = png_set_interlace_handling(png_ptr)
+
+    // The whole file's own colour-plus-coverage samples, not one row: an interlaced pass only
+    // touches a scattered subset of an image's pixels, and png_read_row is what knows which —
+    // composing straight into the client's buffer as each pass arrives would recompute every
+    // pixel's blend on every pass, including the ones that pass never touched (see the same
+    // reasoning, and the bug it once was, in readRGBColormap).
+    let raw = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: width * height * channels)
+    defer { raw.deallocate() }
+
+    for _ in 0 ..< passes {
+        for y in 0 ..< height {
+            png_read_row(png_ptr, raw.baseAddress! + y * width * channels, nil)
+        }
+    }
+
+    for y in 0 ..< height {
+        let destination = first.advanced(by: stride * y).assumingMemoryBound(to: UInt8.self)
+        let sourceRow = y * width * channels
+
+        for x in 0 ..< width {
+            let alpha = raw[sourceRow + x * channels + colorChannels]
+
+            // Wholly transparent: nothing of the file's pixel survives to blend in, so the
+            // buffer's own byte is already the answer and is left untouched.
+            guard alpha > 0 else { continue }
+
+            for c in 0 ..< colorChannels {
+                let index = x * colorChannels + c
+                let component = raw[sourceRow + x * channels + c]
+
+                if alpha == 255 {
+                    // Already corrected, the same as any other opaque pixel: nothing left to
+                    // blend against.
+                    destination[index] = component
+                } else {
+                    // The file's own light, scaled to the table's domain, plus what survives of
+                    // the buffer's own byte — decoded to light first, since blending encoded
+                    // bytes is not the same operation and does not agree with the reference.
+                    let fileLight = UInt32(component) &* 65535
+                    let bufferLight = UInt32(255 - alpha) &* UInt32(sRGBToLinear(destination[index]))
+                    let blended = min(fileLight &+ bufferLight, 255 &* 65535)
+
+                    destination[index] = sRGBFromLinear(blended)
+                }
+            }
         }
     }
 
