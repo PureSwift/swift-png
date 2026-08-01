@@ -349,10 +349,16 @@ apply(png_structp png_ptr, png_infop info_ptr)
    when.second = 60; /* a leap second, which the format allows */
    png_set_tIME(png_ptr, info_ptr, &when);
 
+#ifdef PNG_cICP_SUPPORTED
    png_set_cICP(png_ptr, info_ptr, 9, 16, 0, 1);
+#endif
+#ifdef PNG_cLLI_SUPPORTED
    png_set_cLLI_fixed(png_ptr, info_ptr, 10000000, 4000000);
+#endif
+#ifdef PNG_mDCV_SUPPORTED
    png_set_mDCV_fixed(png_ptr, info_ptr, 31270, 32900, 64000, 33000, 30000, 60000,
        15000, 6000, 10000000, 5);
+#endif
 
    build_profile(profile, &profile_length);
    png_set_iCCP(png_ptr, info_ptr, "a profile", 0, profile, profile_length);
@@ -412,14 +418,23 @@ report(png_structp png_ptr, png_infop info_ptr)
    png_charp scale_width;
    png_charp scale_height;
    png_timep when;
+   /* Conditional for the same reason as in pngdump.c: these chunks postdate the
+    * oldest reference this compiles against.
+    */
+#ifdef PNG_cICP_SUPPORTED
    png_byte primaries;
    png_byte transfer;
    png_byte matrix;
    png_byte range;
+#endif
+#ifdef PNG_cLLI_SUPPORTED
    png_uint_32 max_cll;
    png_uint_32 max_fall;
+#endif
+#ifdef PNG_mDCV_SUPPORTED
    png_uint_32 max_lum;
    png_uint_32 min_lum;
+#endif
    png_charp profile_name;
    png_bytep profile;
    png_uint_32 profile_length;
@@ -510,14 +525,19 @@ report(png_structp png_ptr, png_infop info_ptr)
       printf("time %04d-%02d-%02d %02d:%02d:%02d\n", when->year, when->month, when->day,
           when->hour, when->minute, when->second);
 
+#ifdef PNG_cICP_SUPPORTED
    if (png_get_cICP(png_ptr, info_ptr, &primaries, &transfer, &matrix, &range) != 0)
       printf("cicp primaries=%d transfer=%d matrix=%d range=%d\n", primaries, transfer,
           matrix, range);
+#endif
 
+#ifdef PNG_cLLI_SUPPORTED
    if (png_get_cLLI_fixed(png_ptr, info_ptr, &max_cll, &max_fall) != 0)
       printf("clli max_cll=%lu max_fall=%lu\n", (unsigned long)max_cll,
           (unsigned long)max_fall);
+#endif
 
+#ifdef PNG_mDCV_SUPPORTED
    if (png_get_mDCV_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3],
        &chrm[4], &chrm[5], &chrm[6], &chrm[7], &max_lum, &min_lum) != 0)
    {
@@ -526,6 +546,7 @@ report(png_structp png_ptr, png_infop info_ptr)
          printf(" %ld", (long)chrm[index]);
       printf(" max=%lu min=%lu\n", (unsigned long)max_lum, (unsigned long)min_lum);
    }
+#endif
 
    if (png_get_iCCP(png_ptr, info_ptr, &profile_name, &compression_type, &profile,
        &profile_length) != 0)
