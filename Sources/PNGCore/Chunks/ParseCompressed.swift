@@ -61,7 +61,7 @@ extension InfoStore {
     private static func validateKeyword(
         _ keyword: UnsafeBufferPointer<UInt8>,
         chunk: ChunkName
-    ) throws {
+    ) throws(Diagnostic) {
         guard keyword.count >= 1, keyword.count <= 79 else {
             throw Diagnostic("invalid keyword", chunk: chunk)
         }
@@ -69,7 +69,7 @@ extension InfoStore {
 
     /// The embedded colour profile: a name, a compression method, then the compressed
     /// profile.
-    func parseColorProfile(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseColorProfile(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard let end = Self.separator(in: payload, from: 0) else {
             throw Diagnostic("malformed", chunk: .iccp)
         }
@@ -141,7 +141,7 @@ extension InfoStore {
     ///
     /// Stored as text because the format allows a precision no fixed binary type holds,
     /// and a client can ask for the strings verbatim.
-    func parseScale(_ payload: UnsafeBufferPointer<UInt8>) throws {
+    func parseScale(_ payload: UnsafeBufferPointer<UInt8>) throws(Diagnostic) {
         guard payload.count > 2 else {
             throw Diagnostic("invalid", chunk: .scal)
         }
@@ -166,7 +166,7 @@ extension InfoStore {
         let storedWidth = try TextStorage.copying(width, host: self.host)
         let storedHeight: TextStorage
 
-        do {
+        do throws(Diagnostic) {
             storedHeight = try TextStorage.copying(height, host: self.host)
         } catch {
             storedWidth.deallocate(host: self.host)
@@ -189,7 +189,7 @@ extension InfoStore {
     func inflatePayload(
         _ compressed: UnsafeBufferPointer<UInt8>,
         chunk: ChunkName
-    ) throws -> EscapingBuffer<UInt8> {
+    ) throws(Diagnostic) -> EscapingBuffer<UInt8> {
         let stream = try InflateStream()
         defer { stream.release() }
 
@@ -211,7 +211,7 @@ extension InfoStore {
         // all of it is holding the same buffer.  Growing takes a second allocation, the decompressor
         // can refuse the data, and the handover takes an allocation of its own — and each of those
         // used to lose whatever had been decompressed so far.
-        do {
+        do throws(Diagnostic) {
             while true {
                 let made = try stream.inflate(
                     into: buffer.bytes.baseAddress! + produced,
