@@ -53,12 +53,17 @@ jobs:
       fail-fast: false
       matrix:
         # One from each family the toolchain ships an embedded standard library for: a
-        # 64-bit ELF target, a Cortex-M4F, and the smallest Cortex-M0 profile — which is the
-        # one that catches anything depending on hardware the others happen to have.
+        # 64-bit ELF target, a Cortex-M4F, the smallest Cortex-M0 profile — which is the one
+        # that catches anything depending on hardware the others happen to have — and Apple's
+        # own bare-metal arm64, the Mach-O target the m1n1/Asahi bootloader family builds on.
+        # That last one is compile-only for a real reason rather than an oversight: there is no
+        # QEMU machine model for a generic Apple Silicon SoC to boot it on, unlike the ARM
+        # reference board `qemu-cortex-m4` below actually boots.
         triple:
           - aarch64-none-none-elf
           - armv7em-none-none-eabi
           - armv6m-none-none-eabi
+          - arm64-apple-none-macho
     steps:
       - uses: actions/checkout@v4
 
