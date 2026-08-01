@@ -10,7 +10,7 @@
 // while moving the strings would not be.
 
 import CPNG
-import PNGCore
+import PNG
 
 /// Reports the text entries as an array in the published layout.
 ///
