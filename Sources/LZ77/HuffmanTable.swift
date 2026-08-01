@@ -35,7 +35,7 @@ struct HuffmanTable {
 
     /// Builds the table from one code length per symbol; a length of zero means the symbol is
     /// not in this alphabet at all.
-    init(lengths: [UInt8]) throws {
+    init(lengths: [UInt8]) throws(DeflateError) {
         var blCount = [Int](repeating: 0, count: Self.maxBits + 1)
 
         for length in lengths where length > 0 {
@@ -96,7 +96,7 @@ struct HuffmanTable {
     ///
     /// `partial` is reset to empty when a symbol completes; a caller starting a new symbol
     /// passes a fresh `Partial()`.
-    func decode(_ reader: inout BitReader, partial: inout Partial) throws -> DecodeResult {
+    func decode(_ reader: inout BitReader, partial: inout Partial) throws(DeflateError) -> DecodeResult {
         while partial.length < Self.maxBits {
             guard let bit = reader.bits(1) else { return .needsInput }
 
