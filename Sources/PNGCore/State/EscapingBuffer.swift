@@ -48,7 +48,7 @@ public struct EscapingBuffer<Element> {
     /// The old block is released after the new one is in place and only if this
     /// library still owned it, so that a client which took ownership does not have its
     /// memory freed underneath it.
-    public static func allocated(_ count: Int, host: Host) throws -> Self {
+    public static func allocated(_ count: Int, host: Host) throws(Diagnostic) -> Self {
         guard count > 0 else { return Self() }
 
         var buffer = Self()
