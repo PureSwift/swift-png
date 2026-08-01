@@ -46,7 +46,11 @@ int main(int argc, char **argv)
    height = (png_uint_32)atoi(argv[4]);
    to_memory = argc > 5;
 
-   size = (size_t)width * height * channels_of(format);
+   /* A linear format's samples are two bytes each, and they are light rather than encoded — which is
+    * why the buffer is sized from the depth as well as the channel count.
+    */
+   size = (size_t)width * height * channels_of(format)
+        * (((format & PNG_FORMAT_FLAG_LINEAR) != 0) ? 2 : 1);
    pixels = malloc(size != 0 ? size : 1);
 
    /* Deliberately not smooth, so that a channel written into the wrong place is visible. */
@@ -116,6 +120,49 @@ int main(int argc, char **argv)
    }
 
    free(pixels);
+
+   /* What the file actually says about itself, before anything reads it back.
+    *
+    * Reading the pixels back through this same API cannot see this: the colour space a file declares
+    * and the space a reader assumes when it declares none are the same space, so a file that omits
+    * the chunk entirely still decodes to identical pixels here.  It is a different file, though, and
+    * a reader that does not share the assumption would part company with it — so the chunk list is
+    * compared directly rather than through what it happens not to change.
+    *
+    * Types and lengths, except for the image data: how many IDATs a stream is cut into, and how long
+    * each is, are choices the format leaves open and two correct encoders need not agree on them.  So
+    * those are reported as being present at all and nothing more.
+    */
+   {
+      FILE *fp = fopen(argv[1], "rb");
+      unsigned char header[8];
+      int saw_idat = 0;
+
+      if (fp != NULL && fread(header, 1, 8, fp) == 8)
+      {
+         for (;;)
+         {
+            unsigned char field[8];
+            unsigned long length;
+
+            if (fread(field, 1, 8, fp) != 8) break;
+
+            length = ((unsigned long)field[0] << 24) | ((unsigned long)field[1] << 16) |
+                     ((unsigned long)field[2] << 8) | (unsigned long)field[3];
+
+            if (memcmp(field + 4, "IDAT", 4) == 0)
+               saw_idat = 1;
+            else
+               printf("chunk %.4s %lu\n", field + 4, length);
+
+            if (fseek(fp, (long)length + 4, SEEK_CUR) != 0) break;
+         }
+
+         if (saw_idat) printf("chunk IDAT present\n");
+      }
+
+      if (fp != NULL) fclose(fp);
+   }
 
    /* And back, through the same API a client would use. */
    {
