@@ -10,16 +10,23 @@ That includes the details substitution actually depends on: the complete exporte
 symbol set and nothing beyond it, the versioned library name, and the Mach-O
 compatibility version or ELF symbol version that the dynamic loader checks.
 
-Status: 129 of the 256 published functions are implemented, and the rest report that they
-are not rather than answering wrongly. What works today is reading a non-interlaced image
-sequentially — every colour type, every bit depth from 1 to 16, every filter — along with
-the control structure lifecycle, the allocator and stream callbacks, and every metadata
-chunk with its accessors: the palette and transparency, the colour and gamma chunks, the
-embedded profile, the physical layout, the timestamp, the camera metadata, the high dynamic
-range signalling, and all three text chunks. Interlaced images decode too, both ways a client can
-ask for them, and twenty-five of the read transforms work — the expansions, the depth conversions, the
-channel rearrangements, the filler, the shift, gamma correction, the conversion to greyscale and
-compositing against a background. Alpha mode and quantisation are still to come, as is writing.
+Status: 200 of the 201 published functions are implemented, and the one that is not
+(`png_set_strip_error_numbers`) reports that it is not rather than answering wrongly. Both
+reading and writing work, sequentially and interlaced, both ways a client can ask for an
+interlaced image; every colour type, every bit depth from 1 to 16, every filter. The control
+structure lifecycle, the allocator and stream callbacks, and every metadata chunk with its
+accessors all work: the palette and transparency, the colour and gamma chunks, the embedded
+profile, the physical layout, the timestamp, the camera metadata, the high dynamic range
+signalling, and all three text chunks. Every read transform works — the expansions, the depth
+conversions, the channel rearrangements, the filler, the shift, gamma correction, the conversion
+to greyscale, compositing against a background, alpha mode, and quantisation.
+
+What is left is the convenience `png_image_*` API's shortcuts for the transforms that change
+light rather than arrangement — colour-mapped output, discarding alpha onto a buffer with no
+background named, discarding colour, and converting to or from a linear encoding — and honouring
+a transform argument passed to `png_write_png` rather than refusing anything but the identity.
+Each of those refuses outright and says why, rather than producing an answer that is nearly
+right; the general read and write API these shortcuts sit in front of has no such gap.
 
 ## Building
 
@@ -40,6 +47,28 @@ Two build options matter. `SPNG_USE_SYSTEM_ZLIB` (on by default) compresses with
 zlib, matching what the reference build links against; turning it off uses the
 Swift implementation instead. `SPNG_STATIC_STDLIB` links the Swift runtime into
 the library, which is worth doing on platforms that do not ship one.
+
+## Platforms without a C library underneath
+
+`PNGCore` and the `LZ77` module it compresses through have no dependency on zlib, libc, or an
+operating system, and compile under Embedded Swift for targets that have none of the three:
+WebAssembly, and bare-metal ARM. Building `PNG`/`PNGCore` for one of these disables the
+`SystemZlib` trait (`swift build --disable-default-traits ...`), which switches DEFLATE and
+INFLATE to the from-scratch, zlib-compatible codec in `LZ77` — the same code path exercised by
+`swift test --disable-default-traits` on every hosted platform, so it is not only ever tested on
+targets that are otherwise hard to test at all.
+
+- **`wasm32-unknown-wasip1`** builds via `swift build --swift-sdk swift-6.3.3-RELEASE_wasm-embedded`
+  and is run for real, not just compiled: `Sources/wasm-smoke-test` is an encode-then-decode round
+  trip executed under Wasmtime in CI.
+- **ARM bare metal** (`aarch64-none-none-elf`, `armv7em-none-none-eabi`, `armv6m-none-none-eabi`,
+  `arm64-apple-none-macho`) builds via `scripts/build_embedded.sh <triple>`, which drives `swiftc`
+  directly since these triples have no SwiftPM SDK bundle. `armv7em-none-none-eabi` is also run for
+  real, as bootable firmware under an emulated Cortex-M4F — see `Firmware/QEMU`. `arm64-apple-none-macho`
+  has the same boot-and-verify firmware for real Apple Silicon hardware, under `Hypervisor.framework`
+  — see `Firmware/Hypervisor` — kept out of CI (its own README says why) and run locally instead.
+
+All of this is what `.github/workflows/embedded.yml` checks on every push.
 
 ## How it is put together
 
