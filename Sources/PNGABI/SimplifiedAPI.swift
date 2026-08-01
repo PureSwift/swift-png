@@ -115,10 +115,11 @@ public func swift_swift_image_finish_read(
 
     guard let info = InfoStore.from(info_ptr), let header = info.header else { return 0 }
 
-    // The two colour-mapped cases built so far, both opaque sources with no coverage of their own:
-    // a greyscale file into a greyscale colour map, and an RGB file into the reference's fixed
-    // six-by-six-by-six colour cube.  Everything else — coverage in either direction, an indexed
-    // source, colour reduced to grey or grey expanded to colour, sixteen bits — still refuses.
+    // The three colour-mapped cases built so far, every one an opaque source with no coverage of
+    // its own: a greyscale file into a greyscale colour map, an RGB file into the reference's
+    // fixed six-by-six-by-six colour cube, and an indexed file into its own palette, corrected.
+    // Everything else — coverage in any of these, colour reduced to grey or grey expanded to
+    // colour, sixteen bits — still refuses.
     if format.isColormapped {
         let fileHasAlpha = header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)
 
@@ -137,6 +138,16 @@ public func swift_swift_image_finish_read(
             header.colorType == .rgb, !fileHasAlpha {
             return readRGBColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
+        // Coverage in the output but not the source is still fine here, unlike the other two
+        // cases: every entry is opaque either way, so an alpha channel the client asked for is
+        // just a constant 255 alongside the colour rather than something that has to be composed.
+        if format.hasColor, !format.isLinear, header.colorType.isIndexed, !fileHasAlpha {
+            return readPaletteColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
                 buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
@@ -384,6 +395,72 @@ private func gamma16BitCorrect(_ value: UInt32, exponent: Double) -> UInt16 {
 ///   is `i` scaled by the step between entries — nothing is corrected, because there is nothing to.
 /// - Anything else, including exactly linear: a real correction, computed to the same precision the
 ///   reference's own `pow` call reaches.
+/// What a file's gamma implies about correcting an eight bit encoded sample of its own into an
+/// sRGB colour-map entry — worked out once per file rather than once per sample, since it depends
+/// on nothing but the file's own `gAMA` chunk.
+///
+/// Two independent questions, not one, and it matters that they are asked in this order.  The
+/// first is whether the file's gamma is worth correcting for at all — close enough to one (linear)
+/// that it is not.  Only if it *is* worth correcting does the second question, whether it is close
+/// enough to sRGB to already be what the map needs, get asked; a file whose gamma is near enough to
+/// linear to skip the first test is never checked against sRGB at all, however far from it that
+/// gamma happens to be.
+private struct FileGammaCorrection {
+    let isLinear: Bool
+    let isSRGB: Bool
+    let toLinearExponent: Double
+
+    init(fileGamma: FixedPoint) {
+        // The same fixed-point scale and the same threshold the engine's own gamma machinery uses
+        // (Transforms/Gamma.swift), duplicated rather than exposed: PNG's opaque gamma value, not
+        // a detail PNGCore should have any reason to share with the C boundary.
+        let one: FixedPoint = 100_000
+        let significanceThreshold: FixedPoint = 5_000
+
+        func isSignificant(_ gamma: FixedPoint) -> Bool {
+            gamma < one - significanceThreshold || gamma > one + significanceThreshold
+        }
+
+        self.isLinear = !isSignificant(fileGamma)
+
+        // The reference's own test (png_gamma_not_sRGB): scale the file gamma up by the display
+        // gamma sRGB assumes, 2.2, and ask whether *that* differs enough from one to matter —
+        // sRGB's own encoding gamma is the one value where the two are reciprocals and the product
+        // is one.
+        let scaledForDisplay = FixedPoint((Int64(fileGamma) * 11 + 2) / 5)
+        self.isSRGB = !self.isLinear && !isSignificant(scaledForDisplay)
+
+        // The reciprocal of the file's own gamma, as an exponent: what takes an encoded sample to
+        // linear light.  Rounded to the fixed-point scale first and only then divided back down to
+        // a Double, matching the reference's own two-step rounding (png_reciprocal then
+        // png_gamma_16bit_correct) — computing the reciprocal directly at full Double precision
+        // looks like the same thing and is not: it lands close enough that only entries near a
+        // rounding boundary move, but a few of every 256 do.  Only valid, and only needed, for a
+        // gamma that is neither of the above — never evaluated otherwise, since 1/0 is not a
+        // fraction.
+        self.toLinearExponent = (1e10 / Double(fileGamma) + 0.5).rounded(.down) * 1e-5
+    }
+
+    /// Corrects one eight bit sample, already scaled to the map's own step between entries.
+    func correct(_ value: UInt32) -> UInt8 {
+        if self.isSRGB {
+            // Already what the map needs: nothing to correct.
+            return UInt8(value)
+        } else if self.isLinear {
+            // Already light, just not at sixteen bits yet — an exact scale, not a curve, and then
+            // the ordinary encode to sRGB.
+            return sRGBFromLinear(value &* 257 &* 255)
+        } else {
+            // A real correction: to sixteen bit linear light first, exactly as the reference's own
+            // two-step path does, and only then to the sRGB byte the map holds — collapsing the
+            // two would not give the same rounding.
+            let linear = gamma16BitCorrect(value &* 257, exponent: self.toLinearExponent)
+
+            return sRGBFromLinear(UInt32(linear) &* 255)
+        }
+    }
+}
+
 private func readGrayColormap(
     image: png_imagep,
     png_ptr: png_structrp,
@@ -398,66 +475,98 @@ private func readGrayColormap(
         swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
     }
 
-    // The same fixed-point scale and the same threshold the engine's own gamma machinery uses
-    // (Transforms/Gamma.swift), duplicated rather than exposed: PNG's opaque gamma value, not a
-    // detail PNGCore should have any reason to share with the C boundary.
-    let one: FixedPoint = 100_000
-    let significanceThreshold: FixedPoint = 5_000
     let fileGamma: FixedPoint = info.isValid(PNG_INFO_gAMA) ? info.gamma : 45455 // PNG_GAMMA_sRGB_INVERSE
-
-    func isSignificant(_ gamma: FixedPoint) -> Bool {
-        gamma < one - significanceThreshold || gamma > one + significanceThreshold
-    }
-
-    // Two independent questions, not one, and it matters that they are asked in this order.  The
-    // first is whether the file's gamma is worth correcting for at all — close enough to one
-    // (linear) that it is not.  Only if it *is* worth correcting does the second question, whether
-    // it is close enough to sRGB to already be what the map needs, get asked; a file whose gamma is
-    // near enough to linear to skip the first test is never checked against sRGB at all, however far
-    // from it that gamma happens to be.
-    let fileIsLinear = !isSignificant(fileGamma)
-
-    // The reference's own test (png_gamma_not_sRGB): scale the file gamma up by the display gamma
-    // sRGB assumes, 2.2, and ask whether *that* differs enough from one to matter — sRGB's own
-    // encoding gamma is the one value where the two are reciprocals and the product is one.
-    let scaledForDisplay = FixedPoint((Int64(fileGamma) * 11 + 2) / 5)
-    let fileIsSRGB = !fileIsLinear && !isSignificant(scaledForDisplay)
-
-    // The reciprocal of the file's own gamma, as an exponent: what takes an encoded sample to
-    // linear light.  Rounded to the fixed-point scale first and only then divided back down to a
-    // Double, matching the reference's own two-step rounding (png_reciprocal then
-    // png_gamma_16bit_correct) — computing the reciprocal directly at full Double precision looks
-    // like the same thing and is not: it lands close enough that only entries near a rounding
-    // boundary move, but a few of every 256 do.  Only valid, and only needed, for a gamma that is
-    // neither of the above — never evaluated otherwise, since 1/0 is not a fraction.
-    let toLinearExponent = (1e10 / Double(fileGamma) + 0.5).rounded(.down) * 1e-5
+    let correction = FileGammaCorrection(fileGamma: fileGamma)
 
     let entries = 1 << header.bitDepth
     let step = 255 / (entries - 1)
     let map = colormap.assumingMemoryBound(to: UInt8.self)
 
     for i in 0 ..< entries {
-        let value = UInt32(i * step)
+        map[i] = correction.correct(UInt32(i * step))
+    }
 
-        if fileIsSRGB {
-            // Already what the map needs: nothing to correct.
-            map[i] = UInt8(value)
-        } else if fileIsLinear {
-            // Already light, just not at sixteen bits yet — an exact scale, not a curve, and then
-            // the ordinary encode to sRGB.
-            map[i] = sRGBFromLinear(value &* 257 &* 255)
-        } else {
-            // A real correction: to sixteen bit linear light first, exactly as the reference's own
-            // two-step path does, and only then to the sRGB byte the map holds — collapsing the two
-            // would not give the same rounding.
-            let linear = gamma16BitCorrect(value &* 257, exponent: toLinearExponent)
+    image.pointee.colormap_entries = png_uint_32(entries)
 
-            map[i] = sRGBFromLinear(UInt32(linear) &* 255)
+    return readIndexRows(
+        image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+        buffer: buffer, rowStride: rowStride
+    )
+}
+
+/// Reads an opaque indexed file into a colour map of its own — literally its palette, corrected
+/// for gamma, with an index of a client's own choosing.  The narrowest of the three colour-mapped
+/// cases built so far, because a file that is already colour-mapped needs no quantizing at all:
+/// its samples already are the indices a client wants, unchanged, into a map that is a one-to-one
+/// correction of the one it already had.
+///
+/// Every entry, not the file's whole palette: a palette may hold more entries than any row
+/// actually names, but the reference corrects and hands back every one up to two hundred and
+/// fifty six regardless, and a client comparing the two colour maps directly would see the
+/// difference if this stopped short.
+private func readPaletteColormap(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    info: InfoStore,
+    header: Header,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let colormap else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let fileGamma: FixedPoint = info.isValid(PNG_INFO_gAMA) ? info.gamma : 45455 // PNG_GAMMA_sRGB_INVERSE
+    let correction = FileGammaCorrection(fileGamma: fileGamma)
+
+    let entries = min(info.palette.count, 256)
+    let channels = format.channels
+    let map = colormap.assumingMemoryBound(to: UInt8.self)
+
+    // Blue and red swap places for a client that asked for BGR, the same as the colour cube.
+    let redOffset = format.isReversed ? 2 : 0
+    let blueOffset = format.isReversed ? 0 : 2
+
+    for i in 0 ..< entries {
+        let source = info.palette.elements[i]
+        let base = i * channels
+
+        map[base + redOffset] = correction.correct(UInt32(source.red))
+        map[base + 1] = correction.correct(UInt32(source.green))
+        map[base + blueOffset] = correction.correct(UInt32(source.blue))
+
+        // Opaque: the caller has already refused any file with a tRNS chunk, so there is no
+        // coverage to report and every entry that asked for an alpha channel gets full alpha.
+        if format.hasAlpha {
+            map[base + 3] = 255
         }
     }
 
     image.pointee.colormap_entries = png_uint_32(entries)
 
+    return readIndexRows(
+        image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+        buffer: buffer, rowStride: rowStride
+    )
+}
+
+/// Reads a file whose own bytes already are the colour-map index a client wants — a plain
+/// greyscale or an indexed source, where nothing about the pixel data itself needs to change,
+/// only the map it points into.  Packs sub-byte samples into whole bytes if the file's own depth
+/// is narrower than that, since a client of this API is given index bytes to use, not bits to
+/// unpack itself; does nothing else, because there is nothing else — every correction the map
+/// needed happened when it was built, not here.
+private func readIndexRows(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32
+) -> Int32 {
     if header.bitDepth < 8 {
         png_set_packing(png_ptr)
     }
