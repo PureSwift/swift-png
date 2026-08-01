@@ -5,7 +5,7 @@
 // in the engine, which knows nothing about any of this.
 
 import CPNG
-import PNGCore
+import PNG
 
 @c @implementation
 public func png_read_info(_ png_ptr: png_structrp?, _ info_ptr: png_inforp?) {
