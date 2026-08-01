@@ -19,8 +19,14 @@ if [ ! -x "$ours" ] || [ ! -x "$reference" ]; then
 fi
 
 # The eight arrangements of colour and coverage, then the same again through memory.
+#
+# 0x04 and 0x06 are the linear ones: samples that are already light, written as a sixteen bit file
+# that says so rather than being encoded on the way in.  Their coverage-carrying counterparts, 0x05
+# and 0x07, are not driven — those formats hold colour already multiplied by coverage, which the
+# format does not store, and undoing that is not written yet.
 cases="0x00:13:7 0x01:13:7 0x02:13:7 0x03:13:7 0x11:13:7 0x12:13:7 0x13:13:7 0x21:13:7 0x23:13:7
-0x02:1:1 0x03:256:2 0x00:2:64 0x02:13:7:memory 0x03:13:7:memory 0x13:5:3:memory"
+0x02:1:1 0x03:256:2 0x00:2:64 0x04:13:7 0x06:13:7 0x06:1:1 0x04:2:64
+0x02:13:7:memory 0x03:13:7:memory 0x13:5:3:memory 0x06:13:7:memory"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
