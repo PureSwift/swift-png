@@ -1,4 +1,4 @@
-/* spng_callbacks.c - registering client callbacks, and calling them
+/* swift_callbacks.c - registering client callbacks, and calling them
  *
  * Every transfer of control into client code goes through a trampoline here.
  * Collecting them in one place is what makes the jump discipline checkable: a
@@ -11,7 +11,7 @@
  * trampolines that read those fields keeps the pairing obvious.
  */
 
-#include "spng_internal.h"
+#include "swift_internal.h"
 
 #include <stdio.h>
 
@@ -50,8 +50,8 @@ png_set_benign_errors(png_structrp png_ptr, int allowed)
     * are reading is reasonable, tolerating a mistake in a file you are producing
     * usually is not.
     */
-   bit = (png_ptr->flags & SPNG_FLAG_IS_READ) != 0
-       ? SPNG_FLAG_BENIGN_READ_ERR : SPNG_FLAG_BENIGN_WRITE_ERR;
+   bit = (png_ptr->flags & SWIFT_FLAG_IS_READ) != 0
+       ? SWIFT_FLAG_BENIGN_READ_ERR : SWIFT_FLAG_BENIGN_WRITE_ERR;
 
    if (allowed)
       png_ptr->flags |= bit;
@@ -67,7 +67,7 @@ png_set_read_fn(png_structrp png_ptr, png_voidp io_ptr, png_rw_ptr read_data_fn)
       return;
 
    png_ptr->io_ptr = io_ptr;
-   png_ptr->read_fn = read_data_fn != NULL ? read_data_fn : spng_c_stdio_read;
+   png_ptr->read_fn = read_data_fn != NULL ? read_data_fn : swift_c_stdio_read;
 
    /* A structure reads or writes, never both, so installing one direction clears
     * the other rather than leaving a callback that could be reached by mistake.
@@ -84,7 +84,7 @@ png_set_write_fn(png_structrp png_ptr, png_voidp io_ptr, png_rw_ptr write_data_f
       return;
 
    png_ptr->io_ptr = io_ptr;
-   png_ptr->write_fn = write_data_fn != NULL ? write_data_fn : spng_c_stdio_write;
+   png_ptr->write_fn = write_data_fn != NULL ? write_data_fn : swift_c_stdio_write;
    png_ptr->output_flush_fn = output_flush_fn;
    png_ptr->read_fn = NULL;
 }
@@ -100,17 +100,17 @@ png_init_io(png_structrp png_ptr, png_FILE_p fp)
    /* Which direction to wire up is decided by what the structure was created
     * for, since png_init_io does not say.
     */
-   if ((png_ptr->flags & SPNG_FLAG_IS_READ) != 0)
+   if ((png_ptr->flags & SWIFT_FLAG_IS_READ) != 0)
    {
-      png_ptr->read_fn = spng_c_stdio_read;
+      png_ptr->read_fn = swift_c_stdio_read;
       png_ptr->write_fn = NULL;
       png_ptr->output_flush_fn = NULL;
    }
 
    else
    {
-      png_ptr->write_fn = spng_c_stdio_write;
-      png_ptr->output_flush_fn = spng_c_stdio_flush;
+      png_ptr->write_fn = swift_c_stdio_write;
+      png_ptr->output_flush_fn = swift_c_stdio_flush;
       png_ptr->read_fn = NULL;
    }
 }
@@ -145,7 +145,7 @@ png_set_write_status_fn(png_structrp png_ptr, png_write_status_ptr write_row_fn)
 /* -- default stdio handlers ------------------------------------------------ */
 
 void PNGCBAPI
-spng_c_stdio_read(png_structp png_ptr, png_bytep data, size_t length)
+swift_c_stdio_read(png_structp png_ptr, png_bytep data, size_t length)
 {
    size_t read;
 
@@ -166,7 +166,7 @@ spng_c_stdio_read(png_structp png_ptr, png_bytep data, size_t length)
 }
 
 void PNGCBAPI
-spng_c_stdio_write(png_structp png_ptr, png_bytep data, size_t length)
+swift_c_stdio_write(png_structp png_ptr, png_bytep data, size_t length)
 {
    size_t written;
 
@@ -183,7 +183,7 @@ spng_c_stdio_write(png_structp png_ptr, png_bytep data, size_t length)
 }
 
 void PNGCBAPI
-spng_c_stdio_flush(png_structp png_ptr)
+swift_c_stdio_flush(png_structp png_ptr)
 {
    if (png_ptr == NULL || png_ptr->io_ptr == NULL)
       return;
@@ -200,7 +200,7 @@ spng_c_stdio_flush(png_structp png_ptr)
  */
 
 void
-spng_c_call_read(png_structrp png_ptr, png_bytep data, size_t length)
+swift_c_call_read(png_structrp png_ptr, png_bytep data, size_t length)
 {
    if (png_ptr == NULL || length == 0)
       return;
@@ -208,13 +208,13 @@ spng_c_call_read(png_structrp png_ptr, png_bytep data, size_t length)
    if (png_ptr->read_fn == NULL)
       png_error(png_ptr, "no input stream: call png_init_io or png_set_read_fn");
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->read_fn(png_ptr, data, length);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 void
-spng_c_call_write(png_structrp png_ptr, png_bytep data, size_t length)
+swift_c_call_write(png_structrp png_ptr, png_bytep data, size_t length)
 {
    if (png_ptr == NULL || length == 0)
       return;
@@ -222,42 +222,42 @@ spng_c_call_write(png_structrp png_ptr, png_bytep data, size_t length)
    if (png_ptr->write_fn == NULL)
       png_error(png_ptr, "no output stream: call png_init_io or png_set_write_fn");
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->write_fn(png_ptr, data, length);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 void
-spng_c_call_flush(png_structrp png_ptr)
+swift_c_call_flush(png_structrp png_ptr)
 {
    if (png_ptr == NULL || png_ptr->output_flush_fn == NULL)
       return;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->output_flush_fn(png_ptr);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 void
-spng_c_call_read_row_status(png_structrp png_ptr, png_uint_32 row, int pass)
+swift_c_call_read_row_status(png_structrp png_ptr, png_uint_32 row, int pass)
 {
    if (png_ptr == NULL || png_ptr->read_row_fn == NULL)
       return;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->read_row_fn(png_ptr, row, pass);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 void
-spng_c_call_write_row_status(png_structrp png_ptr, png_uint_32 row, int pass)
+swift_c_call_write_row_status(png_structrp png_ptr, png_uint_32 row, int pass)
 {
    if (png_ptr == NULL || png_ptr->write_row_fn == NULL)
       return;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->write_row_fn(png_ptr, row, pass);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 /* The two user transforms.
@@ -289,9 +289,9 @@ call_user_transform(png_structrp png_ptr, png_user_transform_ptr fn,
        ? (size_t)width * (size_t)(row_info.pixel_depth >> 3)
        : (((size_t)width * (size_t)row_info.pixel_depth) + 7) >> 3;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    fn(png_ptr, &row_info, row);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 
    /* What the client declared wins over what it left behind in the description. */
    if (png_ptr->user_transform_depth != 0)
@@ -304,7 +304,7 @@ call_user_transform(png_structrp png_ptr, png_user_transform_ptr fn,
 }
 
 png_uint_32
-spng_c_call_read_user_transform(png_structrp png_ptr, png_bytep row,
+swift_c_call_read_user_transform(png_structrp png_ptr, png_bytep row,
     png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
     png_uint_32 color_type)
 {
@@ -314,7 +314,7 @@ spng_c_call_read_user_transform(png_structrp png_ptr, png_bytep row,
 }
 
 png_uint_32
-spng_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
+swift_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
     png_uint_32 width, png_uint_32 bit_depth, png_uint_32 channels,
     png_uint_32 color_type)
 {
@@ -330,37 +330,37 @@ spng_c_call_write_user_transform(png_structrp png_ptr, png_bytep row,
  * the library never owns it.
  */
 void
-spng_c_call_progressive_info(png_structrp png_ptr, png_inforp info_ptr)
+swift_c_call_progressive_info(png_structrp png_ptr, png_inforp info_ptr)
 {
    if (png_ptr == NULL || png_ptr->info_fn == NULL)
       return;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->info_fn(png_ptr, info_ptr);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 void
-spng_c_call_progressive_row(png_structrp png_ptr, png_bytep new_row,
+swift_c_call_progressive_row(png_structrp png_ptr, png_bytep new_row,
     png_uint_32 row_number, int pass)
 {
    if (png_ptr == NULL || png_ptr->row_fn == NULL)
       return;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->row_fn(png_ptr, new_row, row_number, pass);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 void
-spng_c_call_progressive_end(png_structrp png_ptr, png_inforp info_ptr)
+swift_c_call_progressive_end(png_structrp png_ptr, png_inforp info_ptr)
 {
    if (png_ptr == NULL || png_ptr->end_fn == NULL)
       return;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    png_ptr->end_fn(png_ptr, info_ptr);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 }
 
 /* A chunk this library does not understand, offered to the client's own handler.
@@ -370,7 +370,7 @@ spng_c_call_progressive_end(png_structrp png_ptr, png_inforp info_ptr)
  * alive.
  */
 int
-spng_c_call_user_chunk(png_structrp png_ptr, png_uint_32 name, png_bytep data, size_t size)
+swift_c_call_user_chunk(png_structrp png_ptr, png_uint_32 name, png_bytep data, size_t size)
 {
    png_unknown_chunk chunk;
    int result;
@@ -387,9 +387,9 @@ spng_c_call_user_chunk(png_structrp png_ptr, png_uint_32 name, png_bytep data, s
    chunk.size = size;
    chunk.location = 0;
 
-   png_ptr->flags |= SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags |= SWIFT_FLAG_IN_CALLBACK;
    result = png_ptr->read_user_chunk_fn(png_ptr, &chunk);
-   png_ptr->flags &= ~SPNG_FLAG_IN_CALLBACK;
+   png_ptr->flags &= ~SWIFT_FLAG_IN_CALLBACK;
 
    return result;
 }
