@@ -24,11 +24,11 @@ signalling, and all three text chunks. Every read transform works — the expans
 conversions, the channel rearrangements, the filler, the shift, gamma correction, the conversion
 to greyscale, compositing against a background, alpha mode, and quantisation.
 
-What is left is a few of the convenience `png_image_*` API's shortcuts: colour-mapped output and
-input; on read, discarding alpha onto a buffer with no background named, and discarding colour from
-a file that also carries coverage; on write, narrowing sixteen bit input to eight. Each of those
-refuses outright and says why, rather than producing an answer that is nearly right; the general
-read and write API these shortcuts sit in front of has no such gap.
+What is left is a few of the convenience `png_image_*` API's shortcuts, all on the reading side:
+colour-mapped output, discarding alpha onto a buffer with no background named, and discarding colour
+from a file that also carries coverage. Each of those refuses outright and says why, rather than
+producing an answer that is nearly right; the general read and write API these shortcuts sit in
+front of has no such gap, and the writing side of the shortcuts no longer has one either.
 
 ## Building
 
