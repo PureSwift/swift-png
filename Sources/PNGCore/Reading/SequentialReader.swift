@@ -72,7 +72,7 @@ final class SequentialReader {
         into info: InfoStore,
         context: PngContext,
         signatureBytesConsumed: Int
-    ) throws {
+    ) throws(Diagnostic) {
         guard self.phase == .start else { return }
 
         try ChunkLexer.readSignature(
@@ -176,7 +176,7 @@ final class SequentialReader {
     }
 
     /// Prepares the row buffers. Called once, before the first row.
-    func startRows(context: PngContext) throws {
+    func startRows(context: PngContext) throws(Diagnostic) {
         guard self.phase == .header else { return }
 
         guard let header = context.header else {
@@ -287,7 +287,7 @@ final class SequentialReader {
     /// Advances nothing but the scanline count. What a row means to the client differs
     /// between the three ways of reading, so moving to the next pass is the caller's job.
     @discardableResult
-    private func decodeScanline(context: PngContext) throws -> Int {
+    private func decodeScanline(context: PngContext) throws(Diagnostic) -> Int {
         if self.phase == .header {
             try self.startRows(context: context)
         }
@@ -460,7 +460,7 @@ final class SequentialReader {
     private func report(
         _ observations: TransformProgram.Observations,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         guard observations.sawColor else { return }
 
         context.noteColorDuringConversion()
@@ -617,7 +617,7 @@ final class SequentialReader {
     func readRow(
         into destination: UnsafeMutablePointer<UInt8>?,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         if self.phase == .header {
             try self.startRows(context: context)
         }
@@ -703,7 +703,7 @@ final class SequentialReader {
     func readImage(
         rows: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         if self.phase == .header {
             try self.startRows(context: context)
         }
@@ -754,7 +754,7 @@ final class SequentialReader {
     }
 
     /// Fills the start of the row buffer with exactly `count` decompressed bytes.
-    private func inflateExactly(count: Int, context: PngContext) throws {
+    private func inflateExactly(count: Int, context: PngContext) throws(Diagnostic) {
         guard let inflater = context.inflater else {
             throw Diagnostic("no image data to read")
         }
@@ -795,7 +795,7 @@ final class SequentialReader {
 
     /// Draws more compressed bytes, moving to the next image data chunk when the
     /// current one runs out.
-    private func refillInput(context: PngContext) throws {
+    private func refillInput(context: PngContext) throws(Diagnostic) {
         while self.lexer.remainingInChunk == 0 {
             try self.finishChunk(context: context)
 
@@ -822,7 +822,7 @@ final class SequentialReader {
 
     /// Reads whatever remains of the stream after the image data, up to and
     /// including the end marker.
-    func readEnd(info: InfoStore?, context: PngContext) throws {
+    func readEnd(info: InfoStore?, context: PngContext) throws(Diagnostic) {
         guard self.phase == .imageEnd || self.phase == .rows else { return }
 
         // A client that stopped reading part way leaves rows behind, and those rows are image data
@@ -906,7 +906,7 @@ final class SequentialReader {
         _ chunk: ChunkHeader,
         info: InfoStore,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         let wantsCallback = context.host.userChunk != nil && context.hasUserChunkCallback
         let keeps = context.unknownChunks.keeps(
             chunk.name,
@@ -985,7 +985,7 @@ final class SequentialReader {
         _ chunk: ChunkHeader,
         info: InfoStore?,
         context: PngContext
-    ) throws {
+    ) throws(Diagnostic) {
         // A chunk this library does not know is not an error: the format is built to be extended, and
         // the chunk's own name says whether it may be dropped.  What happens to it is the client's
         // answer, which it gives in advance.
@@ -1050,7 +1050,7 @@ final class SequentialReader {
     }
 
     /// Discards the current chunk's payload and checks its trailing checksum.
-    private func skipChunk(context: PngContext) throws {
+    private func skipChunk(context: PngContext) throws(Diagnostic) {
         try context.reserve(.scratch, Self.inputBufferSize)
         self.lexer.skipPayload(host: context.host, scratch: context.scratch.bytes)
         try self.finishChunk(context: context)
@@ -1059,7 +1059,7 @@ final class SequentialReader {
     /// Reads the trailing checksum of the current chunk, and says whether what it covered can be
     /// trusted.
     @discardableResult
-    private func finishChunk(context: PngContext) throws -> Bool {
+    private func finishChunk(context: PngContext) throws(Diagnostic) -> Bool {
         guard self.lexer.current != nil else { return true }
 
         guard !self.lexer.readAndCheckCrc(host: context.host, context: context) else { return true }
