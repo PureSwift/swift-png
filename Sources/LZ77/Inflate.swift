@@ -122,7 +122,7 @@ public final class Inflate {
     public func inflate(
         into destination: UnsafeMutablePointer<UInt8>,
         count: Int
-    ) throws -> Int {
+    ) throws(DeflateError) -> Int {
         guard count > 0 else { return 0 }
 
         self.destination = destination
@@ -140,7 +140,7 @@ public final class Inflate {
     ///
     /// Returns false when nothing more can happen right now — either the input has run out or
     /// the destination has — so the caller's loop above knows to stop rather than spin.
-    private func step() throws -> Bool {
+    private func step() throws(DeflateError) -> Bool {
         switch self.state {
         case .zlibHeader:
             // Read as one field: two separate reads would each be atomic on their own, but
@@ -452,7 +452,7 @@ public final class Inflate {
     /// The two repeat codes in the code-length alphabet: 16 copies the previous length again,
     /// 17 and 18 insert runs of zero — three different symbols for what is, underneath, the same
     /// "extend the array by `count` entries" operation.
-    private func repeatPreviousLength(count: Int) throws {
+    private func repeatPreviousLength(count: Int) throws(DeflateError) {
         guard self.combinedLengthsIndex > 0 else {
             throw DeflateError("repeat code with nothing to repeat")
         }
@@ -460,12 +460,12 @@ public final class Inflate {
         try self.fill(self.previousCodeLength, count: count)
     }
 
-    private func fillZeroLength(count: Int) throws {
+    private func fillZeroLength(count: Int) throws(DeflateError) {
         try self.fill(0, count: count)
         self.previousCodeLength = 0
     }
 
-    private func fill(_ value: UInt8, count: Int) throws {
+    private func fill(_ value: UInt8, count: Int) throws(DeflateError) {
         guard self.combinedLengthsIndex + count <= self.combinedLengths.count else {
             throw DeflateError("code-length repeat runs past the table")
         }
