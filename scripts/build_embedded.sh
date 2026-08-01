@@ -30,8 +30,12 @@ toolchain=$(dirname "$(dirname "$swiftc")")
 
 if [ ! -d "$toolchain/lib/swift/embedded/$triple" ] \
     && [ ! -d "$toolchain/usr/lib/swift/embedded/$triple" ]; then
-    # Fall back to any installed toolchain that does ship it, newest first.
-    for candidate in "$HOME"/Library/Developer/Toolchains/*.xctoolchain; do
+    # Fall back to any installed toolchain that does ship it. Both locations, because a
+    # per-user install (swiftly, or a manually unpacked toolchain) lands under the caller's
+    # home directory, while the official swift.org .pkg installer — run with `installer
+    # -target /`, which is what a CI runner does — places it system-wide instead.
+    for candidate in "$HOME"/Library/Developer/Toolchains/*.xctoolchain \
+                     /Library/Developer/Toolchains/*.xctoolchain; do
         if [ -d "$candidate/usr/lib/swift/embedded/$triple" ]; then
             swiftc="$candidate/usr/bin/swiftc"
             break
