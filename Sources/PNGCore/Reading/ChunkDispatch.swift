@@ -35,7 +35,7 @@ extension SequentialReader {
         payload: UnsafeBufferPointer<UInt8>,
         info: InfoStore,
         host: Host
-    ) throws {
+    ) throws(Diagnostic) {
         do {
             switch name {
             case .plte: try info.parsePalette(payload)
