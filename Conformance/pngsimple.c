@@ -44,10 +44,18 @@ int main(int argc, char **argv)
       png_color background;
       png_colorp background_ptr = NULL;
       png_bytep buffer;
+      png_bytep colormap = NULL;
       size_t size;
+      size_t colormap_size = 0;
       size_t k;
 
       image.format = (png_uint_32)strtol(argv[2], NULL, 0);
+
+      if ((image.format & PNG_FORMAT_FLAG_COLORMAP) != 0)
+      {
+         colormap_size = PNG_IMAGE_COLORMAP_SIZE(image);
+         colormap = malloc(colormap_size != 0 ? colormap_size : 1);
+      }
 
       /* A colour to blend coverage away against, when the caller asks for one.  Without it the
        * library blends against whatever the buffer holds, which is a different operation.
@@ -71,15 +79,32 @@ int main(int argc, char **argv)
        */
       buffer = calloc(1, size != 0 ? size : 1);
 
-      if (png_image_finish_read(&image, background_ptr, buffer, 0, NULL) == 0)
+      if (png_image_finish_read(&image, background_ptr, buffer, 0, colormap) == 0)
       {
          printf("finish failed: %s\n", image.message);
          free(buffer);
+         free(colormap);
          return 1;
       }
 
-      printf("read format=0x%x size=%u stride=%u\n", (unsigned)image.format,
-             (unsigned)size, (unsigned)PNG_IMAGE_ROW_STRIDE(image));
+      printf("read format=0x%x size=%u stride=%u colormap_entries=%u\n",
+             (unsigned)image.format, (unsigned)size,
+             (unsigned)PNG_IMAGE_ROW_STRIDE(image), (unsigned)image.colormap_entries);
+
+      if (colormap != NULL)
+      {
+         colormap_size = PNG_IMAGE_COLORMAP_SIZE(image);
+         printf("colormap");
+
+         for (k = 0; k < colormap_size; k++)
+         {
+            if (k % 32 == 0) printf("\n ");
+
+            printf(" %02x", colormap[k]);
+         }
+
+         printf("\n");
+      }
 
       for (k = 0; k < size; k++)
       {
@@ -90,6 +115,7 @@ int main(int argc, char **argv)
 
       printf("\n");
       free(buffer);
+      free(colormap);
    }
 
    png_image_free(&image);
