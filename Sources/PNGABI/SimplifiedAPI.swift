@@ -211,12 +211,15 @@ public func swift_swift_image_finish_read(
     }
 
     // Discarding colour is ordinary averaging — png_set_rgb_to_gray, the same call every other
-    // caller of this library reaches for — *except* when the file also carries coverage: the
-    // reference's simplified reader can't run its rgb-to-gray transform and its alpha handling in
-    // the same pass without a second, gamma-aware compositing step of its own (a known limitation
-    // it works around rather than one this project should also take on), so that combination is
-    // still refused.  A file with no alpha at all has nothing for that workaround to matter to.
-    if !format.hasColor, (header.colorType.hasColor || header.colorType.isIndexed), fileHasAlpha {
+    // caller of this library reaches for.  Kept alongside coverage the file already has and at
+    // eight bits, that is all it is: nothing is being composited away or premultiplied, so the
+    // double gamma correction the reference works around below has nothing to trip over — this
+    // combination reaches the ordinary request below rather than being refused.  Sixteen bits is
+    // not the same: there the alpha-mode step premultiplies unconditionally, whether or not the
+    // channel survives to the output, and premultiplying is exactly the operation rgb-to-gray
+    // cannot share a pass with — so linear output stays refused alongside removing the channel.
+    if !format.hasColor, (header.colorType.hasColor || header.colorType.isIndexed), fileHasAlpha,
+        (!format.hasAlpha || format.isLinear) {
         swift_c_error(png_ptr, "png_image: discarding colour and alpha together not implemented")
     }
 
