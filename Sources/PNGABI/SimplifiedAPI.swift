@@ -116,17 +116,35 @@ public func swift_swift_image_finish_read(
     guard let info = InfoStore.from(info_ptr), let header = info.header else { return 0 }
 
     // The three colour-mapped cases built so far, every one an opaque source with no coverage of
-    // its own: a greyscale file into a greyscale colour map, an RGB file into the reference's
-    // fixed six-by-six-by-six colour cube, and an indexed file into its own palette, corrected.
-    // Everything else — coverage in any of these, colour reduced to grey or grey expanded to
-    // colour, sixteen bits — still refuses.
+    // its own: a greyscale file into a greyscale colour map (colour asked back from it or not), an
+    // RGB file into either the reference's fixed six-by-six-by-six colour cube or, discarding its
+    // colour, the same grey map the first case builds, and an indexed file into its own palette,
+    // corrected.  Everything else — coverage in any of these, sixteen bits — still refuses.
     if format.isColormapped {
         let fileHasAlpha = header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)
 
-        if !format.hasColor, !format.hasAlpha, !format.isLinear,
-            header.colorType == .grayscale, header.bitDepth <= 8, !fileHasAlpha {
+        // Colour asked back from a grey source is not a conversion the way the reverse is: every
+        // channel just repeats the one light level a grey file has, so there is nothing here that
+        // needs the averaging discarding an RGB source's colour does.  Coverage in the output is
+        // the same free addition it is for the palette case, for the same reason: every entry is
+        // opaque either way.
+        if !format.isLinear, header.colorType == .grayscale, header.bitDepth <= 8, !fileHasAlpha {
             return readGrayColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
+                buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
+        // Discarding an RGB source's colour is ordinary averaging, safe here for the same reason
+        // it is for the ordinary (non-colour-mapped) reader — nothing about it needs the
+        // gamma-aware compositing that combining it with real coverage would, and this file has
+        // none.  Unlike the grey-source case above, the map here is not a correction of the raw
+        // file bytes: png_set_rgb_to_gray decodes, averages and re-encodes each pixel itself, so
+        // what reaches the row is already the sRGB byte the client wants, and the map is the
+        // identity — the reference builds it the same way, as 256 entries of `i, i, i`.
+        if !format.hasColor, !format.isLinear, header.colorType == .rgb, !fileHasAlpha {
+            return readColorReducedGrayColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
                 buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
@@ -492,18 +510,103 @@ private func readGrayColormap(
         swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
     }
 
+    let format = SimplifiedFormat(raw: image.pointee.format)
     let fileGamma: FixedPoint = info.isValid(PNG_INFO_gAMA) ? info.gamma : 45455 // PNG_GAMMA_sRGB_INVERSE
     let correction = FileGammaCorrection(fileGamma: fileGamma)
 
+    // Colour reaching this function has already been averaged away, or is about to be — see the
+    // caller and the flag passed below — so the map is a plain grey ramp either way, and needs
+    // building only the once.
     let entries = 1 << header.bitDepth
     let step = 255 / (entries - 1)
+    let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
 
     for i in 0 ..< entries {
-        map[i] = correction.correct(UInt32(i * step))
+        let corrected = correction.correct(UInt32(i * step))
+        let base = i * channels
+
+        // A grey value asked back as colour is the same value repeated across every channel —
+        // there is only one light level here for red, green and blue to agree on.
+        if format.hasColor {
+            map[base] = corrected
+            map[base + 1] = corrected
+            map[base + 2] = corrected
+        } else {
+            map[base] = corrected
+        }
+
+        // Opaque: the caller has already refused any file with a tRNS chunk, so there is no
+        // coverage to report and every entry that asked for an alpha channel gets full alpha.
+        if format.hasAlpha {
+            map[base + channels - 1] = 255
+        }
     }
 
     image.pointee.colormap_entries = png_uint_32(entries)
+
+    return readIndexRows(
+        image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+        buffer: buffer, rowStride: rowStride
+    )
+}
+
+/// Reads an opaque RGB source into a plain grey colour map, discarding its colour.  Unlike the
+/// grey-source case above, the map is not a correction of the raw file bytes: the file's samples
+/// never reach the row as themselves, only as the result of averaging three of them together, and
+/// that averaging already has to go through the gamma machinery to be correct — decode each to
+/// light, average there, and re-encode — which is exactly what `png_set_rgb_to_gray` does. So the
+/// row byte that comes out is already the client's answer in its own encoding, and the map is the
+/// identity, the same way the reference's `make_gray_colormap` builds it: 256 entries of `i, i, i`.
+private func readColorReducedGrayColormap(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let colormap else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let channels = format.channels
+    let map = colormap.assumingMemoryBound(to: UInt8.self)
+
+    for i in 0 ..< 256 {
+        let base = i * channels
+        let value = UInt8(i)
+
+        if format.hasColor {
+            map[base] = value
+            map[base + 1] = value
+            map[base + 2] = value
+        } else {
+            map[base] = value
+        }
+
+        if format.hasAlpha {
+            map[base + channels - 1] = 255
+        }
+    }
+
+    image.pointee.colormap_entries = 256
+
+    // What a file with no gAMA of its own is assumed to have been encoded with — the same default
+    // requestConversion seeds for the ordinary reader, needed here for the same reason: rgb-to-gray's
+    // decode step has to know what curve the samples it is decoding are in.
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+    png_set_alpha_mode_fixed(
+        png_ptr,
+        PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_expand(png_ptr)
+    png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
 
     return readIndexRows(
         image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
