@@ -147,3 +147,10 @@ rgba16-filter1.png 0x23 The reference's sixteen bit gamma table is coarser than 
 # ordinary formats above, but the same file and the same cause.  0x12 is the BGR order of 0x02.
 rgba16-filter1.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through discarding an RGB source's colour into a grey colour map, rather than one of the
+# ordinary formats above, but the same file and the same cause: png_set_rgb_to_gray decodes each
+# sixteen bit sample through the reference's coarse table before averaging.
+interlaced-rgb16-11x7.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
