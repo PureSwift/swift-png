@@ -190,11 +190,10 @@ public func swift_swift_image_finish_read(
     // into premultiplied light, so there is nothing left for a background to name; the reference does
     // not look at one there either.  Only the eight bit case needs one supplied — or, now, nothing at
     // all: naming none is itself an answer, the client's own buffer, and that case is built below
-    // rather than refused.  Not for an indexed source, and not combined with colour reduced to grey
-    // or the reverse — both stay their own, still-refused cases.
+    // rather than refused.  Not for an indexed source, which stays its own, still-refused case.
     if !format.hasAlpha, fileHasAlpha, background == nil, !format.isLinear {
         guard !header.colorType.isIndexed,
-            format.hasColor == header.colorType.hasColor else {
+            format.hasColor == header.colorType.hasColor || !format.hasColor else {
             swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
         }
 
@@ -204,9 +203,38 @@ public func swift_swift_image_finish_read(
         let assumesLinearInput = header.bitDepth == 16
             && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
 
-        return readComposite(
-            image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header, format: format,
-            assumesLinearInput: assumesLinearInput, buffer: buffer, rowStride: row_stride
+        if format.hasColor == header.colorType.hasColor {
+            return readComposite(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header, format: format,
+                assumesLinearInput: assumesLinearInput, buffer: buffer, rowStride: row_stride
+            )
+        }
+
+        // Colour is being discarded as well as coverage — the only mismatch reaching here, since
+        // the guard above refuses the opposite direction: png_set_rgb_to_gray and compositing can't
+        // run in the same pass without the double gamma correction bug the reference works around
+        // by doing this part itself — so this library does too, rather than asking the library to
+        // do both at once.  See the caller's own no-background case above; this is the same idea,
+        // averaged to one channel first.
+        return readColorReducedComposite(
+            image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+            assumesLinearInput: assumesLinearInput, background: nil, buffer: buffer,
+            rowStride: row_stride
+        )
+    }
+
+    // The same colour-and-coverage combination as above, but blended against a background the
+    // client named instead of the client's own buffer.  Named or not is the same operation once the
+    // colour is already gone, so both reach the one function.
+    if !format.hasAlpha, fileHasAlpha, let background, !format.isLinear,
+        !format.hasColor, header.colorType.hasColor, !header.colorType.isIndexed {
+        let assumesLinearInput = header.bitDepth == 16
+            && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+        return readColorReducedComposite(
+            image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+            assumesLinearInput: assumesLinearInput, background: background, buffer: buffer,
+            rowStride: row_stride
         )
     }
 
@@ -826,6 +854,111 @@ private func readComposite(
 
                     destination[index] = sRGBFromLinear(blended)
                 }
+            }
+        }
+    }
+
+    png_read_end(png_ptr, nil)
+
+    return 1
+}
+
+/// Reads a file with coverage of its own and colour it will not keep, removing both at once by
+/// averaging colour to grey and then blending that grey against a background — named, or the
+/// client's own buffer when none is.  Kept apart from readComposite because the reference itself
+/// keeps them apart: running its rgb-to-gray transform and its compositing in the same pass double
+/// corrects for gamma, a bug it works around by doing the blend itself once rgb-to-gray has already
+/// run rather than asking the library to do both — which is what this does too, in the same order.
+private func readColorReducedComposite(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    assumesLinearInput: Bool,
+    background: png_const_colorp?,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32
+) -> Int32 {
+    png_set_expand(png_ptr)
+    png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
+
+    // The two-call sequence readComposite also needs, and for the same reason: the first states
+    // what a file with no gAMA of its own is assumed to have been encoded with, and only the first
+    // such call sets it.  The second asks for the output gamma alone — PNG_ALPHA_PNG rather than
+    // OPTIMIZED, since the blend itself happens below rather than in the library, which is the
+    // whole point of being here instead of in requestConversion.
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
+
+    // The output here is always eight bits — see the caller — but the source may not be; narrowing
+    // is the gamma machinery's job, the same as everywhere else it happens, not a matter of moving
+    // bytes.
+    png_set_scale_16(png_ptr)
+
+    png_read_update_info(png_ptr, info_ptr)
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+    let stride = rowStride == 0 ? width : Int(rowStride)
+
+    guard abs(stride) >= width else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    let passes = png_set_interlace_handling(png_ptr)
+    let channels = 2 // grey, alpha
+
+    // The whole file, not one row: an interlaced pass only touches a scattered subset of an
+    // image's pixels — see the same reasoning in readComposite.
+    let raw = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: width * height * channels)
+    defer { raw.deallocate() }
+
+    for _ in 0 ..< passes {
+        for y in 0 ..< height {
+            png_read_row(png_ptr, raw.baseAddress! + y * width * channels, nil)
+        }
+    }
+
+    // Named in the sRGB the API speaks, at the depth the blend happens at — which is eight bits,
+    // since a source with more never reaches here.  Grey output takes the green channel, the API's
+    // own rule: green is most of what a viewer sees as brightness.
+    let backgroundByte = background.map { UInt8($0.pointee.green) }
+    let backgroundLight = backgroundByte.map { UInt32(sRGBToLinear($0)) }
+
+    for y in 0 ..< height {
+        let destination = first.advanced(by: stride * y).assumingMemoryBound(to: UInt8.self)
+        let sourceRow = y * width * channels
+
+        for x in 0 ..< width {
+            let component = raw[sourceRow + x * channels]
+            let alpha = raw[sourceRow + x * channels + 1]
+
+            if alpha == 255 {
+                // Already corrected, the same as any other opaque pixel: nothing left to blend
+                // against.
+                destination[x] = component
+            } else if alpha == 0 {
+                if let backgroundByte {
+                    destination[x] = backgroundByte
+                }
+                // Else wholly transparent with nothing named to replace it: the buffer's own byte
+                // is already the answer and is left untouched, the same rule readComposite follows.
+            } else {
+                // The file's own light, decoded first since blending encoded bytes is not the same
+                // operation, plus what survives of whichever base — named or the buffer's own byte
+                // — is being blended against.
+                let fileLight = UInt32(sRGBToLinear(component)) &* UInt32(alpha)
+                let baseLight = backgroundLight ?? UInt32(sRGBToLinear(destination[x]))
+                let blended = fileLight &+ baseLight &* UInt32(255 - alpha)
+
+                destination[x] = sRGBFromLinear(blended)
             }
         }
     }
