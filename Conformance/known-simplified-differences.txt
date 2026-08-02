@@ -154,3 +154,11 @@ rgba16-filter1.png 0x12 The reference's sixteen bit gamma table is coarser than 
 interlaced-rgb16-11x7.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 meta-rgb16-sbit-bkgd.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgb16-filter4.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through discarding colour while keeping the coverage a sixteen bit source already has,
+# the same cause again: png_set_rgb_to_gray decodes each sample through the reference's coarse
+# table before averaging.
+rgba16-filter1.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
