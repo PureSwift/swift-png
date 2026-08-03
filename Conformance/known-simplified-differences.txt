@@ -35,9 +35,223 @@ unimplemented Every conversion this library refuses is recorded here as one thin
 # Written out, the whole conversion lands within about three counts of the reference on the corpus —
 # near enough to look right and not near enough to be it, which is the same finish as the coarse gamma
 # table next door and wants the same answer, the construction rather than a fit to it.
+#
+# That last sentence has since been answered, and the answer is that there is no construction to find.
+#
+# The reference builds its linear-to-sRGB tables with a numerical search (contrib/tools/makesRGB.c):
+# it fits a piecewise linear approximation to the curve and then walks each of the five hundred and
+# twelve entries trying to reduce how many inputs come out wrong.  The search stops short of zero.
+# The committed tables still disagree with the correctly rounded curve at three hundred and eight of
+# the sixty five thousand five hundred and thirty six inputs the generator itself checks, always by
+# one count.  So the table is not an approximation *of* the curve that a better computation would
+# beat — it is the definition of what the reference outputs, its own departures from the curve
+# included, and no closed form reproduces it.  Computing the curve exactly instead disagrees on about
+# half a percent of the range, always by one.
+#
+# The tables are therefore vendored, in Sources/PNGABI/SRGBTable.swift, the same way and under the
+# same licence as the headers.  What that closed is recorded here rather than in the entries below,
+# because the reasoning is what stops the question being reopened.
 
 # Removing coverage against a colour the client named is implemented and agrees with the reference
 # exactly when that colour is black.  Against any other colour it differs in the low bits, and for the
 # same reason: the reference takes the colour to light at sixteen bits and this library does it at
 # eight, so the two disagree about the colour rather than about the blend.  Driven both ways round
 # above so that the line between them stays visible.
+
+# -- the coarse gamma table, reached through this API -------------------------
+#
+# Every entry below is a sixteen bit file, and every one differs by a count or two in the low
+# byte and nowhere else.  This is the difference already set out at length in
+# known-transform-differences.txt: a table over sixteen bit samples would need 65536 entries per
+# image, so the reference builds a coarser one and looks samples up in it, losing the low bits on
+# purpose, while this library computes each sample exactly.  Nothing about this API is involved
+# beyond it being another way to reach that table — no eight bit file differs here at all.
+#
+# Listed one image and format at a time rather than as a class, so that a real regression on a
+# sixteen bit file still fails rather than landing in a catch-all.
+gray16-filter2.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through the colour cube rather than the ordinary sRGB formats above, but the same cause: a
+# one count difference in the underlying byte, from the same coarse table.  It looks larger here
+# only because the cube's index weights each channel by six or thirty-six — one level of difference
+# in one channel moves the reported index by that much, not because more went wrong.
+rgb16-filter4.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x0a:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x0a:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x0a:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+meta-rgb16-sbit-bkgd.png 0x0a:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x0a:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x0a:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+rgba16-filter1.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through composing onto the buffer with no background named, rather than one of the
+# ordinary formats above, but the same file and the same cause.  0x12 is the BGR order of 0x02.
+rgba16-filter1.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through discarding an RGB source's colour into a grey colour map, rather than one of the
+# ordinary formats above, but the same file and the same cause: png_set_rgb_to_gray decodes each
+# sixteen bit sample through the reference's coarse table before averaging.  A background named or
+# not makes no difference to an opaque source — nothing here is ever composited away — so the same
+# entries recur for :bg and :bg0, and 0x09 (coverage kept rather than colour) reaches the identical
+# rgb-to-gray step regardless.
+interlaced-rgb16-11x7.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+interlaced-rgb16-11x7.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgb16-filter4.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through discarding colour while keeping the coverage a sixteen bit source already has,
+# the same cause again: png_set_rgb_to_gray decodes each sample through the reference's coarse
+# table before averaging.
+rgba16-filter1.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# Reached through discarding colour and coverage together, rather than one of the ordinary formats
+# above, but the same file and the same cause.
+rgba16-filter1.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# -- a real bug in the reference, not this library --------------------------------
+
+# The twenty-seven partially-covered entries the RGB-alpha colour cube's own classification picks
+# among (see readRGBAlphaColormap) sort a pixel's red, green and blue by testing the top two bits
+# of each channel separately.  Every reference from 1.6.39 (which Debian stable ships) through
+# 1.6.55 tests the red channel's byte three times over — a copy-paste slip in pngread.c's
+# PNG_CMAP_RGB_ALPHA case, `inrow[0]` where the green and blue tests should read `inrow[1]` and
+# `inrow[2]` — so a partially covered pixel with different values in each channel can land on the
+# wrong one of the cube's coarse levels for two of its three channels. Fixed in 1.6.56, confirmed
+# by reading the reference's own source at each tag between the two rather than assumed from the
+# Debian/Homebrew version gap alone. Only the partially-covered case is affected: an opaque or
+# wholly transparent pixel takes a different branch entirely (`PNG_RGB_INDEX` or the fixed
+# background index), neither of which reads by channel at all.
+[<1.6.56] interlaced-rgba8-16x16.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-16x16.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-16x16.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-16x16.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.

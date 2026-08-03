@@ -148,6 +148,21 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
         target_include_directories(pngwrite BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
     endif()
 
+    # png_write_png's own bitmask dispatch: the fixed order it applies requests in, which bits
+    # are write-side no-ops, and what a contradictory or empty request does.  The individual
+    # requests it makes are already covered by pngwrite.c's own transform-setting cases.
+    add_executable(pngwritepng pngwritepng.c)
+    target_link_libraries(pngwritepng PRIVATE png16)
+
+    add_executable(pngwritepng_reference pngwritepng.c)
+    target_include_directories(pngwritepng_reference BEFORE PRIVATE
+        ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(pngwritepng_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(pngwritepng BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
     # The one chunk that stores numbers as text: two libraries that format the same value differently
     # write different files, so the formatting is compared directly rather than through an image.
     add_executable(scaleprobe scaleprobe.c)
@@ -331,6 +346,12 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
                 $<TARGET_FILE:pngwrite_reference>
                 ${CMAKE_CURRENT_SOURCE_DIR}/known-write-differences.txt)
 
+    add_test(NAME differential_write_png
+        COMMAND ${SPNG_SCRIPTS}/compare_write.sh
+                $<TARGET_FILE:pngwritepng>
+                $<TARGET_FILE:pngwritepng_reference>
+                ${CMAKE_CURRENT_SOURCE_DIR}/known-write-png-differences.txt)
+
     # The transforms, over combinations rather than one at a time: the interesting defects are in
     # the interactions, and in whether the order the client asked in leaks into the result.
     add_test(NAME differential_transforms
@@ -369,6 +390,7 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
             differential_readpng
             differential_roundtrip
             differential_write
+            differential_write_png
             differential_transforms
             differential_decode
         APPEND PROPERTY ENVIRONMENT "SPNG_REFERENCE_VERSION=${SPNG_REFERENCE_VERSION}")

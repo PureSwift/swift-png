@@ -12,24 +12,24 @@
  * hangs off the single opaque `swift_ctx` pointer.
  */
 
-#ifndef SPNG_PNGSTRUCT_ABI_H
-#define SPNG_PNGSTRUCT_ABI_H
+#ifndef SWIFT_PNGSTRUCT_ABI_H
+#define SWIFT_PNGSTRUCT_ABI_H
 
 #include "png.h"
 
-#define SPNG_MESSAGE_MAX 192 /* matches the message length libpng exposes */
+#define SWIFT_MESSAGE_MAX 192 /* matches the message length libpng exposes */
 
 /* Bits of png_struct_def.flags. */
-#define SPNG_FLAG_IS_READ         0x00000001U /* read struct, not write */
-#define SPNG_FLAG_JMPBUF_ARMED    0x00000002U /* png_set_longjmp_fn has run */
-#define SPNG_FLAG_BENIGN_READ_ERR 0x00000004U /* png_set_benign_errors, read */
-#define SPNG_FLAG_BENIGN_WRITE_ERR 0x00000008U /* png_set_benign_errors, write */
-#define SPNG_FLAG_IN_CALLBACK     0x00000010U /* debug re-entrancy guard */
+#define SWIFT_FLAG_IS_READ         0x00000001U /* read struct, not write */
+#define SWIFT_FLAG_JMPBUF_ARMED    0x00000002U /* png_set_longjmp_fn has run */
+#define SWIFT_FLAG_BENIGN_READ_ERR 0x00000004U /* png_set_benign_errors, read */
+#define SWIFT_FLAG_BENIGN_WRITE_ERR 0x00000008U /* png_set_benign_errors, write */
+#define SWIFT_FLAG_IN_CALLBACK     0x00000010U /* debug re-entrancy guard */
 
 struct png_struct_def
 {
    /* Jump state.  This is the only jmp_buf in the project and only
-    * spng_error.c may touch it.
+    * swift_error.c may touch it.
     */
    jmp_buf jmp_buf_local;
    png_longjmp_ptr longjmp_fn;
@@ -41,7 +41,7 @@ struct png_struct_def
    png_error_ptr error_fn;
    png_error_ptr warning_fn;
    png_voidp error_ptr;
-   char message[SPNG_MESSAGE_MAX];
+   char message[SWIFT_MESSAGE_MAX];
 
    /* Input and output. */
    png_rw_ptr read_fn;
@@ -135,4 +135,4 @@ struct png_control
    size_t out_used;
 };
 
-#endif /* SPNG_PNGSTRUCT_ABI_H */
+#endif /* SWIFT_PNGSTRUCT_ABI_H */

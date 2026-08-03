@@ -18,23 +18,23 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
     Host(
         owner: UnsafeMutableRawPointer(png_ptr),
         allocate: { owner, size in
-            spng_c_malloc(owner?.pngStruct, png_alloc_size_t(size))
+            swift_c_malloc(owner?.pngStruct, png_alloc_size_t(size))
         },
         deallocate: { owner, memory in
-            spng_c_free(owner?.pngStruct, memory)
+            swift_c_free(owner?.pngStruct, memory)
         },
         read: { owner, destination, count in
-            spng_c_call_read(owner?.pngStruct, destination, size_t(count))
+            swift_c_call_read(owner?.pngStruct, destination, size_t(count))
         },
         warn: { owner, message, length in
-            spng_c_warning_bytes(
+            swift_c_warning_bytes(
                 owner?.pngStruct,
                 UnsafeRawPointer(message)?.assumingMemoryBound(to: CChar.self),
                 size_t(length)
             )
         },
         warnChunk: { owner, message, length, packed in
-            spng_c_warning_chunk_bytes(
+            swift_c_warning_chunk_bytes(
                 owner?.pngStruct,
                 UnsafeRawPointer(message)?.assumingMemoryBound(to: CChar.self),
                 size_t(length),
@@ -42,7 +42,7 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
             )
         },
         userTransform: { owner, row, width, depth, channels, colorType in
-            spng_c_call_read_user_transform(
+            swift_c_call_read_user_transform(
                 owner?.pngStruct,
                 row,
                 width,
@@ -52,13 +52,13 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
             )
         },
         writeBytes: { owner, data, count in
-            spng_c_call_write(owner?.pngStruct, data, size_t(count))
+            swift_c_call_write(owner?.pngStruct, data, size_t(count))
         },
         flushBytes: { owner in
-            spng_c_call_flush(owner?.pngStruct)
+            swift_c_call_flush(owner?.pngStruct)
         },
         writeUserTransform: { owner, row, width, depth, channels, colorType in
-            spng_c_call_write_user_transform(
+            swift_c_call_write_user_transform(
                 owner?.pngStruct,
                 row,
                 width,
@@ -68,23 +68,23 @@ private func makeHost(_ png_ptr: png_structrp) -> Host {
             )
         },
         userChunk: { owner, name, data, size in
-            spng_c_call_user_chunk(owner?.pngStruct, name, data, size_t(size))
+            swift_c_call_user_chunk(owner?.pngStruct, name, data, size_t(size))
         },
         benign: { owner, message, length in
-            spng_c_benign_error_bytes(
+            swift_c_benign_error_bytes(
                 owner?.pngStruct,
                 UnsafeRawPointer(message)?.assumingMemoryBound(to: CChar.self),
                 size_t(length)
             )
         },
         progressiveInfoFn: { owner in
-            spng_c_call_progressive_info(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
+            swift_c_call_progressive_info(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
         },
         progressiveRowFn: { owner, row, number, pass in
-            spng_c_call_progressive_row(owner?.pngStruct, row, number, pass)
+            swift_c_call_progressive_row(owner?.pngStruct, row, number, pass)
         },
         progressiveEndFn: { owner in
-            spng_c_call_progressive_end(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
+            swift_c_call_progressive_end(owner?.pngStruct, owner?.pngStruct.pointee.progressive_info)
         }
     )
 }
@@ -97,7 +97,7 @@ extension UnsafeMutableRawPointer {
 }
 
 @c
-public func spng_swift_context_create(_ png_ptr: png_structrp?, _ is_read: Int32) -> Int32 {
+public func swift_swift_context_create(_ png_ptr: png_structrp?, _ is_read: Int32) -> Int32 {
     guard let png_ptr else { return 0 }
 
     let context = PngContext(host: makeHost(png_ptr), isReading: is_read != 0)
@@ -111,7 +111,7 @@ public func spng_swift_context_create(_ png_ptr: png_structrp?, _ is_read: Int32
 }
 
 @c
-public func spng_swift_context_destroy(_ png_ptr: png_structrp?) {
+public func swift_swift_context_destroy(_ png_ptr: png_structrp?) {
     guard let png_ptr, let opaque = png_ptr.pointee.swift_ctx else { return }
 
     png_ptr.pointee.swift_ctx = nil
@@ -126,7 +126,7 @@ public func spng_swift_context_destroy(_ png_ptr: png_structrp?) {
 }
 
 @c
-public func spng_swift_info_create(
+public func swift_swift_info_create(
     _ info_ptr: png_inforp?,
     _ png_ptr: png_const_structrp?
 ) -> Int32 {
@@ -142,7 +142,7 @@ public func spng_swift_info_create(
 }
 
 @c
-public func spng_swift_info_destroy(
+public func swift_swift_info_destroy(
     _ info_ptr: png_inforp?,
     _ png_ptr: png_const_structrp?
 ) {
@@ -159,7 +159,7 @@ public func spng_swift_info_destroy(
 }
 
 @c
-public func spng_swift_info_reset(
+public func swift_swift_info_reset(
     _ info_ptr: png_inforp?,
     _ png_ptr: png_const_structrp?
 ) {

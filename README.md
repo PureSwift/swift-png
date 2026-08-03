@@ -10,23 +10,39 @@ That includes the details substitution actually depends on: the complete exporte
 symbol set and nothing beyond it, the versioned library name, and the Mach-O
 compatibility version or ELF symbol version that the dynamic loader checks.
 
-Status: 200 of the 201 published functions are implemented, and the one that is not
-(`png_set_strip_error_numbers`) reports that it is not rather than answering wrongly. Both
-reading and writing work, sequentially and interlaced, both ways a client can ask for an
-interlaced image; every colour type, every bit depth from 1 to 16, every filter. The control
+Status: every published function this build's configuration exports is implemented — 256 of
+256, the same count `png.h` and the reference build agree on once the functions gated out by
+this build's `pnglibconf.h` (`png_set_strip_error_numbers` among them, behind
+`PNG_ERROR_NUMBERS_SUPPORTED`, which neither build turns on) are set aside; a raw text search
+of the header that skips those guards overcounts. Both reading and writing work, sequentially
+and interlaced, both ways a client can ask for an interlaced image; every colour type, every
+bit depth from 1 to 16, every filter. The control
 structure lifecycle, the allocator and stream callbacks, and every metadata chunk with its
 accessors all work: the palette and transparency, the colour and gamma chunks, the embedded
 profile, the physical layout, the timestamp, the camera metadata, the high dynamic range
 signalling, and all three text chunks. Every read transform works — the expansions, the depth
 conversions, the channel rearrangements, the filler, the shift, gamma correction, the conversion
-to greyscale, compositing against a background, alpha mode, and quantisation.
+to greyscale, compositing against a background, alpha mode, and quantisation. The convenience
+`png_image_*` shortcut is complete on both sides now, too. Reading: colour-mapped output works
+for a source with real coverage of its own, indexed, grey, grey-plus-alpha and RGB alike, coverage
+kept or removed, against a named background or not; and discarding colour from a file that also
+carries coverage is done by running the reference's own workaround for a bug in combining the two,
+since rgb-to-gray and compositing correct for gamma twice if the library is asked to do both in the
+same pass, and this does the blend itself once rgb-to-gray has already run instead. Writing: a
+client's own colour map becomes an indexed file's palette, and — wherever an entry is not fully
+opaque — its transparency table, built once per entry the way the reference's own
+`png_image_set_PLTE` builds it rather than once per pixel. Discarding colour and coverage together
+now works at sixteen bits as well as eight, the same workaround applied a second time: nothing
+there composites in the library either, so there is no background to ask for and no bug to trip
+over.
 
-What is left is the convenience `png_image_*` API's shortcuts for the transforms that change
-light rather than arrangement — colour-mapped output, discarding alpha onto a buffer with no
-background named, discarding colour, and converting to or from a linear encoding — and honouring
-a transform argument passed to `png_write_png` rather than refusing anything but the identity.
-Each of those refuses outright and says why, rather than producing an answer that is nearly
-right; the general read and write API these shortcuts sit in front of has no such gap.
+What is left is one narrow corner: an indexed source, asked to remove its coverage onto the
+client's own buffer with no background named. Every other colour type reaches this through
+`PNG_ALPHA_OPTIMIZED`, and an indexed one should too once expanded — but tried against the
+corpus rather than assumed, it produces real wrong bytes, because the optimized alpha arrangement
+is a step the transform pipeline (`TransformProgram.swift`) never adds for an indexed image at
+all, only for `PNG_ALPHA_STANDARD` and `PNG_ALPHA_BROKEN`. Left refused rather than shipped wrong;
+closing it is engine work, not a small extension of the reading shortcut around it.
 
 ## Building
 

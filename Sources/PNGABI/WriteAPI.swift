@@ -109,7 +109,7 @@ public func png_set_filter(_ png_ptr: png_structrp?, _ method: Int32, _ filters:
     // The single filter method the format defines.  Anything else describes a file this library
     // cannot write, so the request is refused rather than approximated.
     guard method == 0 else {
-        spng_c_error(png_ptr, "Unknown custom filter method")
+        swift_c_error(png_ptr, "Unknown custom filter method")
     }
 
     // Negative asks for the default, which is all of them.
@@ -150,12 +150,12 @@ public func png_set_compression_window_bits(_ png_ptr: png_structrp?, _ window_b
     var bits = window_bits
 
     if bits > 15 {
-        spng_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
         bits = 15
     }
 
     if bits < 8 {
-        spng_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
         bits = 8
     }
 
@@ -168,7 +168,7 @@ public func png_set_compression_method(_ png_ptr: png_structrp?, _ method: Int32
 
     // The one method zlib defines.  The reference warns and carries on with it.
     if method != 8 {
-        spng_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
+        swift_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
     }
 
     context.compression.method = 8
@@ -229,12 +229,12 @@ public func png_set_text_compression_window_bits(_ png_ptr: png_structrp?, _ win
     var bits = window_bits
 
     if bits > 15 {
-        spng_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows <= 32k supported by PNG")
         bits = 15
     }
 
     if bits < 8 {
-        spng_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
+        swift_c_warning(png_ptr, "Only compression windows >= 256 supported by PNG")
         bits = 8
     }
 
@@ -246,7 +246,7 @@ public func png_set_text_compression_method(_ png_ptr: png_structrp?, _ method: 
     guard let png_ptr, let context = PngContext.from(png_ptr) else { return }
 
     if method != 8 {
-        spng_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
+        swift_c_warning(png_ptr, "Only compression method 8 is supported by PNG")
     }
 
     context.textCompression.method = 8
@@ -362,9 +362,10 @@ public func png_get_rows(
 
 /// Writes a whole file in one call, from rows the client has already set.
 ///
-/// The transform argument is what this does not yet honour.  Anything but the identity would change
-/// the rows on their way out, and a request that was accepted and then ignored would produce a file
-/// that is wrong rather than one that is missing something — so it is refused instead, and says so.
+/// The transform argument names the same ordinary requests a client could make one at a time —
+/// this makes them on the client's behalf, in the reference's own fixed order, before the rows go
+/// out.  Read-only bits (`STRIP_16`, `STRIP_ALPHA`, `EXPAND`, `GRAY_TO_RGB`, `EXPAND_16`,
+/// `SCALE_16`) have no write-side counterpart and are silently ignored here, the same as there.
 @c @implementation
 public func png_write_png(
     _ png_ptr: png_structrp?,
@@ -373,15 +374,81 @@ public func png_write_png(
     _ params: png_voidp?
 ) {
     attempt(png_ptr, info_ptr) { context, info in
-        guard transforms == 0 else {
-            throw Diagnostic("png_write_png: transforms are not implemented in this build")
-        }
-
         guard let rows = info.rows else {
-            throw Diagnostic("Invalid image height in IHDR")
+            throw Diagnostic("no rows for png_write_image to write")
         }
 
         png_write_info(png_ptr, png_const_inforp(info_ptr))
+
+        if transforms & PNG_TRANSFORM_INVERT_MONO != 0 {
+            png_set_invert_mono(png_ptr)
+        }
+
+        // Needs the significant-bits chunk to know how far to move the samples; a client that
+        // asked for this without ever calling png_set_sBIT is asking for nothing there is data
+        // to act on, so it is quietly skipped rather than treated as a mistake.
+        if transforms & PNG_TRANSFORM_SHIFT != 0, info.isValid(PNG_INFO_sBIT) {
+            var bits = png_color_8()
+            let significantBits = info.significantBits
+
+            bits.red = significantBits.red
+            bits.green = significantBits.green
+            bits.blue = significantBits.blue
+            bits.gray = significantBits.gray
+            bits.alpha = significantBits.alpha
+
+            withUnsafePointer(to: &bits) {
+                png_set_shift(png_ptr, $0)
+            }
+        }
+
+        if transforms & PNG_TRANSFORM_PACKING != 0 {
+            png_set_packing(png_ptr)
+        }
+
+        if transforms & PNG_TRANSFORM_SWAP_ALPHA != 0 {
+            png_set_swap_alpha(png_ptr)
+        }
+
+        // Asking to strip a filler from both ends at once is a contradiction.  The reference
+        // reports it as a benign error and then, only when a client has configured those as
+        // warnings rather than errors, continues anyway by favouring AFTER — a pre-1.6.10
+        // compatibility shim, not a considered choice.  Reporting a benign error mid-write here
+        // would mean calling into the client's handler, which can jump out, before this frame's
+        // own locals have unwound — the exact hazard `attempt` exists to avoid (see Boundary.swift)
+        // — so this throws instead, which reaches the client the same way but only after Swift has
+        // already unwound everything above it.  The one difference from the reference: a client
+        // that has configured benign errors as warnings does not get the AFTER fallback here, it
+        // gets nothing written at all.  Narrow enough, and safe enough, to be worth it.
+        let stripsFillerAfter = transforms & PNG_TRANSFORM_STRIP_FILLER_AFTER != 0
+        let stripsFillerBefore = transforms & PNG_TRANSFORM_STRIP_FILLER_BEFORE != 0
+
+        if stripsFillerAfter, stripsFillerBefore {
+            throw Diagnostic(
+                "PNG_TRANSFORM_STRIP_FILLER: BEFORE+AFTER not supported",
+                severity: .benign
+            )
+        } else if stripsFillerAfter {
+            png_set_filler(png_ptr, 0, PNG_FILLER_AFTER)
+        } else if stripsFillerBefore {
+            png_set_filler(png_ptr, 0, PNG_FILLER_BEFORE)
+        }
+
+        if transforms & PNG_TRANSFORM_BGR != 0 {
+            png_set_bgr(png_ptr)
+        }
+
+        if transforms & PNG_TRANSFORM_SWAP_ENDIAN != 0 {
+            png_set_swap(png_ptr)
+        }
+
+        if transforms & PNG_TRANSFORM_PACKSWAP != 0 {
+            png_set_packswap(png_ptr)
+        }
+
+        if transforms & PNG_TRANSFORM_INVERT_ALPHA != 0 {
+            png_set_invert_alpha(png_ptr)
+        }
 
         try context.writeImage(rows: rows)
         try context.writeEnd(info)

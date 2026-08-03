@@ -34,7 +34,7 @@ public func png_data_freer(
     default:
         guard let png_ptr else { return }
 
-        spng_c_error(
+        swift_c_error(
             png_structp(mutating: png_ptr),
             "Unknown freer parameter in png_data_freer"
         )

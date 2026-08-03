@@ -41,9 +41,9 @@ fi
 
 # The stub file must cover exactly the functions that are not implemented yet.
 python3 "$work/scripts/gen_stubs.py" >/dev/null
-if ! diff -q "$root/Sources/CPNG/gen/spng_stubs.c" \
-        "$work/Sources/CPNG/gen/spng_stubs.c" >/dev/null; then
-    report "Sources/CPNG/gen/spng_stubs.c" "python3 scripts/gen_stubs.py"
+if ! diff -q "$root/Sources/CPNG/gen/swift_stubs.c" \
+        "$work/Sources/CPNG/gen/swift_stubs.c" >/dev/null; then
+    report "Sources/CPNG/gen/swift_stubs.c" "python3 scripts/gen_stubs.py"
 fi
 
 if [ "$status" -eq 0 ]; then

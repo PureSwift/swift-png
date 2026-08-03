@@ -31,7 +31,7 @@ func updateAllocating(
         report(diagnostic, to: png_structp(mutating: png_ptr))
     } catch {
         guard let png_ptr else { return }
-        spng_c_error(png_structp(mutating: png_ptr), "out of memory")
+        swift_c_error(png_structp(mutating: png_ptr), "out of memory")
     }
 }
 
@@ -420,7 +420,7 @@ public func png_set_sCAL_s(
         guard let bytes, !AsciiNumbers.isValid(terminated: bytes) else { continue }
         guard let png_ptr else { return }
 
-        spng_c_error(
+        swift_c_error(
             png_structp(mutating: png_ptr),
             what == "width" ? "Invalid sCAL width" : "Invalid sCAL height"
         )
@@ -545,7 +545,7 @@ private func setScale(
 ) {
     guard !rejects else {
         if let png_ptr {
-            spng_c_warning(png_structp(mutating: png_ptr), "Invalid sCAL width ignored")
+            swift_c_warning(png_structp(mutating: png_ptr), "Invalid sCAL width ignored")
         }
 
         return
@@ -581,7 +581,7 @@ public func png_get_eXIf(
     _ exif: UnsafeMutablePointer<png_bytep?>?
 ) -> png_uint_32 {
     if let png_ptr {
-        spng_c_warning(png_structp(mutating: png_ptr), "png_get_eXIf does not work; use png_get_eXIf_1")
+        swift_c_warning(png_structp(mutating: png_ptr), "png_get_eXIf does not work; use png_get_eXIf_1")
     }
 
     return 0
@@ -594,6 +594,6 @@ public func png_set_eXIf(
     _ exif: png_bytep?
 ) {
     if let png_ptr {
-        spng_c_warning(png_structp(mutating: png_ptr), "png_set_eXIf does not work; use png_set_eXIf_1")
+        swift_c_warning(png_structp(mutating: png_ptr), "png_set_eXIf does not work; use png_set_eXIf_1")
     }
 }

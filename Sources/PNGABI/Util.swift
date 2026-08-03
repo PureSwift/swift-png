@@ -83,7 +83,7 @@ public func png_get_uint_31(
 
     if value > 0x7FFF_FFFF {
         // Nothing in this frame owns memory, so jumping from here is safe.
-        spng_c_error(png_ptr, "PNG unsigned integer out of range")
+        swift_c_error(png_ptr, "PNG unsigned integer out of range")
     }
 
     return value

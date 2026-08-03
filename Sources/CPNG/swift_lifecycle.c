@@ -1,4 +1,4 @@
-/* spng_lifecycle.c - creating and destroying the control structures
+/* swift_lifecycle.c - creating and destroying the control structures
  *
  * Creation is in C because it needs a jump target of its own.  A client has not
  * had the chance to call setjmp yet at this point, but creation can still fail
@@ -12,7 +12,7 @@
  * needing to know how far the decode had progressed.
  */
 
-#include "spng_internal.h"
+#include "swift_internal.h"
 
 #include <setjmp.h>
 #include <stdlib.h>
@@ -23,7 +23,7 @@
  * provide.  A differing patch level is compatible by libpng's own rule.
  */
 static int
-spng_version_is_compatible(png_const_charp user_png_ver)
+swift_version_is_compatible(png_const_charp user_png_ver)
 {
    if (user_png_ver == NULL)
       return 1; /* the client declined to say; libpng accepts this */
@@ -42,7 +42,7 @@ spng_version_is_compatible(png_const_charp user_png_ver)
 }
 
 static png_structp
-spng_create_png_struct(png_const_charp user_png_ver, png_voidp error_ptr,
+swift_create_png_struct(png_const_charp user_png_ver, png_voidp error_ptr,
     png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr,
     png_malloc_ptr malloc_fn, png_free_ptr free_fn, int is_read)
 {
@@ -66,19 +66,19 @@ spng_create_png_struct(png_const_charp user_png_ver, png_voidp error_ptr,
    }
 
    if (is_read)
-      scratch.flags |= SPNG_FLAG_IS_READ;
+      scratch.flags |= SWIFT_FLAG_IS_READ;
 
    /* Arm the scratch structure's buffer so that a png_error raised below returns
     * here rather than reaching a client that has no target installed yet.
     */
    scratch.longjmp_fn = longjmp;
    scratch.jmp_buf_size = sizeof (jmp_buf);
-   scratch.flags |= SPNG_FLAG_JMPBUF_ARMED;
+   scratch.flags |= SWIFT_FLAG_JMPBUF_ARMED;
 
    if (setjmp(scratch.jmp_buf_local) != 0)
       return NULL;
 
-   if (!spng_version_is_compatible(user_png_ver))
+   if (!swift_version_is_compatible(user_png_ver))
    {
       png_error(&scratch,
           "the application was built against an incompatible libpng version");
@@ -94,9 +94,9 @@ spng_create_png_struct(png_const_charp user_png_ver, png_voidp error_ptr,
     */
    png_ptr->longjmp_fn = NULL;
    png_ptr->jmp_buf_size = 0;
-   png_ptr->flags &= ~SPNG_FLAG_JMPBUF_ARMED;
+   png_ptr->flags &= ~SWIFT_FLAG_JMPBUF_ARMED;
 
-   if (!spng_swift_context_create(png_ptr, is_read))
+   if (!swift_swift_context_create(png_ptr, is_read))
    {
       png_free(&scratch, png_ptr);
       return NULL;
@@ -110,7 +110,7 @@ png_create_read_struct_2(png_const_charp user_png_ver, png_voidp error_ptr,
     png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr,
     png_malloc_ptr malloc_fn, png_free_ptr free_fn)
 {
-   return spng_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
+   return swift_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
        mem_ptr, malloc_fn, free_fn, 1);
 }
 
@@ -118,7 +118,7 @@ png_structp PNGAPI
 png_create_read_struct(png_const_charp user_png_ver, png_voidp error_ptr,
     png_error_ptr error_fn, png_error_ptr warn_fn)
 {
-   return spng_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
+   return swift_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
        NULL, NULL, NULL, 1);
 }
 
@@ -127,7 +127,7 @@ png_create_write_struct_2(png_const_charp user_png_ver, png_voidp error_ptr,
     png_error_ptr error_fn, png_error_ptr warn_fn, png_voidp mem_ptr,
     png_malloc_ptr malloc_fn, png_free_ptr free_fn)
 {
-   return spng_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
+   return swift_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
        mem_ptr, malloc_fn, free_fn, 0);
 }
 
@@ -135,7 +135,7 @@ png_structp PNGAPI
 png_create_write_struct(png_const_charp user_png_ver, png_voidp error_ptr,
     png_error_ptr error_fn, png_error_ptr warn_fn)
 {
-   return spng_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
+   return swift_create_png_struct(user_png_ver, error_ptr, error_fn, warn_fn,
        NULL, NULL, NULL, 0);
 }
 
@@ -158,7 +158,7 @@ png_create_info_struct(png_const_structrp png_ptr)
 
    memset(info_ptr, 0, sizeof (png_info));
 
-   if (!spng_swift_info_create(info_ptr, png_ptr))
+   if (!swift_swift_info_create(info_ptr, png_ptr))
    {
       png_free(png_ptr, info_ptr);
       return NULL;
@@ -182,7 +182,7 @@ png_destroy_info_struct(png_const_structrp png_ptr, png_infopp info_ptr_ptr)
 
    *info_ptr_ptr = NULL;
 
-   spng_swift_info_destroy(info_ptr, png_ptr);
+   swift_swift_info_destroy(info_ptr, png_ptr);
    png_free(png_ptr, info_ptr);
 }
 
@@ -190,7 +190,7 @@ png_destroy_info_struct(png_const_structrp png_ptr, png_infopp info_ptr_ptr)
  * structures a client may pass.
  */
 static void
-spng_destroy_png_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr,
+swift_destroy_png_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr,
     png_infopp end_info_ptr_ptr)
 {
    png_structp png_ptr;
@@ -215,7 +215,7 @@ spng_destroy_png_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr,
    /* Releases every buffer the decode had allocated, whatever state it was left
     * in.
     */
-   spng_swift_context_destroy(png_ptr);
+   swift_swift_context_destroy(png_ptr);
 
    if (png_ptr->free_fn != NULL)
       png_ptr->free_fn(png_ptr, png_ptr);
@@ -228,13 +228,13 @@ void PNGAPI
 png_destroy_read_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr,
     png_infopp end_info_ptr_ptr)
 {
-   spng_destroy_png_struct(png_ptr_ptr, info_ptr_ptr, end_info_ptr_ptr);
+   swift_destroy_png_struct(png_ptr_ptr, info_ptr_ptr, end_info_ptr_ptr);
 }
 
 void PNGAPI
 png_destroy_write_struct(png_structpp png_ptr_ptr, png_infopp info_ptr_ptr)
 {
-   spng_destroy_png_struct(png_ptr_ptr, info_ptr_ptr, NULL);
+   swift_destroy_png_struct(png_ptr_ptr, info_ptr_ptr, NULL);
 }
 
 void PNGAPI
@@ -258,5 +258,5 @@ png_info_init_3(png_infopp info_ptr_ptr, size_t png_info_struct_size)
    if (png_info_struct_size != sizeof (png_info))
       return;
 
-   spng_swift_info_reset(info_ptr, NULL);
+   swift_swift_info_reset(info_ptr, NULL);
 }

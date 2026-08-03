@@ -1,4 +1,4 @@
-/* spng_error.c - error reporting and the setjmp/longjmp boundary
+/* swift_error.c - error reporting and the setjmp/longjmp boundary
  *
  * This file owns the jump machinery.  Nothing else in the project references
  * jmp_buf, longjmp or setjmp, which keeps the one construct that can abandon
@@ -6,14 +6,14 @@
  * translation unit.
  *
  * The contract with the Swift engine: engine code never jumps.  It reports
- * failure by throwing, and the exported entry point calls spng_c_error as the
+ * failure by throwing, and the exported entry point calls swift_c_error as the
  * final action in its frame, once no Swift-managed values are live.  Client
  * callbacks are a separate case: a client may legally longjmp out of one, so
- * call sites for the trampolines in spng_callbacks.c must leave the context in
+ * call sites for the trampolines in swift_callbacks.c must leave the context in
  * a state that png_destroy_* can still reclaim.
  */
 
-#include "spng_internal.h"
+#include "swift_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +25,7 @@
  * matches how the reference implementation treats it.
  */
 static png_const_charp
-spng_stage_message(png_const_structrp png_ptr, png_const_charp message)
+swift_stage_message(png_const_structrp png_ptr, png_const_charp message)
 {
    png_structp mutable_ptr = (png_structp)png_ptr;
 
@@ -44,8 +44,8 @@ spng_stage_message(png_const_structrp png_ptr, png_const_charp message)
    if (message == mutable_ptr->message)
       return message;
 
-   strncpy(mutable_ptr->message, message, SPNG_MESSAGE_MAX - 1);
-   mutable_ptr->message[SPNG_MESSAGE_MAX - 1] = '\0';
+   strncpy(mutable_ptr->message, message, SWIFT_MESSAGE_MAX - 1);
+   mutable_ptr->message[SWIFT_MESSAGE_MAX - 1] = '\0';
 
    return mutable_ptr->message;
 }
@@ -57,11 +57,11 @@ spng_stage_message(png_const_structrp png_ptr, png_const_charp message)
  * would overwrite the text while reading it.
  */
 static png_const_charp
-spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
+swift_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
     png_const_charp message)
 {
    png_structp mutable_ptr = (png_structp)png_ptr;
-   char staged[SPNG_MESSAGE_MAX];
+   char staged[SWIFT_MESSAGE_MAX];
    size_t offset = 0;
 
    if (mutable_ptr == NULL)
@@ -76,14 +76,14 @@ spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
        * may hold anything at all, and a message carrying a control byte or a broken character is a
        * message a client cannot print, log or compare.
        */
-      while (offset + 2 < SPNG_MESSAGE_MAX && chunk_name[index] != '\0')
+      while (offset + 2 < SWIFT_MESSAGE_MAX && chunk_name[index] != '\0')
       {
          unsigned char byte = (unsigned char)chunk_name[index++];
 
          if ((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z'))
             staged[offset++] = (char)byte;
 
-         else if (offset + 6 < SPNG_MESSAGE_MAX)
+         else if (offset + 6 < SWIFT_MESSAGE_MAX)
          {
             static const char digits[] = "0123456789ABCDEF";
 
@@ -97,7 +97,7 @@ spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
             break;
       }
 
-      if (offset + 2 < SPNG_MESSAGE_MAX)
+      if (offset + 2 < SWIFT_MESSAGE_MAX)
       {
          staged[offset++] = ':';
          staged[offset++] = ' ';
@@ -108,7 +108,7 @@ spng_stage_chunk_message(png_const_structrp png_ptr, png_const_charp chunk_name,
    {
       size_t index = 0;
 
-      while (offset + 1 < SPNG_MESSAGE_MAX && message[index] != '\0')
+      while (offset + 1 < SWIFT_MESSAGE_MAX && message[index] != '\0')
          staged[offset++] = message[index++];
    }
 
@@ -123,7 +123,7 @@ void PNGAPI
 png_longjmp(png_const_structrp png_ptr, int val)
 {
    if (png_ptr != NULL && png_ptr->longjmp_fn != NULL &&
-       (png_ptr->flags & SPNG_FLAG_JMPBUF_ARMED) != 0)
+       (png_ptr->flags & SWIFT_FLAG_JMPBUF_ARMED) != 0)
    {
       /* The buffer lives in the heap-allocated struct, so its address is stable
        * for as long as the client can jump to it.
@@ -152,19 +152,19 @@ png_set_longjmp_fn(png_structrp png_ptr, png_longjmp_ptr longjmp_fn,
    if (jmp_buf_size != sizeof (jmp_buf))
    {
       png_ptr->longjmp_fn = NULL;
-      png_ptr->flags &= ~SPNG_FLAG_JMPBUF_ARMED;
+      png_ptr->flags &= ~SWIFT_FLAG_JMPBUF_ARMED;
       png_error(png_ptr, "size of jmp_buf does not match the library build");
    }
 
    png_ptr->longjmp_fn = longjmp_fn;
    png_ptr->jmp_buf_size = jmp_buf_size;
-   png_ptr->flags |= SPNG_FLAG_JMPBUF_ARMED;
+   png_ptr->flags |= SWIFT_FLAG_JMPBUF_ARMED;
 
    return &png_ptr->jmp_buf_local;
 }
 
 void PNGCBAPI
-spng_c_default_error(png_structp png_ptr, png_const_charp message)
+swift_c_default_error(png_structp png_ptr, png_const_charp message)
 {
    fprintf(stderr, "libpng error: %s\n", message != NULL ? message : "");
    fflush(stderr);
@@ -172,7 +172,7 @@ spng_c_default_error(png_structp png_ptr, png_const_charp message)
 }
 
 void PNGCBAPI
-spng_c_default_warning(png_structp png_ptr, png_const_charp message)
+swift_c_default_warning(png_structp png_ptr, png_const_charp message)
 {
    (void)png_ptr;
    fprintf(stderr, "libpng warning: %s\n", message != NULL ? message : "");
@@ -182,7 +182,7 @@ spng_c_default_warning(png_structp png_ptr, png_const_charp message)
 void PNGAPI
 png_error(png_const_structrp png_ptr, png_const_charp error_message)
 {
-   png_const_charp staged = spng_stage_message(png_ptr, error_message);
+   png_const_charp staged = swift_stage_message(png_ptr, error_message);
 
    if (png_ptr != NULL && png_ptr->error_fn != NULL)
    {
@@ -193,26 +193,26 @@ png_error(png_const_structrp png_ptr, png_const_charp error_message)
       png_ptr->error_fn((png_structp)png_ptr, staged);
    }
 
-   spng_c_default_error((png_structp)png_ptr, staged);
+   swift_c_default_error((png_structp)png_ptr, staged);
 }
 
 void PNGAPI
 png_warning(png_const_structrp png_ptr, png_const_charp warning_message)
 {
-   png_const_charp staged = spng_stage_message(png_ptr, warning_message);
+   png_const_charp staged = swift_stage_message(png_ptr, warning_message);
 
    if (png_ptr != NULL && png_ptr->warning_fn != NULL)
       png_ptr->warning_fn((png_structp)png_ptr, staged);
 
    else
-      spng_c_default_warning((png_structp)png_ptr, staged);
+      swift_c_default_warning((png_structp)png_ptr, staged);
 }
 
 void PNGAPI
 png_benign_error(png_const_structrp png_ptr, png_const_charp error_message)
 {
-   png_uint_32 benign = (png_ptr != NULL && (png_ptr->flags & SPNG_FLAG_IS_READ)
-       != 0) ? SPNG_FLAG_BENIGN_READ_ERR : SPNG_FLAG_BENIGN_WRITE_ERR;
+   png_uint_32 benign = (png_ptr != NULL && (png_ptr->flags & SWIFT_FLAG_IS_READ)
+       != 0) ? SWIFT_FLAG_BENIGN_READ_ERR : SWIFT_FLAG_BENIGN_WRITE_ERR;
 
    if (png_ptr != NULL && (png_ptr->flags & benign) != 0)
       png_warning(png_ptr, error_message);
@@ -240,19 +240,19 @@ png_chunk_benign_error(png_const_structrp png_ptr, png_const_charp error_message
 }
 
 void
-spng_c_error(png_const_structrp png_ptr, png_const_charp message)
+swift_c_error(png_const_structrp png_ptr, png_const_charp message)
 {
    png_error(png_ptr, message);
 }
 
 void
-spng_c_warning(png_const_structrp png_ptr, png_const_charp message)
+swift_c_warning(png_const_structrp png_ptr, png_const_charp message)
 {
    png_warning(png_ptr, message);
 }
 
 void
-spng_c_warning_bytes(png_const_structrp png_ptr, const char *message,
+swift_c_warning_bytes(png_const_structrp png_ptr, const char *message,
     size_t length)
 {
    png_structp mutable_ptr = (png_structp)png_ptr;
@@ -261,8 +261,8 @@ spng_c_warning_bytes(png_const_structrp png_ptr, const char *message,
    if (mutable_ptr == NULL || message == NULL)
       return;
 
-   if (count > SPNG_MESSAGE_MAX - 1)
-      count = SPNG_MESSAGE_MAX - 1;
+   if (count > SWIFT_MESSAGE_MAX - 1)
+      count = SWIFT_MESSAGE_MAX - 1;
 
    memcpy(mutable_ptr->message, message, count);
    mutable_ptr->message[count] = '\0';
@@ -274,11 +274,11 @@ spng_c_warning_bytes(png_const_structrp png_ptr, const char *message,
 }
 
 void
-spng_c_warning_chunk_bytes(png_const_structrp png_ptr, const char *message,
+swift_c_warning_chunk_bytes(png_const_structrp png_ptr, const char *message,
     size_t length, png_uint_32 packed_name)
 {
    png_structp mutable_ptr = (png_structp)png_ptr;
-   char staged[SPNG_MESSAGE_MAX];
+   char staged[SWIFT_MESSAGE_MAX];
    char name[5];
    size_t count = length;
 
@@ -291,23 +291,23 @@ spng_c_warning_chunk_bytes(png_const_structrp png_ptr, const char *message,
    name[3] = (char)(packed_name & 0xFF);
    name[4] = '\0';
 
-   if (count > SPNG_MESSAGE_MAX - 1)
-      count = SPNG_MESSAGE_MAX - 1;
+   if (count > SWIFT_MESSAGE_MAX - 1)
+      count = SWIFT_MESSAGE_MAX - 1;
 
    memcpy(staged, message, count);
    staged[count] = '\0';
 
-   spng_c_chunk_warning(png_ptr, name, staged);
+   swift_c_chunk_warning(png_ptr, name, staged);
 }
 
 void
-spng_c_benign_error(png_const_structrp png_ptr, png_const_charp message)
+swift_c_benign_error(png_const_structrp png_ptr, png_const_charp message)
 {
    png_benign_error(png_ptr, message);
 }
 
 void
-spng_c_benign_error_bytes(png_const_structrp png_ptr, const char *message,
+swift_c_benign_error_bytes(png_const_structrp png_ptr, const char *message,
     size_t length)
 {
    png_structp mutable_ptr = (png_structp)png_ptr;
@@ -316,8 +316,8 @@ spng_c_benign_error_bytes(png_const_structrp png_ptr, const char *message,
    if (mutable_ptr == NULL || message == NULL)
       return;
 
-   if (count > SPNG_MESSAGE_MAX - 1)
-      count = SPNG_MESSAGE_MAX - 1;
+   if (count > SWIFT_MESSAGE_MAX - 1)
+      count = SWIFT_MESSAGE_MAX - 1;
 
    memcpy(mutable_ptr->message, message, count);
    mutable_ptr->message[count] = '\0';
@@ -330,21 +330,21 @@ spng_c_benign_error_bytes(png_const_structrp png_ptr, const char *message,
 }
 
 void
-spng_c_chunk_error(png_const_structrp png_ptr, png_const_charp chunk_name,
+swift_c_chunk_error(png_const_structrp png_ptr, png_const_charp chunk_name,
     png_const_charp message)
 {
-   png_error(png_ptr, spng_stage_chunk_message(png_ptr, chunk_name, message));
+   png_error(png_ptr, swift_stage_chunk_message(png_ptr, chunk_name, message));
 }
 
 void
-spng_c_chunk_warning(png_const_structrp png_ptr, png_const_charp chunk_name,
+swift_c_chunk_warning(png_const_structrp png_ptr, png_const_charp chunk_name,
     png_const_charp message)
 {
-   png_warning(png_ptr, spng_stage_chunk_message(png_ptr, chunk_name, message));
+   png_warning(png_ptr, swift_stage_chunk_message(png_ptr, chunk_name, message));
 }
 
 int
-spng_c_in_callback(png_const_structrp png_ptr)
+swift_c_in_callback(png_const_structrp png_ptr)
 {
-   return png_ptr != NULL && (png_ptr->flags & SPNG_FLAG_IN_CALLBACK) != 0;
+   return png_ptr != NULL && (png_ptr->flags & SWIFT_FLAG_IN_CALLBACK) != 0;
 }
