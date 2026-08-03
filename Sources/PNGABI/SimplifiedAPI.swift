@@ -137,6 +137,18 @@ public func swift_swift_image_finish_read(
             )
         }
 
+        // Coverage kept through a colour map is its own layout, not a correction of a byte already
+        // there — see the function itself for why.  A single named transparent value never
+        // reaches here: the branch above already handles every `.grayscale` source, coverage kept
+        // or not, since nothing about a value that is either wholly there or wholly gone needs
+        // this map's finer alpha grading.
+        if header.colorType == .grayscaleAlpha, format.hasAlpha, !format.isLinear {
+            return readGAColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
         // Discarding an RGB source's colour is ordinary averaging, safe here for the same reason
         // it is for the ordinary (non-colour-mapped) reader — nothing about it needs the
         // gamma-aware compositing that combining it with real coverage would, and this file has
@@ -1081,6 +1093,126 @@ private func readColorReducedComposite(
 /// itself evenly.
 private func div51(_ value: UInt8) -> UInt8 {
     UInt8((UInt32(value) &* 5 &+ 130) >> 8)
+}
+
+/// Reads a grey-plus-alpha file into a colour map that keeps its coverage rather than the file's
+/// own bytes.  Two independent bytes cannot be a map index the way one channel can — every
+/// combination of grey and alpha would need its own entry, sixty five thousand of them — so the
+/// reference reduces to two hundred and thirty one graded levels of an opaque grey, one wholly
+/// transparent entry, and twenty four partially-covered entries split six ways by grey and four
+/// ways by alpha; which entry a pixel becomes is a classification into that layout, not a
+/// correction of a byte already there, so the rows need their own pass the other colour-mapped
+/// cases do not.
+private func readGAColormap(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let colormap else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let channels = format.channels
+    let map = colormap.assumingMemoryBound(to: UInt8.self)
+
+    func writeEntry(_ index: Int, grey: UInt8, alpha: UInt8) {
+        let base = index * channels
+
+        if format.hasColor {
+            map[base] = grey
+            map[base + 1] = grey
+            map[base + 2] = grey
+        } else {
+            map[base] = grey
+        }
+
+        map[base + channels - 1] = alpha
+    }
+
+    for i in 0 ..< 231 {
+        writeEntry(i, grey: UInt8((i * 256 + 115) / 231), alpha: 255)
+    }
+
+    writeEntry(231, grey: 255, alpha: 0)
+
+    var index = 232
+    for alphaLevel in 1 ..< 5 {
+        for greyLevel in 0 ..< 6 {
+            writeEntry(index, grey: UInt8(greyLevel * 51), alpha: UInt8(alphaLevel * 51))
+            index += 1
+        }
+    }
+
+    image.pointee.colormap_entries = 256
+
+    // Ordinary sRGB gamma correction and nothing else: no compositing happens on the way through,
+    // so there is no double correction to work around here the way there is discarding colour —
+    // the classification above is what turns coverage into an index, not a blend against anything.
+    png_set_expand(png_ptr)
+
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
+    png_set_scale_16(png_ptr)
+
+    png_read_update_info(png_ptr, info_ptr)
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+    let stride = rowStride == 0 ? width : Int(rowStride)
+
+    guard abs(stride) >= width else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    let passes = png_set_interlace_handling(png_ptr)
+
+    // The whole file, not one row: an interlaced pass only touches a scattered subset of an
+    // image's pixels — see the same reasoning in readComposite.
+    let raw = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: width * height * 2)
+    defer { raw.deallocate() }
+
+    for _ in 0 ..< passes {
+        for y in 0 ..< height {
+            png_read_row(png_ptr, raw.baseAddress! + y * width * 2, nil)
+        }
+    }
+
+    for y in 0 ..< height {
+        let destination = first.advanced(by: stride * y).assumingMemoryBound(to: UInt8.self)
+        let sourceRow = y * width * 2
+
+        for x in 0 ..< width {
+            let grey = raw[sourceRow + x * 2]
+            let alpha = raw[sourceRow + x * 2 + 1]
+
+            if alpha > 229 {
+                destination[x] = UInt8((231 * Int(grey) + 128) >> 8)
+            } else if alpha < 26 {
+                destination[x] = 231
+            } else {
+                destination[x] = 226 &+ 6 &* div51(alpha) &+ div51(grey)
+            }
+        }
+    }
+
+    png_read_end(png_ptr, nil)
+
+    return 1
 }
 
 /// Reads an opaque RGB or RGBA file into the reference's own fixed colour map: every combination
