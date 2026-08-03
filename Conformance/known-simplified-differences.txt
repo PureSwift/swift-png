@@ -164,10 +164,6 @@ interlaced-rgb16-11x7.png 0x08 The reference's sixteen bit gamma table is coarse
 interlaced-rgb16-11x7.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 interlaced-rgb16-11x7.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 interlaced-rgb16-11x7.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgb16-filter4.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgb16-filter4.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgb16-filter4.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
@@ -185,3 +181,77 @@ rgba16-filter1.png 0x11:bg The reference's sixteen bit gamma table is coarser th
 # above, but the same file and the same cause.
 rgba16-filter1.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# -- a real bug in the reference, not this library --------------------------------
+
+# The twenty-seven partially-covered entries the RGB-alpha colour cube's own classification picks
+# among (see readRGBAlphaColormap) sort a pixel's red, green and blue by testing the top two bits
+# of each channel separately.  Every reference from 1.6.39 (which Debian stable ships) through
+# 1.6.55 tests the red channel's byte three times over — a copy-paste slip in pngread.c's
+# PNG_CMAP_RGB_ALPHA case, `inrow[0]` where the green and blue tests should read `inrow[1]` and
+# `inrow[2]` — so a partially covered pixel with different values in each channel can land on the
+# wrong one of the cube's coarse levels for two of its three channels. Fixed in 1.6.56, confirmed
+# by reading the reference's own source at each tag between the two rather than assumed from the
+# Debian/Homebrew version gap alone. Only the partially-covered case is affected: an opaque or
+# wholly transparent pixel takes a different branch entirely (`PNG_RGB_INDEX` or the fixed
+# background index), neither of which reads by channel at all.
+[<1.6.56] interlaced-rgba8-16x16.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-16x16.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-16x16.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-16x16.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-1x8.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-3x5.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-5x3.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-7x7.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-8x1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] interlaced-rgba8-9x9.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] meta-rgba-sbit.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba16-filter1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter0.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter1.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter2.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter3.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x0a:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x0b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x0b:bg The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
+[<1.6.56] rgba8-filter4.png 0x8b The reference's own RGB-alpha classification reads the red channel for all three colour tests below libpng 1.6.56, a bug fixed there — see the header above.
