@@ -1,10 +1,14 @@
 # Equivalent of the official swift:6.3.3-bookworm image (swiftlang/swift-docker,
-# 6.3/debian/12/Dockerfile), inlined here and adapted to Debian 13 (trixie):
-#  - base image is debian:13 instead of debian:12
-#  - libstdc++-12-dev becomes libstdc++-14-dev, matching trixie's default GCC
+# 6.3/debian/12/Dockerfile), inlined here and adapted to Debian testing:
+#  - base image is debian:testing instead of debian:12, for the newest libpng
+#    testing carries (1.6.58 at the time of writing, versus bookworm's 1.6.39)
+#  - libstdc++-12-dev becomes libstdc++-14-dev, matching testing's default GCC;
+#    still its own package there, not yet folded into a newer default
 #  - the toolchain tarball stays the debian12 build; swift.org does not publish
-#    a debian13 toolchain, and the debian12 one runs fine on trixie's glibc
-FROM debian:13
+#    one for testing, and the debian12 build runs fine on testing's glibc
+#  - testing is a moving target: apt-cache policy libpng-dev / libstdc++-*-dev
+#    inside the image is the way to check what actually landed, not this comment
+FROM debian:testing
 
 LABEL maintainer="Swift Infrastructure <swift-infrastructure@forums.swift.org>"
 LABEL description="Docker Container for the Swift programming language"
