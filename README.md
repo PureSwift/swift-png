@@ -22,16 +22,16 @@ accessors all work: the palette and transparency, the colour and gamma chunks, t
 profile, the physical layout, the timestamp, the camera metadata, the high dynamic range
 signalling, and all three text chunks. Every read transform works — the expansions, the depth
 conversions, the channel rearrangements, the filler, the shift, gamma correction, the conversion
-to greyscale, compositing against a background, alpha mode, and quantisation. Reading through the
-convenience `png_image_*` shortcut is complete too: colour-mapped output works for a source with
-real coverage of its own, indexed, grey, grey-plus-alpha and RGB alike, coverage kept or removed,
-against a named background or not; and discarding colour from a file that also carries coverage is
-done by running the reference's own workaround for a bug in combining the two, since rgb-to-gray
-and compositing correct for gamma twice if the library is asked to do both in the same pass, and
-this does the blend itself once rgb-to-gray has already run instead.
-
-What is left is the same shortcut's write side: it refuses a client's own colour-mapped buffer as
-input outright, where the reference accepts one.
+to greyscale, compositing against a background, alpha mode, and quantisation. The convenience
+`png_image_*` shortcut is complete on both sides now, too. Reading: colour-mapped output works
+for a source with real coverage of its own, indexed, grey, grey-plus-alpha and RGB alike, coverage
+kept or removed, against a named background or not; and discarding colour from a file that also
+carries coverage is done by running the reference's own workaround for a bug in combining the two,
+since rgb-to-gray and compositing correct for gamma twice if the library is asked to do both in the
+same pass, and this does the blend itself once rgb-to-gray has already run instead. Writing: a
+client's own colour map becomes an indexed file's palette, and — wherever an entry is not fully
+opaque — its transparency table, built once per entry the way the reference's own
+`png_image_set_PLTE` builds it rather than once per pixel.
 
 ## Building
 
