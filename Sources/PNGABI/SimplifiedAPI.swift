@@ -200,6 +200,26 @@ public func swift_swift_image_finish_read(
             )
         }
 
+        // An RGB or RGBA source with real coverage of its own, colour asked back: the reference's
+        // fixed cube gains a hundred and twenty eight further entries a pixel's own coverage picks
+        // among — kept or removed, the layout and the row-by-row classification that reaches it
+        // are the same either way, since a per-pixel compose is exactly what this coarse
+        // classification exists to avoid; only what removed coverage settles into differs, and
+        // only when a named background does not already fall exactly on the cube's own grid does
+        // that difference need entries of its own rather than the ordinary background composite
+        // the opaque cube already uses.
+        if format.hasColor, !format.isLinear,
+            header.colorType == .rgb || header.colorType == .rgba, fileHasAlpha {
+            guard format.hasAlpha || background != nil else {
+                swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
+            }
+
+            return readRGBAlphaColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
         // An indexed source's own palette, corrected, and — now — composited where its own tRNS
         // table says an entry is not fully opaque: every row byte is already the index a client
         // wants, unchanged, so the only work coverage adds here is in the map, not the rows.  Kept
@@ -1365,6 +1385,21 @@ private func readRGBColormap(
 
     png_read_update_info(png_ptr, info_ptr)
 
+    return readRGBColormapRows(
+        image: image, png_ptr: png_ptr, buffer: buffer, rowStride: rowStride
+    )
+}
+
+/// Reads the opaque sRGB rows the cube's own index is a `div51` of — shared by the plain cube
+/// above and by a source with real coverage of its own, once that coverage has already been
+/// composited away by a named background that happened to land exactly on the cube's own grid,
+/// which leaves this the same problem: opaque sRGB triples in, a `div51` classification out.
+private func readRGBColormapRows(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32
+) -> Int32 {
     let width = Int(image.pointee.width)
     let height = Int(image.pointee.height)
     let stride = rowStride == 0 ? width : Int(rowStride)
@@ -1407,6 +1442,239 @@ private func readRGBColormap(
             let b = div51(raw[sourceRow + x * 3 + 2])
 
             destination[x] = (r * 6 + g) * 6 + b
+        }
+    }
+
+    png_read_end(png_ptr, nil)
+
+    return 1
+}
+
+/// Reads an RGB or RGBA source with real coverage of its own into the reference's cube, extended
+/// with a hundred and twenty eight further entries a pixel's own alpha picks among rather than a
+/// per-pixel blend, which is exactly the cost this coarse classification exists to avoid: one
+/// wholly transparent (or, removed, the named background), and twenty seven graded by rounding
+/// each channel to one of three levels — the top two bits, cheaply — for the pixels in between.
+///
+/// Kept or removed, that layout and the row-by-row classification reaching it are identical; only
+/// what a removed pixel's coverage settles into differs, and only when a named background does not
+/// already land exactly on the opaque cube's own grid does that difference need entries of its
+/// own, rather than the ordinary background composite the plain opaque cube already uses.
+private func readRGBAlphaColormap(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    background: png_const_colorp?,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let colormap else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let map = colormap.assumingMemoryBound(to: UInt8.self)
+
+    // Blue and red swap places for a client that asked for BGR, the same as the plain cube; the
+    // rows this reads stay in the file's own order regardless, since the classification below
+    // works from that order and only the map a found index points into need be reversed.
+    let redOffset = format.isReversed ? 2 : 0
+    let blueOffset = format.isReversed ? 0 : 2
+
+    // Three channels, not four, once the output has nowhere to put an alpha at all — matching an
+    // opaque cube's own entries, which are the ordinary three either way.
+    let channels = format.channels
+
+    func writeEntry(_ index: Int, red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
+        let base = index * channels
+
+        map[base + redOffset] = red
+        map[base + 1] = green
+        map[base + blueOffset] = blue
+
+        if format.hasAlpha {
+            map[base + 3] = alpha
+        }
+    }
+
+    for r in 0 ..< 6 {
+        for g in 0 ..< 6 {
+            for b in 0 ..< 6 {
+                writeEntry((r * 6 + g) * 6 + b, red: UInt8(r * 51), green: UInt8(g * 51),
+                    blue: UInt8(b * 51), alpha: 255)
+            }
+        }
+    }
+
+    // A named background exactly on the cube's own grid composites no differently from an opaque
+    // source: the ordinary background call already used for a plain cube leaves every pixel
+    // already at one of the two hundred sixteen colours the ramp above holds, so no entry beyond
+    // it, and no classification beyond `div51`, is ever needed. This is the one background value
+    // the reference's own default happens to land on exactly: black.
+    if !format.hasAlpha, let background {
+        let backgroundColour = (
+            red: UInt8(background.pointee.red),
+            green: UInt8(background.pointee.green),
+            blue: UInt8(background.pointee.blue)
+        )
+        let onGrid = div51(backgroundColour.red) &* 51 == backgroundColour.red
+            && div51(backgroundColour.green) &* 51 == backgroundColour.green
+            && div51(backgroundColour.blue) &* 51 == backgroundColour.blue
+
+        if onGrid {
+            image.pointee.colormap_entries = 216
+
+            png_set_expand(png_ptr)
+
+            let assumesLinearInput = header.bitDepth == 16
+                && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+            png_set_alpha_mode_fixed(
+                png_ptr, PNG_ALPHA_PNG,
+                assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+            )
+            png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
+            png_set_scale_16(png_ptr)
+
+            var colour = png_color_16()
+            colour.red = png_uint_16(backgroundColour.red)
+            colour.green = png_uint_16(backgroundColour.green)
+            colour.blue = png_uint_16(backgroundColour.blue)
+            colour.gray = colour.green
+
+            withUnsafePointer(to: &colour) {
+                png_set_background_fixed(png_ptr, $0, PNG_BACKGROUND_GAMMA_SCREEN, 0, 0)
+            }
+
+            png_read_update_info(png_ptr, info_ptr)
+
+            return readRGBColormapRows(
+                image: image, png_ptr: png_ptr, buffer: buffer, rowStride: rowStride
+            )
+        }
+    }
+
+    // The transparent or background entry, and the twenty seven a partly covered pixel rounds
+    // into.  One decodes and re-encodes each channel at the fixed weight the reference's own
+    // classification below assumes — half the file's own light, half whatever survives; the other
+    // needs no such correction; it is already opaque, unused by anything but its own colour.
+    func partial(_ component: UInt8, against backgroundComponent: UInt8) -> UInt8 {
+        let fileLight = UInt32(sRGBToLinear(component)) &* 128
+        let backgroundLight = UInt32(sRGBToLinear(backgroundComponent)) &* 127
+
+        return sRGBFromLinear(fileLight &+ backgroundLight)
+    }
+
+    let backgroundIndex = 216
+
+    if format.hasAlpha {
+        writeEntry(backgroundIndex, red: 255, green: 255, blue: 255, alpha: 0)
+    } else if let background {
+        writeEntry(
+            backgroundIndex, red: UInt8(background.pointee.red),
+            green: UInt8(background.pointee.green), blue: UInt8(background.pointee.blue), alpha: 0
+        )
+    }
+
+    var index = backgroundIndex + 1
+    let levels: [UInt8] = [0, 127, 255]
+
+    for r in levels {
+        for g in levels {
+            for b in levels {
+                if format.hasAlpha {
+                    writeEntry(index, red: r, green: g, blue: b, alpha: 128)
+                } else if let background {
+                    writeEntry(
+                        index,
+                        red: partial(r, against: UInt8(background.pointee.red)),
+                        green: partial(g, against: UInt8(background.pointee.green)),
+                        blue: partial(b, against: UInt8(background.pointee.blue)),
+                        alpha: 0
+                    )
+                }
+
+                index += 1
+            }
+        }
+    }
+
+    image.pointee.colormap_entries = png_uint_32(index)
+
+    // No compositing in the pipeline here, kept or removed: the classification below is what
+    // turns coverage into an index, the same reason readGAColormap needs none either — a
+    // per-pixel blend is exactly what the coarse buckets above exist to avoid paying for.
+    png_set_expand(png_ptr)
+
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
+    png_set_scale_16(png_ptr)
+
+    png_read_update_info(png_ptr, info_ptr)
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+    let stride = rowStride == 0 ? width : Int(rowStride)
+
+    guard abs(stride) >= width else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    let passes = png_set_interlace_handling(png_ptr)
+
+    // The whole file's own RGBA quadruples, not one row — the same reasoning as every other
+    // colour-mapped case that reads more than an index at a time: an interlaced pass only ever
+    // touches a scattered subset of an image's pixels.
+    let raw = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: width * height * 4)
+    defer { raw.deallocate() }
+
+    for _ in 0 ..< passes {
+        for y in 0 ..< height {
+            png_read_row(png_ptr, raw.baseAddress! + y * width * 4, nil)
+        }
+    }
+
+    for y in 0 ..< height {
+        let destination = first.advanced(by: stride * y).assumingMemoryBound(to: UInt8.self)
+        let sourceRow = y * width * 4
+
+        for x in 0 ..< width {
+            let r = raw[sourceRow + x * 4]
+            let g = raw[sourceRow + x * 4 + 1]
+            let b = raw[sourceRow + x * 4 + 2]
+            let alpha = raw[sourceRow + x * 4 + 3]
+
+            if alpha >= 196 {
+                destination[x] = (div51(r) &* 6 &+ div51(g)) &* 6 &+ div51(b)
+            } else if alpha < 64 {
+                destination[x] = UInt8(backgroundIndex)
+            } else {
+                // Each channel rounds to whichever of its own top two bits are set — `00`, `01` or
+                // `10`, and `11` — the same three levels `partial` above composed against, weighted
+                // nine and three and one the way the reference's own bit tests are.
+                var level = backgroundIndex + 1
+
+                if r & 0x80 != 0 { level += 9 }
+                if r & 0x40 != 0 { level += 9 }
+                if g & 0x80 != 0 { level += 3 }
+                if g & 0x40 != 0 { level += 3 }
+                if b & 0x80 != 0 { level += 1 }
+                if b & 0x40 != 0 { level += 1 }
+
+                destination[x] = UInt8(level)
+            }
         }
     }
 
