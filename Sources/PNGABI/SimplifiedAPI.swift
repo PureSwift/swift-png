@@ -1778,8 +1778,22 @@ public func swift_swift_image_write(
 
     let format = SimplifiedFormat(raw: image.pointee.format)
 
-    guard !format.isColormapped else {
-        swift_c_error(png_ptr, "png_image: colour-mapped input not implemented")
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+
+    guard width > 0, height > 0 else {
+        swift_c_error(png_ptr, "png_image: no image to write")
+    }
+
+    // A colour-mapped write has nothing in common with the rest of this function below: the file
+    // is indexed rather than sampled, which changes the header, needs a palette built from the
+    // client's own map rather than a per-row transform, and writes the client's index bytes
+    // through packing rather than any of the arrangements below.
+    if format.isColormapped {
+        return writeColormapImage(
+            image: image, png_ptr: png_ptr, info_ptr: info_ptr, width: width, height: height,
+            buffer: buffer, rowStride: row_stride, colormap: colormap
+        )
     }
 
     // Sixteen bit input is light, and a sixteen bit file can hold it as it stands: the file simply
@@ -1790,13 +1804,6 @@ public func swift_swift_image_write(
     // in and the format does not.  Both happen a row at a time below.
     let writes16Bit = format.isLinear && convert_to_8_bit == 0
     let narrows = format.isLinear && convert_to_8_bit != 0
-
-    let width = Int(image.pointee.width)
-    let height = Int(image.pointee.height)
-
-    guard width > 0, height > 0 else {
-        swift_c_error(png_ptr, "png_image: no image to write")
-    }
 
     // The colour type the format implies.  There is no choosing here: a client that said its pixels
     // have colour and coverage is describing exactly one of the format's types.
@@ -1941,6 +1948,249 @@ public func swift_swift_image_write(
     png_write_end(png_ptr, info_ptr)
 
     return 1
+}
+
+/// Writes a colour-mapped image: an indexed file, built from the client's own index rows and a
+/// palette taken from its colour map.  Kept apart from the rest of `swift_swift_image_write`
+/// because none of what that does applies here — a colour map is not itself samples the ordinary
+/// per-row arrangements have any business touching, and the file's own bit depth is chosen from
+/// how many entries the map holds rather than assumed to be eight or sixteen.
+private func writeColormapImage(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    width: Int,
+    height: Int,
+    buffer: UnsafeRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeRawPointer?
+) -> Int32 {
+    guard let colormap, image.pointee.colormap_entries > 0 else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    // Every entry, not the file's rows, is what decides the depth: an index the client's own rows
+    // never exceed still costs whatever a byte-packed map would cost to store if the map itself
+    // holds more entries than the rows ever name, since nothing here inspects the rows to find out
+    // any of them actually use the low ones.
+    let entries = min(Int(image.pointee.colormap_entries), 256)
+    let bitDepth: Int32 = entries > 16 ? 8 : (entries > 4 ? 4 : (entries > 2 ? 2 : 1))
+
+    png_set_IHDR(
+        png_ptr, info_ptr, png_uint_32(width), png_uint_32(height), bitDepth,
+        PNG_COLOR_TYPE_PALETTE, PNG_INTERLACE_NONE,
+        PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT
+    )
+
+    writeColormapPalette(
+        image: image, png_ptr: png_ptr, info_ptr: info_ptr, colormap: colormap, entries: entries
+    )
+
+    // What space the map's own colours are in, said in the file the same way the ordinary
+    // (non-colour-mapped) writer says it — a colour map is never sixteen bit light the way a plain
+    // row can be, so there is no gamma-of-one case to consider here.
+    let colorsIsSRGB = image.pointee.flags
+        & png_uint_32(PNG_IMAGE_FLAG_COLORSPACE_NOT_sRGB) == 0
+
+    if colorsIsSRGB {
+        png_set_sRGB(png_ptr, info_ptr, PNG_sRGB_INTENT_PERCEPTUAL)
+    } else {
+        png_set_gAMA_fixed(png_ptr, info_ptr, 45455)
+    }
+
+    png_write_info(png_ptr, info_ptr)
+
+    // The rows the client hands over are already byte-packed indices regardless of how few entries
+    // the map holds; a file with sixteen or fewer needs them packed down to the depth just chosen.
+    if entries <= 16 {
+        png_set_packing(png_ptr)
+    }
+
+    let stride = rowStride == 0 ? width : Int(rowStride)
+
+    guard abs(stride) >= width else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    for row in 0 ..< height {
+        let source = first.advanced(by: stride * row).assumingMemoryBound(to: UInt8.self)
+
+        png_write_row(png_ptr, source)
+    }
+
+    png_write_end(png_ptr, info_ptr)
+
+    return 1
+}
+
+/// Builds the palette, and the transparency table if any entry is not fully opaque, a
+/// colour-mapped write's indices point into — the reference's own `png_image_set_PLTE`.  A colour
+/// map is read here exactly once per entry rather than once per pixel, which is what makes the
+/// reference's own coarse per-map correction affordable in a way a per-pixel one would not be.
+private func writeColormapPalette(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    colormap: UnsafeRawPointer,
+    entries: Int
+) {
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let channels = format.channels
+
+    // AFIRST only ever reorders an alpha channel that exists; a map with none has nothing for it
+    // to move.
+    let alphaFirst = format.alphaFirst && format.hasAlpha
+    let blueOffset = format.isReversed ? 0 : 2
+    let redOffset = format.isReversed ? 2 : 0
+
+    var palette = [png_color](repeating: png_color(red: 0, green: 0, blue: 0), count: entries)
+    var trans = [UInt8](repeating: 255, count: entries)
+    var transparentCount = 0
+
+    if format.isLinear {
+        // Sixteen bit light, premultiplied the same way a row would be if the format carried
+        // coverage — undone here once per entry with the reference's own reciprocal, the same
+        // arithmetic `unpremultiply` uses for a row, collapsed to the single sRGB byte a palette
+        // entry holds rather than a corrected sixteen bit sample.
+        let source = colormap.assumingMemoryBound(to: UInt16.self)
+
+        for i in 0 ..< entries {
+            let base = i * channels
+
+            if !format.hasAlpha {
+                if format.hasColor {
+                    palette[i].red = sRGBFromLinear(255 &* UInt32(source[base + redOffset]))
+                    palette[i].green = sRGBFromLinear(255 &* UInt32(source[base + 1]))
+                    palette[i].blue = sRGBFromLinear(255 &* UInt32(source[base + blueOffset]))
+                } else {
+                    let value = sRGBFromLinear(255 &* UInt32(source[base]))
+                    palette[i].red = value
+                    palette[i].green = value
+                    palette[i].blue = value
+                }
+            } else {
+                let alpha = source[base + (alphaFirst ? 0 : channels - 1)]
+                let colourOffset = alphaFirst ? 1 : 0
+                let alphaByte = unpremultipliedAlphaByte(alpha)
+
+                trans[i] = alphaByte
+                if alphaByte < 255 { transparentCount = i + 1 }
+
+                // Rounded to eight bits and back before it decides whether a reciprocal is worth
+                // computing at all — the reference's own two-step shortcut, not an equivalent
+                // rewrite of it: an alpha whose eight bit rounding lands on zero or two hundred
+                // fifty five skips the reciprocal even where the raw sixteen bit value alone would
+                // not have, and every channel below has to see the same skip to agree with it.
+                let reciprocal: UInt32 = (alphaByte > 0 && alphaByte < 255)
+                    ? (((UInt32(0xFFFF) &* 0xFF) << 7) &+ UInt32(alpha >> 1)) / UInt32(alpha)
+                    : 0
+
+                if format.hasColor {
+                    palette[i].red = unpremultiply(
+                        source[base + colourOffset + redOffset], alpha: alpha, reciprocal: reciprocal
+                    )
+                    palette[i].green = unpremultiply(
+                        source[base + colourOffset + 1], alpha: alpha, reciprocal: reciprocal
+                    )
+                    palette[i].blue = unpremultiply(
+                        source[base + colourOffset + blueOffset], alpha: alpha, reciprocal: reciprocal
+                    )
+                } else {
+                    let value = unpremultiply(
+                        source[base + colourOffset], alpha: alpha, reciprocal: reciprocal
+                    )
+                    palette[i].red = value
+                    palette[i].green = value
+                    palette[i].blue = value
+                }
+            }
+        }
+    } else {
+        let source = colormap.assumingMemoryBound(to: UInt8.self)
+
+        for i in 0 ..< entries {
+            let base = i * channels
+
+            switch channels {
+            case 4:
+                let alpha = source[base + (alphaFirst ? 0 : 3)]
+                trans[i] = alpha
+                if alpha < 255 { transparentCount = i + 1 }
+
+                fallthrough
+
+            case 3:
+                let colourOffset = alphaFirst ? 1 : 0
+
+                palette[i].red = source[base + colourOffset + redOffset]
+                palette[i].green = source[base + colourOffset + 1]
+                palette[i].blue = source[base + colourOffset + blueOffset]
+
+            case 2:
+                let alpha = source[base + (alphaFirst ? 0 : 1)]
+                trans[i] = alpha
+                if alpha < 255 { transparentCount = i + 1 }
+
+                fallthrough
+
+            case 1:
+                let value = source[base + (channels == 2 && alphaFirst ? 1 : 0)]
+                palette[i].red = value
+                palette[i].green = value
+                palette[i].blue = value
+
+            default:
+                break
+            }
+        }
+    }
+
+    palette.withUnsafeBufferPointer {
+        png_set_PLTE(png_ptr, info_ptr, $0.baseAddress, Int32(entries))
+    }
+
+    if transparentCount > 0 {
+        trans.withUnsafeBufferPointer {
+            png_set_tRNS(png_ptr, info_ptr, $0.baseAddress, Int32(transparentCount), nil)
+        }
+    }
+}
+
+/// The eight bit sRGB byte a sixteen bit premultiplied sample undoes to, one channel of one
+/// colour-map entry at a time.  Full intensity once a sample cannot be recovered — at or above its
+/// own coverage, the reference's own rule wherever a premultiplied sample is undone — and rounded
+/// rather than computed exactly below the level an eight bit result could ever show it at.
+private func unpremultiply(_ component: UInt16, alpha: UInt16, reciprocal: UInt32) -> UInt8 {
+    guard component < alpha, alpha >= 128 else {
+        return 255
+    }
+
+    guard component > 0 else {
+        return 0
+    }
+
+    if alpha < 65407 {
+        // Scaled by 255*65535 and then seven bits further, matching the reciprocal's own scale,
+        // rounded to the nearest before the final shift back down to that.  The reciprocal itself
+        // is the caller's: computed once per entry rather than once per channel, and skipped
+        // (zero) wherever the entry's own eight bit alpha said it was not worth it — a decision
+        // every channel here has to see the same way to agree with the reference.
+        let scaled = (UInt32(component) &* reciprocal &+ 64) >> 7
+
+        return sRGBFromLinear(scaled)
+    }
+
+    return sRGBFromLinear(UInt32(component) &* 255)
+}
+
+/// The eight bit alpha a colour-map entry's own coverage rounds to — `PNG_DIV257`, the reference's
+/// own reciprocal rounding of a sixteen bit value down to eight, not a plain shift.
+private func unpremultipliedAlphaByte(_ alpha: UInt16) -> UInt8 {
+    UInt8((UInt32(alpha) &+ 128) / 257)
 }
 
 /// Takes the coverage back out of the colour, which is what the format stores.
