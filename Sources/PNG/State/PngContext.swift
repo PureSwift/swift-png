@@ -453,6 +453,17 @@ public final class PngContext {
         // the client's accessors, this one for the reading API.
         self.header = info.header
         self.headerInfo = info
+
+        // A file that named its own gamma is believed over any default, and has to be recorded
+        // before returning to the client — a client is free to call `png_set_alpha_mode` right
+        // here, before ever calling `png_read_update_info`, and that call also defaults this same
+        // field whenever it finds it unset. Recording the real value first is what keeps a default
+        // from a client's own gamma-arrangement call from outrunning the file's own chunk and
+        // winning by arriving second — updateInfo's later check of the same condition exists for a
+        // client that never calls `png_set_alpha_mode` at all, not as the only place this can run.
+        if self.gamma.fileGamma == 0, info.isValid(InfoStore.Valid.gama) {
+            self.gamma.fileGamma = info.gamma
+        }
     }
 
     public func startReadImage() throws(Diagnostic) {
