@@ -267,7 +267,14 @@ public func swift_swift_image_finish_read(
     // into premultiplied light, so there is nothing left for a background to name; the reference does
     // not look at one there either.  Only the eight bit case needs one supplied — or, now, nothing at
     // all: naming none is itself an answer, the client's own buffer, and that case is built below
-    // rather than refused.  Not for an indexed source, which stays its own, still-refused case.
+    // rather than refused.
+    //
+    // Not for an indexed source, and this one is not the same free extension every other colour-
+    // mapped case in this file turned out to be: tried once, against the corpus rather than by
+    // inspection, an indexed source through this exact path produced real wrong bytes, not the
+    // refusal message this comment used to describe — png_set_expand alone was not the whole story
+    // the way it was everywhere else, and finding what else differs is its own piece of work rather
+    // than a small extension of this one.  Left refused, correctly, rather than shipped wrong.
     if !format.hasAlpha, fileHasAlpha, background == nil, !format.isLinear {
         guard !header.colorType.isIndexed,
             format.hasColor == header.colorType.hasColor || !format.hasColor else {
@@ -319,13 +326,29 @@ public func swift_swift_image_finish_read(
     // caller of this library reaches for.  Kept alongside coverage the file already has and at
     // eight bits, that is all it is: nothing is being composited away or premultiplied, so the
     // double gamma correction the reference works around below has nothing to trip over — this
-    // combination reaches the ordinary request below rather than being refused.  Sixteen bits is
-    // not the same: there the alpha-mode step premultiplies unconditionally, whether or not the
-    // channel survives to the output, and premultiplying is exactly the operation rgb-to-gray
-    // cannot share a pass with — so linear output stays refused alongside removing the channel.
+    // combination reaches the ordinary request below rather than being refused.
     if !format.hasColor, (header.colorType.hasColor || header.colorType.isIndexed), fileHasAlpha,
-        (!format.hasAlpha || format.isLinear) {
+        !format.hasAlpha, !format.isLinear {
         swift_c_error(png_ptr, "png_image: discarding colour and alpha together not implemented")
+    }
+
+    // Sixteen bits is not the same as the eight bit cases above, kept or removed: there the
+    // alpha-mode step premultiplies unconditionally once the file has coverage, whether or not the
+    // channel survives to the output, and premultiplying is exactly the operation rgb-to-gray
+    // cannot share a pass with — the reference works around this the same way it works around
+    // discarding colour and coverage together at eight bits, by leaving the library's own
+    // premultiply out of the pipeline and doing it once rgb-to-gray has already run.  There is no
+    // background to ask for either way: sixteen bit output holds light, and light with no coverage
+    // at all is black, not a colour a client gets to pick.
+    if !format.hasColor, (header.colorType.hasColor || header.colorType.isIndexed), fileHasAlpha,
+        format.isLinear {
+        let assumesLinearInput = header.bitDepth == 16
+            && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+        return readColorReducedPremultiplied(
+            image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header, format: format,
+            assumesLinearInput: assumesLinearInput, buffer: buffer, rowStride: row_stride
+        )
     }
 
     // What a file with no gAMA of its own is assumed to have been encoded with.  A sixteen bit file
@@ -1123,6 +1146,115 @@ private func readColorReducedComposite(
                 let blended = fileLight &+ baseLight &* UInt32(255 - alpha)
 
                 destination[x] = sRGBFromLinear(blended)
+            }
+        }
+    }
+
+    png_read_end(png_ptr, nil)
+
+    return 1
+}
+
+/// Reads a file with coverage of its own and colour it will not keep, into a sixteen bit result.
+/// Sixteen bits is not the eight bit case above with a wider sample: there the alpha-mode step
+/// premultiplies unconditionally once the file has coverage, whether or not the channel survives
+/// to the output, and premultiplying is exactly the operation rgb-to-gray cannot share a pass with
+/// — the same double gamma correction bug that discarding colour at eight bits works around by
+/// compositing separately.  The reference works around this one the same way it works around that
+/// one: by leaving the library's own premultiply out of the pipeline entirely and doing it here,
+/// once rgb-to-gray has already produced plain, unmultiplied grey-plus-alpha rows.  There is
+/// nothing to name a background for — sixteen bit output holds light, and light with no coverage
+/// at all is black, not a colour a client gets to pick.
+private func readColorReducedPremultiplied(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    format: SimplifiedFormat,
+    assumesLinearInput: Bool,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32
+) -> Int32 {
+    png_set_expand(png_ptr)
+    png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
+
+    // The two-call sequence every other coverage-aware reader here needs, and for the same reason:
+    // the first states what a file with no gAMA of its own is assumed to have been encoded with.
+    // The second asks for sixteen bit linear output and PNG_ALPHA_PNG rather than STANDARD — the
+    // premultiply happens below instead, which is the whole point of being here.
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_FP_1))
+    png_set_expand_16(png_ptr)
+
+    if SimplifiedFormat.isLittleEndian {
+        png_set_swap(png_ptr)
+    }
+
+    png_read_update_info(png_ptr, info_ptr)
+
+    let width = Int(image.pointee.width)
+    let height = Int(image.pointee.height)
+    let outputChannels = format.hasAlpha ? 2 : 1
+    let minimum = width * outputChannels * 2
+    let stride = rowStride == 0 ? minimum : Int(rowStride) * 2
+
+    guard abs(stride) >= minimum else {
+        swift_c_error(png_ptr, "png_image: row stride too small")
+    }
+
+    let first = stride < 0
+        ? buffer.advanced(by: -stride * (height - 1))
+        : buffer
+
+    let passes = png_set_interlace_handling(png_ptr)
+    let sourceChannels = 2 // grey, alpha, from the file's own byte order once swapped above
+
+    // The whole file, not one row: an interlaced pass only touches a scattered subset of an
+    // image's pixels — see the same reasoning in readComposite.
+    let raw = UnsafeMutableBufferPointer<UInt16>.allocate(capacity: width * height * sourceChannels)
+    defer { raw.deallocate() }
+
+    raw.withMemoryRebound(to: UInt8.self) { bytes in
+        for _ in 0 ..< passes {
+            for y in 0 ..< height {
+                png_read_row(png_ptr, bytes.baseAddress! + y * width * sourceChannels * 2, nil)
+            }
+        }
+    }
+
+    // Alpha first swaps the pair the same way it swaps a kept channel anywhere else, but the file
+    // itself is never asked to reorder — there is nothing here for png_set_swap_alpha to reorder
+    // before this function ever sees the row, so the placement is entirely this loop's business.
+    let alphaFirst = format.hasAlpha && format.alphaFirst
+
+    for y in 0 ..< height {
+        let destination = first.advanced(by: stride * y).assumingMemoryBound(to: UInt16.self)
+        let sourceRow = y * width * sourceChannels
+
+        for x in 0 ..< width {
+            let component = raw[sourceRow + x * sourceChannels]
+            let alpha = raw[sourceRow + x * sourceChannels + 1]
+
+            let premultiplied: UInt16
+
+            if alpha == 0 {
+                premultiplied = 0
+            } else if alpha < 65535 {
+                premultiplied = UInt16((UInt32(component) &* UInt32(alpha) &+ 32767) / 65535)
+            } else {
+                premultiplied = component
+            }
+
+            let base = x * outputChannels
+
+            if format.hasAlpha {
+                destination[base + (alphaFirst ? 1 : 0)] = premultiplied
+                destination[base + (alphaFirst ? 0 : 1)] = alpha
+            } else {
+                destination[base] = premultiplied
             }
         }
     }
