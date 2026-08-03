@@ -149,6 +149,32 @@ public func swift_swift_image_finish_read(
             )
         }
 
+        // Coverage removed rather than kept collapses back to an ordinary grey ramp — a named
+        // background is a single fixed colour, not the finer grading real coverage needs a map
+        // for, so there is no reason to build the twenty-six-entry layout above only to blend
+        // every pixel down to whichever one the background happens to match.  Only when the
+        // output wants colour *and* the named background is not itself a shade of grey does that
+        // grading become unavoidable — the background then has to survive as three channels
+        // through a blend the map's own index cannot carry, which is the one sub-case still
+        // refused here.
+        if header.colorType == .grayscaleAlpha, !format.hasAlpha, !format.isLinear {
+            guard let background else {
+                swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
+            }
+
+            let backgroundIsGrey = background.pointee.red == background.pointee.green
+                && background.pointee.green == background.pointee.blue
+
+            guard !format.hasColor || backgroundIsGrey else {
+                swift_c_error(png_ptr, "png_image: colour-mapped output not implemented")
+            }
+
+            return readGrayAlphaComposedColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
         // Discarding an RGB source's colour is ordinary averaging, safe here for the same reason
         // it is for the ordinary (non-colour-mapped) reader — nothing about it needs the
         // gamma-aware compositing that combining it with real coverage would, and this file has
@@ -1213,6 +1239,75 @@ private func readGAColormap(
     png_read_end(png_ptr, nil)
 
     return 1
+}
+
+/// Reads a grey-plus-alpha file into a colour map with its coverage already removed, blended
+/// against a named background the library itself composites — a single fixed colour, not the
+/// finer grading real coverage kept in the map would need, so the ordinary background-compositing
+/// call already used for a source with no colour change at all does the whole job here too.  The
+/// map is the identity: `png_set_background_fixed` leaves the row already in the sRGB the map
+/// holds, the same reason `readColorReducedGrayColormap`'s map next door is.
+private func readGrayAlphaComposedColormap(
+    image: png_imagep,
+    png_ptr: png_structrp,
+    info_ptr: png_inforp,
+    header: Header,
+    background: png_const_colorp,
+    buffer: UnsafeMutableRawPointer,
+    rowStride: png_int_32,
+    colormap: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let colormap else {
+        swift_c_error(png_ptr, "png_image: no color-map for color-mapped image")
+    }
+
+    let format = SimplifiedFormat(raw: image.pointee.format)
+    let channels = format.channels
+    let map = colormap.assumingMemoryBound(to: UInt8.self)
+
+    for i in 0 ..< 256 {
+        let base = i * channels
+        let value = UInt8(i)
+
+        if format.hasColor {
+            map[base] = value
+            map[base + 1] = value
+            map[base + 2] = value
+        } else {
+            map[base] = value
+        }
+    }
+
+    image.pointee.colormap_entries = 256
+
+    png_set_expand(png_ptr)
+
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
+    png_set_scale_16(png_ptr)
+
+    // Grey output takes the green channel, the API's own rule — green is most of what a viewer
+    // sees as brightness, and it is what the map's own grey ramp is built in terms of either way.
+    var colour = png_color_16()
+    colour.red = png_uint_16(background.pointee.red)
+    colour.green = png_uint_16(background.pointee.green)
+    colour.blue = png_uint_16(background.pointee.blue)
+    colour.gray = colour.green
+
+    withUnsafePointer(to: &colour) {
+        png_set_background_fixed(png_ptr, $0, PNG_BACKGROUND_GAMMA_SCREEN, 0, 0)
+    }
+
+    return readIndexRows(
+        image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+        buffer: buffer, rowStride: rowStride
+    )
 }
 
 /// Reads an opaque RGB or RGBA file into the reference's own fixed colour map: every combination
