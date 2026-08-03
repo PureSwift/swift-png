@@ -24,14 +24,18 @@ signalling, and all three text chunks. Every read transform works — the expans
 conversions, the channel rearrangements, the filler, the shift, gamma correction, the conversion
 to greyscale, compositing against a background, alpha mode, and quantisation.
 
-What is left is one of the convenience `png_image_*` API's shortcuts, on the reading side:
-colour-mapped output for a source with real coverage of its own. It refuses outright and says why,
-rather than producing an answer that is nearly right; the general read and write API this shortcut
-sits in front of has no such gap, and neither does the rest of the shortcuts — including, now,
-discarding colour from a file that also carries coverage, which the ordinary reader does by
-running the reference's own workaround for a bug in combining the two: rgb-to-gray and compositing
-correct for gamma twice if the library is asked to do both in the same pass, so this does the
-blend itself once rgb-to-gray has already run, the same as the reference does.
+What is left is a single narrow corner of one of the convenience `png_image_*` API's shortcuts, on
+the reading side: colour-mapped output for a grey-plus-alpha source, asking for colour back while
+removing coverage against a background that is not itself a shade of grey. It refuses outright and
+says why, rather than producing an answer that is nearly right; the general read and write API
+this shortcut sits in front of has no such gap, and neither does the rest of the shortcuts —
+colour-mapped output for a source with real coverage of its own now works throughout, indexed,
+grey, grey-plus-alpha and RGB alike, coverage kept or removed, against a named background or not.
+Discarding colour from a file that also carries coverage is likewise no longer a gap on the
+ordinary reading side, done by running the reference's own workaround for a bug in combining the
+two: rgb-to-gray and compositing correct for gamma twice if the library is asked to do both in the
+same pass, so this does the blend itself once rgb-to-gray has already run, the same as the
+reference does.
 
 ## Building
 
