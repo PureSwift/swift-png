@@ -145,18 +145,18 @@ public func swift_swift_image_finish_read(
         if header.colorType == .grayscaleAlpha, format.hasAlpha, !format.isLinear {
             return readGAColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
-                buffer: buffer, rowStride: row_stride, colormap: colormap
+                background: nil, buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
 
-        // Coverage removed rather than kept collapses back to an ordinary grey ramp — a named
-        // background is a single fixed colour, not the finer grading real coverage needs a map
-        // for, so there is no reason to build the twenty-six-entry layout above only to blend
-        // every pixel down to whichever one the background happens to match.  Only when the
-        // output wants colour *and* the named background is not itself a shade of grey does that
-        // grading become unavoidable — the background then has to survive as three channels
-        // through a blend the map's own index cannot carry, which is the one sub-case still
-        // refused here.
+        // Coverage removed rather than kept collapses back to an ordinary grey ramp whenever a
+        // named background is a single fixed colour is all a blend needs to settle into — no
+        // reason to build the finer twenty-six-entry layout above only to have every pixel land on
+        // whichever one grey level the background happens to match.  Only when the output wants
+        // colour *and* the named background is not itself a shade of grey does a settled-into
+        // colour vary by more than one channel, and the finer layout — every entry now opaque,
+        // holding a real blend rather than the raw grey a kept alpha channel leaves ungraded — is
+        // what a per-pixel compose would otherwise cost.
         if header.colorType == .grayscaleAlpha, !format.hasAlpha, !format.isLinear {
             guard let background else {
                 swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
@@ -165,11 +165,14 @@ public func swift_swift_image_finish_read(
             let backgroundIsGrey = background.pointee.red == background.pointee.green
                 && background.pointee.green == background.pointee.blue
 
-            guard !format.hasColor || backgroundIsGrey else {
-                swift_c_error(png_ptr, "png_image: colour-mapped output not implemented")
+            if !format.hasColor || backgroundIsGrey {
+                return readGrayAlphaComposedColormap(
+                    image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                    background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
+                )
             }
 
-            return readGrayAlphaComposedColormap(
+            return readGAColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
                 background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
             )
@@ -1141,19 +1144,32 @@ private func div51(_ value: UInt8) -> UInt8 {
     UInt8((UInt32(value) &* 5 &+ 130) >> 8)
 }
 
-/// Reads a grey-plus-alpha file into a colour map that keeps its coverage rather than the file's
-/// own bytes.  Two independent bytes cannot be a map index the way one channel can — every
-/// combination of grey and alpha would need its own entry, sixty five thousand of them — so the
-/// reference reduces to two hundred and thirty one graded levels of an opaque grey, one wholly
-/// transparent entry, and twenty four partially-covered entries split six ways by grey and four
-/// ways by alpha; which entry a pixel becomes is a classification into that layout, not a
+/// Reads a grey-plus-alpha file into a colour map graded by coverage rather than the file's own
+/// bytes.  Two independent bytes cannot be a map index the way one channel can — every combination
+/// of grey and alpha would need its own entry, sixty five thousand of them — so the reference
+/// reduces to two hundred and thirty one graded levels of an opaque grey, one entry for the pixels
+/// with no coverage at all, and twenty four more split six ways by grey and four ways by alpha for
+/// the ones in between; which entry a pixel becomes is a classification into that layout, not a
 /// correction of a byte already there, so the rows need their own pass the other colour-mapped
 /// cases do not.
+///
+/// Kept or removed, that layout and the classification reaching it are identical — only what the
+/// one entry and the twenty four settle into differs.  Coverage kept, colour was never asked for
+/// even when the client wants it back, since every entry only ever repeats one grey level; the one
+/// entry is wholly transparent and the twenty four hold the file's own grey raised to each of four
+/// coarse alpha levels, unblended, since nothing has been composited yet.  Removed, colour is what
+/// the client is asking for — a grey pixel blended against a background that is not itself a shade
+/// of grey has a real colour, not a level of one — so the one entry becomes the background at full
+/// precision and the twenty four become that same blend, done once per entry rather than once per
+/// pixel.  Nothing else reaches this second half: a source keeping its alpha, or losing it against
+/// a background that is grey (or an output that has nowhere to put colour anyway), settles it more
+/// simply — see the two callers.
 private func readGAColormap(
     image: png_imagep,
     png_ptr: png_structrp,
     info_ptr: png_inforp,
     header: Header,
+    background: png_const_colorp?,
     buffer: UnsafeMutableRawPointer,
     rowStride: png_int_32,
     colormap: UnsafeMutableRawPointer?
@@ -1166,31 +1182,81 @@ private func readGAColormap(
     let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
 
-    func writeEntry(_ index: Int, grey: UInt8, alpha: UInt8) {
+    func writeEntry(_ index: Int, red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
         let base = index * channels
 
         if format.hasColor {
-            map[base] = grey
-            map[base + 1] = grey
-            map[base + 2] = grey
+            map[base] = red
+            map[base + 1] = green
+            map[base + 2] = blue
         } else {
-            map[base] = grey
+            map[base] = red
         }
 
-        map[base + channels - 1] = alpha
+        if format.hasAlpha {
+            map[base + channels - 1] = alpha
+        }
     }
 
     for i in 0 ..< 231 {
-        writeEntry(i, grey: UInt8((i * 256 + 115) / 231), alpha: 255)
+        let grey = UInt8((i * 256 + 115) / 231)
+        writeEntry(i, red: grey, green: grey, blue: grey, alpha: 255)
     }
 
-    writeEntry(231, grey: 255, alpha: 0)
+    if let background {
+        // Removed against a background with real colour of its own: the background at full
+        // precision stands in for a pixel with no coverage, and every graded level blends the
+        // file's own light against it — decoded once per channel here, not once per pixel, since
+        // there are only six grey levels and four alpha levels to ever ask for.
+        let backgroundColour = (
+            red: UInt8(background.pointee.red),
+            green: UInt8(background.pointee.green),
+            blue: UInt8(background.pointee.blue)
+        )
 
-    var index = 232
-    for alphaLevel in 1 ..< 5 {
-        for greyLevel in 0 ..< 6 {
-            writeEntry(index, grey: UInt8(greyLevel * 51), alpha: UInt8(alphaLevel * 51))
-            index += 1
+        writeEntry(
+            231, red: backgroundColour.red, green: backgroundColour.green,
+            blue: backgroundColour.blue, alpha: 255
+        )
+
+        let backgroundLight = (
+            red: UInt32(sRGBToLinear(backgroundColour.red)),
+            green: UInt32(sRGBToLinear(backgroundColour.green)),
+            blue: UInt32(sRGBToLinear(backgroundColour.blue))
+        )
+
+        func blend(_ grey: UInt8, alpha: UInt32, against backgroundLight: UInt32) -> UInt8 {
+            let greyLight = UInt32(sRGBToLinear(grey)) &* alpha
+            return sRGBFromLinear(greyLight &+ backgroundLight &* (255 &- alpha))
+        }
+
+        var index = 232
+        for alphaLevel in 1 ..< 5 {
+            let alpha = UInt32(alphaLevel * 51)
+
+            for greyLevel in 0 ..< 6 {
+                let grey = UInt8(greyLevel * 51)
+
+                writeEntry(
+                    index,
+                    red: blend(grey, alpha: alpha, against: backgroundLight.red),
+                    green: blend(grey, alpha: alpha, against: backgroundLight.green),
+                    blue: blend(grey, alpha: alpha, against: backgroundLight.blue),
+                    alpha: 255
+                )
+                index += 1
+            }
+        }
+    } else {
+        writeEntry(231, red: 255, green: 255, blue: 255, alpha: 0)
+
+        var index = 232
+        for alphaLevel in 1 ..< 5 {
+            for greyLevel in 0 ..< 6 {
+                let grey = UInt8(greyLevel * 51)
+                writeEntry(index, red: grey, green: grey, blue: grey, alpha: UInt8(alphaLevel * 51))
+                index += 1
+            }
         }
     }
 
