@@ -160,14 +160,24 @@ public func swift_swift_image_finish_read(
             )
         }
 
-        // Coverage in the output but not the source is still fine here, unlike the other two
-        // cases: every entry is opaque either way, so an alpha channel the client asked for is
-        // just a constant 255 alongside the colour rather than something that has to be composed.
-        if format.hasColor, !format.isLinear, header.colorType.isIndexed, !fileHasAlpha {
+        // An indexed source's own palette, corrected, and — now — composited where its own tRNS
+        // table says an entry is not fully opaque: every row byte is already the index a client
+        // wants, unchanged, so the only work coverage adds here is in the map, not the rows.  Kept
+        // in the output alongside the source's own is the easy half, the same constant-255 case as
+        // an opaque source; removed needs a colour to blend against, and unlike the ordinary
+        // reader there is no client buffer for a colour-mapped read to fall back on — a fixed map
+        // cannot remember what pixel it will end up written over — so a background is required
+        // outright rather than merely preferred.
+        if format.hasColor, !format.isLinear, header.colorType.isIndexed,
+            format.hasAlpha || background != nil || !fileHasAlpha {
             return readPaletteColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
-                buffer: buffer, rowStride: row_stride, colormap: colormap
+                background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
             )
+        }
+
+        if header.colorType.isIndexed, format.hasColor, !format.isLinear {
+            swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
         }
 
         swift_c_error(png_ptr, "png_image: colour-mapped output not implemented")
@@ -525,6 +535,20 @@ private struct FileGammaCorrection {
             return sRGBFromLinear(UInt32(linear) &* 255)
         }
     }
+
+    /// Decodes one eight bit sample to sixteen bit linear light, the step `correct(_:)` folds into
+    /// one byte for the common case of an opaque entry.  Compositing needs the light itself rather
+    /// than the byte it eventually rounds to, since blending is only meaningful there — so this is
+    /// the same three-way correction, stopped one step short.
+    func toLinear16(_ value: UInt32) -> UInt32 {
+        if self.isSRGB {
+            return UInt32(sRGBToLinear(UInt8(value)))
+        } else if self.isLinear {
+            return value &* 257
+        } else {
+            return UInt32(gamma16BitCorrect(value &* 257, exponent: self.toLinearExponent))
+        }
+    }
 }
 
 private func readGrayColormap(
@@ -645,11 +669,11 @@ private func readColorReducedGrayColormap(
     )
 }
 
-/// Reads an opaque indexed file into a colour map of its own — literally its palette, corrected
-/// for gamma, with an index of a client's own choosing.  The narrowest of the three colour-mapped
-/// cases built so far, because a file that is already colour-mapped needs no quantizing at all:
-/// its samples already are the indices a client wants, unchanged, into a map that is a one-to-one
-/// correction of the one it already had.
+/// Reads an indexed file into a colour map of its own — literally its palette, corrected for
+/// gamma and, where the file's own tRNS table says an entry is not fully opaque, for coverage
+/// too.  The narrowest of the colour-mapped cases, because a file that is already colour-mapped
+/// needs no quantizing at all: its samples already are the indices a client wants, unchanged,
+/// into a map that is a one-to-one correction of the one it already had.
 ///
 /// Every entry, not the file's whole palette: a palette may hold more entries than any row
 /// actually names, but the reference corrects and hands back every one up to two hundred and
@@ -661,6 +685,7 @@ private func readPaletteColormap(
     info_ptr: png_inforp,
     info: InfoStore,
     header: Header,
+    background: png_const_colorp?,
     buffer: UnsafeMutableRawPointer,
     rowStride: png_int_32,
     colormap: UnsafeMutableRawPointer?
@@ -681,18 +706,49 @@ private func readPaletteColormap(
     let redOffset = format.isReversed ? 2 : 0
     let blueOffset = format.isReversed ? 0 : 2
 
+    let trans = info.transparentAlpha.elements
+    let transCount = info.transparentCount
+    let backgroundRGB = background.map {
+        (r: UInt8($0.pointee.red), g: UInt8($0.pointee.green), b: UInt8($0.pointee.blue))
+    }
+
+    // One sample composited against a named background, in the light the file's own gamma
+    // decodes it to rather than in the encoded bytes — the same rule readComposite and
+    // readColorReducedComposite follow, reached here through the palette instead of a row.
+    func blend(_ sample: UInt8, alpha: UInt8, against backgroundByte: UInt8) -> UInt8 {
+        let fileLight = correction.toLinear16(UInt32(sample)) &* UInt32(alpha)
+        let backgroundLight = UInt32(sRGBToLinear(backgroundByte)) &* UInt32(255 - alpha)
+
+        return sRGBFromLinear(fileLight &+ backgroundLight)
+    }
+
     for i in 0 ..< entries {
         let source = info.palette.elements[i]
         let base = i * channels
+        let alpha: UInt8 = i < transCount ? trans[i] : 255
 
-        map[base + redOffset] = correction.correct(UInt32(source.red))
-        map[base + 1] = correction.correct(UInt32(source.green))
-        map[base + blueOffset] = correction.correct(UInt32(source.blue))
-
-        // Opaque: the caller has already refused any file with a tRNS chunk, so there is no
-        // coverage to report and every entry that asked for an alpha channel gets full alpha.
         if format.hasAlpha {
-            map[base + 3] = 255
+            // Coverage kept rather than removed: the file's own alpha for this entry travels
+            // with its corrected colour, unchanged, the same as an opaque entry's constant 255
+            // below — nothing here is composited away.
+            map[base + redOffset] = correction.correct(UInt32(source.red))
+            map[base + 1] = correction.correct(UInt32(source.green))
+            map[base + blueOffset] = correction.correct(UInt32(source.blue))
+            map[base + channels - 1] = alpha
+        } else if alpha == 0, let backgroundRGB {
+            // Wholly transparent: nothing of the file's own colour survives, so the entry is the
+            // background outright rather than a blend of it with anything.
+            map[base + redOffset] = backgroundRGB.r
+            map[base + 1] = backgroundRGB.g
+            map[base + blueOffset] = backgroundRGB.b
+        } else if alpha < 255, let backgroundRGB {
+            map[base + redOffset] = blend(source.red, alpha: alpha, against: backgroundRGB.r)
+            map[base + 1] = blend(source.green, alpha: alpha, against: backgroundRGB.g)
+            map[base + blueOffset] = blend(source.blue, alpha: alpha, against: backgroundRGB.b)
+        } else {
+            map[base + redOffset] = correction.correct(UInt32(source.red))
+            map[base + 1] = correction.correct(UInt32(source.green))
+            map[base + blueOffset] = correction.correct(UInt32(source.blue))
         }
     }
 
