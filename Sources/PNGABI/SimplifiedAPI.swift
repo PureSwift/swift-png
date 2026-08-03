@@ -782,7 +782,10 @@ private func readColorReducedGrayColormap(
 
     // What a file with no gAMA of its own is assumed to have been encoded with — the same default
     // requestConversion seeds for the ordinary reader, needed here for the same reason: rgb-to-gray's
-    // decode step has to know what curve the samples it is decoding are in.
+    // decode step has to know what curve the samples it is decoding are in.  The second call is the
+    // real request, the same two-call sequence every other coverage-aware reader in this file needs:
+    // the output here is eight bit sRGB regardless of what the source turned out to be assumed as,
+    // and only a second call after the seed settles that rather than leaving the seed as the answer.
     let assumesLinearInput = header.bitDepth == 16
         && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
 
@@ -791,8 +794,15 @@ private func readColorReducedGrayColormap(
         PNG_ALPHA_PNG,
         assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
     )
+    png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
     png_set_expand(png_ptr)
     png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
+
+    // The output here is always eight bits, but a sixteen bit source's samples are not narrowed by
+    // rgb-to-gray itself — without this, a row twice the width readIndexRows expects goes into a
+    // buffer sized for the narrower one, which said nothing on every allocator that happened not to
+    // notice and corrupted the heap on the one that did.
+    png_set_scale_16(png_ptr)
 
     return readIndexRows(
         image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
