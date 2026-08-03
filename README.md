@@ -31,7 +31,18 @@ since rgb-to-gray and compositing correct for gamma twice if the library is aske
 same pass, and this does the blend itself once rgb-to-gray has already run instead. Writing: a
 client's own colour map becomes an indexed file's palette, and — wherever an entry is not fully
 opaque — its transparency table, built once per entry the way the reference's own
-`png_image_set_PLTE` builds it rather than once per pixel.
+`png_image_set_PLTE` builds it rather than once per pixel. Discarding colour and coverage together
+now works at sixteen bits as well as eight, the same workaround applied a second time: nothing
+there composites in the library either, so there is no background to ask for and no bug to trip
+over.
+
+What is left is one narrow corner: an indexed source, asked to remove its coverage onto the
+client's own buffer with no background named. Every other colour type reaches this through
+`PNG_ALPHA_OPTIMIZED`, and an indexed one should too once expanded — but tried against the
+corpus rather than assumed, it produces real wrong bytes, because the optimized alpha arrangement
+is a step the transform pipeline (`TransformProgram.swift`) never adds for an indexed image at
+all, only for `PNG_ALPHA_STANDARD` and `PNG_ALPHA_BROKEN`. Left refused rather than shipped wrong;
+closing it is engine work, not a small extension of the reading shortcut around it.
 
 ## Building
 
