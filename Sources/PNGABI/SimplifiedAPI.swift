@@ -126,12 +126,14 @@ public func swift_swift_image_finish_read(
         // Colour asked back from a grey source is not a conversion the way the reverse is: every
         // channel just repeats the one light level a grey file has, so there is nothing here that
         // needs the averaging discarding an RGB source's colour does.  Coverage in the output is
-        // the same free addition it is for the palette case, for the same reason: every entry is
-        // opaque either way.
-        if !format.isLinear, header.colorType == .grayscale, header.bitDepth <= 8, !fileHasAlpha {
+        // the same free addition it is for the palette case, for the same reason: every entry but
+        // one is opaque either way, and unlike coverage carried a channel at a time, a single
+        // named transparent value never touches the rows — only the one map entry it points at.
+        if !format.isLinear, header.colorType == .grayscale, header.bitDepth <= 8,
+            format.hasAlpha || background != nil || !fileHasAlpha {
             return readGrayColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
-                buffer: buffer, rowStride: row_stride, colormap: colormap
+                background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
 
@@ -177,6 +179,10 @@ public func swift_swift_image_finish_read(
         }
 
         if header.colorType.isIndexed, format.hasColor, !format.isLinear {
+            swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
+        }
+
+        if header.colorType == .grayscale, header.bitDepth <= 8, !format.isLinear, fileHasAlpha {
             swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
         }
 
@@ -557,6 +563,7 @@ private func readGrayColormap(
     info_ptr: png_inforp,
     info: InfoStore,
     header: Header,
+    background: png_const_colorp?,
     buffer: UnsafeMutableRawPointer,
     rowStride: png_int_32,
     colormap: UnsafeMutableRawPointer?
@@ -569,6 +576,12 @@ private func readGrayColormap(
     let fileGamma: FixedPoint = info.isValid(PNG_INFO_gAMA) ? info.gamma : 45455 // PNG_GAMMA_sRGB_INVERSE
     let correction = FileGammaCorrection(fileGamma: fileGamma)
 
+    // A single grey value the file names as never opaque, not a channel of coverage varying pixel
+    // to pixel — so whether it is one sample among 256 or the one index a whole run of them share,
+    // there is exactly one map entry to treat differently, and the rows underneath never change:
+    // a sample either is that value or it isn't, nothing here is ever partly covered.
+    let transparentIndex = info.isValid(PNG_INFO_tRNS) ? Int(info.transparentColor.gray) : nil
+
     // Colour reaching this function has already been averaged away, or is about to be — see the
     // caller and the flag passed below — so the map is a plain grey ramp either way, and needs
     // building only the once.
@@ -578,8 +591,42 @@ private func readGrayColormap(
     let map = colormap.assumingMemoryBound(to: UInt8.self)
 
     for i in 0 ..< entries {
-        let corrected = correction.correct(UInt32(i * step))
         let base = i * channels
+
+        if i == transparentIndex {
+            // Kept in the output, coverage needs no colour at all to be meaningful, so the
+            // reference does not ask the client for one here: white, the same default it falls
+            // back to everywhere a colour is wanted but none is required.  Removed, a colour is
+            // required — there is no row-by-row buffer for a fixed map to fall back on, the same
+            // rule the indexed case follows.
+            guard format.hasAlpha || background != nil else {
+                swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
+            }
+
+            // A background only matters once the client is asking for one to stand in for the
+            // coverage it is losing; kept in the output, coverage needs no colour to be
+            // meaningful, so a named background is not even consulted here — same as the
+            // reference, which never reads it in this branch either.
+            let colour = format.hasAlpha
+                ? (255, 255, 255)
+                : background.map { (UInt8($0.pointee.red), UInt8($0.pointee.green), UInt8($0.pointee.blue)) }!
+
+            if format.hasColor {
+                map[base] = colour.0
+                map[base + 1] = colour.1
+                map[base + 2] = colour.2
+            } else {
+                map[base] = colour.1
+            }
+
+            if format.hasAlpha {
+                map[base + channels - 1] = 0
+            }
+
+            continue
+        }
+
+        let corrected = correction.correct(UInt32(i * step))
 
         // A grey value asked back as colour is the same value repeated across every channel —
         // there is only one light level here for red, green and blue to agree on.
@@ -591,8 +638,8 @@ private func readGrayColormap(
             map[base] = corrected
         }
 
-        // Opaque: the caller has already refused any file with a tRNS chunk, so there is no
-        // coverage to report and every entry that asked for an alpha channel gets full alpha.
+        // Opaque: every entry but the one transparent value above, so every entry that asked for
+        // an alpha channel gets full alpha here.
         if format.hasAlpha {
             map[base + channels - 1] = 255
         }
