@@ -279,8 +279,12 @@ public func swift_swift_image_finish_read(
         // reader there is no client buffer for a colour-mapped read to fall back on — a fixed map
         // cannot remember what pixel it will end up written over — so a background is required
         // outright rather than merely preferred.
-        if format.hasColor, !format.isLinear, header.colorType.isIndexed,
-            format.hasAlpha || background != nil || !fileHasAlpha {
+        // Sixteen bit entries come through with no further conditions: removal composes on black
+        // without a background, coverage kept is the same constant-alpha case, and colour asked
+        // away is an averaging the entry itself absorbs — the rows are indices regardless.
+        if header.colorType.isIndexed,
+            format.isLinear
+                || (format.hasColor && (format.hasAlpha || background != nil || !fileHasAlpha)) {
             return readPaletteColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
                 background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
@@ -1015,6 +1019,7 @@ private func readPaletteColormap(
     let entries = min(info.palette.count, 256)
     let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
+    let wide = colormap.assumingMemoryBound(to: UInt16.self)
 
     // Blue and red swap places for a client that asked for BGR, the same as the colour cube.
     let redOffset = format.isReversed ? 2 : 0
@@ -1036,10 +1041,83 @@ private func readPaletteColormap(
         return sRGBFromLinear(fileLight &+ backgroundLight)
     }
 
+    // One decoded sample composed on black at its entry's own coverage, the reference's own
+    // arithmetic step for step: the multiply by 257 with the folded-back high word is its exact
+    // scale-by-65535-divide-by-255, and the entry this feeds is then premultiplied *again* by the
+    // same coverage on its way into the map — not this library's idea of compositing, but what the
+    // reference computes, entry for entry, and what a client comparing maps would measure.
+    func composedOnBlack(_ sample: UInt8, alpha: UInt8) -> UInt32 {
+        var light = correction.toLinear16(UInt32(sample)) &* UInt32(alpha)
+
+        light &*= 257
+        light &+= light >> 16
+
+        return (light &+ 32768) >> 16
+    }
+
+    // One sixteen bit entry, from channels already decoded to light: grey asked back from a
+    // colour entry averages *here*, in light, by the reference's own weights — there is no
+    // rgb-to-gray in the pipeline, since the rows are indices that never see the samples — and
+    // whatever coverage the entry carries premultiplies it, kept in the output or not.
+    func putLinear(_ index: Int, red: UInt32, green: UInt32, blue: UInt32, alpha: UInt32) {
+        var (red, green, blue) = (red, green, blue)
+        let base = index * channels
+
+        if !format.hasColor, red != green || green != blue {
+            let y = (6968 &* red &+ 23434 &* green &+ 2366 &* blue &+ 16384) >> 15
+
+            (red, green, blue) = (y, y, y)
+        }
+
+        if alpha < 65535 {
+            red = alpha > 0 ? (red &* alpha &+ 32767) / 65535 : 0
+            green = alpha > 0 ? (green &* alpha &+ 32767) / 65535 : 0
+            blue = alpha > 0 ? (blue &* alpha &+ 32767) / 65535 : 0
+        }
+
+        if format.hasColor {
+            wide[base + redOffset] = UInt16(red)
+            wide[base + 1] = UInt16(green)
+            wide[base + blueOffset] = UInt16(blue)
+        } else {
+            wide[base] = UInt16(green)
+        }
+
+        if format.hasAlpha {
+            wide[base + channels - 1] = UInt16(alpha)
+        }
+    }
+
     for i in 0 ..< entries {
         let source = info.palette.elements[i]
         let base = i * channels
         let alpha: UInt8 = i < transCount ? trans[i] : 255
+
+        if format.isLinear {
+            // Coverage removed with sixteen bit entries needs no background: light with no
+            // coverage is black, so a wholly transparent entry is black outright and a graded one
+            // is its own compose on black — the reference never reads a colour it was passed.
+            // Kept, every entry is simply its decoded self at its own coverage.
+            if !format.hasAlpha, alpha < 255, alpha > 0 {
+                putLinear(
+                    i,
+                    red: composedOnBlack(source.red, alpha: alpha),
+                    green: composedOnBlack(source.green, alpha: alpha),
+                    blue: composedOnBlack(source.blue, alpha: alpha),
+                    alpha: UInt32(alpha) &* 257
+                )
+            } else {
+                putLinear(
+                    i,
+                    red: correction.toLinear16(UInt32(source.red)),
+                    green: correction.toLinear16(UInt32(source.green)),
+                    blue: correction.toLinear16(UInt32(source.blue)),
+                    alpha: UInt32(alpha) &* 257
+                )
+            }
+
+            continue
+        }
 
         if format.hasAlpha {
             // Coverage kept rather than removed: the file's own alpha for this entry travels
