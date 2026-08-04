@@ -115,11 +115,13 @@ public func swift_swift_image_finish_read(
 
     guard let info = InfoStore.from(info_ptr), let header = info.header else { return 0 }
 
-    // The three colour-mapped cases built so far, every one an opaque source with no coverage of
-    // its own: a greyscale file into a greyscale colour map (colour asked back from it or not), an
-    // RGB file into either the reference's fixed six-by-six-by-six colour cube or, discarding its
-    // colour, the same grey map the first case builds, and an indexed file into its own palette,
-    // corrected.  Everything else — coverage in any of these, sixteen bits — still refuses.
+    // The colour-mapped cases, by what the source is: a greyscale file into a greyscale colour
+    // map (colour asked back from it or not), an RGB or RGBA file into the reference's fixed
+    // six-by-six-by-six colour cube or, discarding its colour, the grey maps, and an indexed file
+    // into its own palette, corrected.  Coverage comes through in each — kept, graded through the
+    // layouts built for it, or removed against a named background (or, at sixteen bits, black) —
+    // and what refuses now is only what the reference itself refuses: an eight bit removal with
+    // no background to settle into.
     if format.isColormapped {
         let fileHasAlpha = header.colorType.hasAlpha || info.isValid(PNG_INFO_tRNS)
 
@@ -212,8 +214,8 @@ public func swift_swift_image_finish_read(
         // identity — the reference builds it the same way, as 256 entries of `i, i, i`.
         if !format.hasColor, header.colorType == .rgb, !fileHasAlpha {
             return readColorReducedGrayColormap(
-                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
-                composesCoverageOnBlack: false,
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
+                composeBackground: nil, composesCoverage: false,
                 buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
@@ -250,13 +252,13 @@ public func swift_swift_image_finish_read(
             )
         }
 
-        // Colour discarded from a source with real coverage, sixteen bit entries only.  Kept, the
-        // coverage grades through the same layout a grey-plus-alpha source builds, reached by the
-        // same averaging an opaque source goes through; removed, light with no coverage is black,
-        // so the map collapses to the identity ramp in light and the compose needs no named
-        // background at all — the same two rules the grey-source cases above follow.
-        if !format.hasColor, format.isLinear,
-            header.colorType == .rgb || header.colorType == .rgba, fileHasAlpha {
+        // Colour discarded from a source with real coverage.  Kept, the coverage grades through
+        // the same layout a grey-plus-alpha source builds — sRGB or light entries alike — reached
+        // by the same averaging an opaque source goes through.  Removed, the map collapses to the
+        // identity ramp and the library composes on a single grey: at sixteen bits that grey is
+        // black and needs no naming — light with no coverage is black — while at eight bits it is
+        // the client's to name, and refusing without one is the reference's own answer.
+        if !format.hasColor, header.colorType == .rgb || header.colorType == .rgba, fileHasAlpha {
             if format.hasAlpha {
                 return readGAColormap(
                     image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
@@ -264,9 +266,13 @@ public func swift_swift_image_finish_read(
                 )
             }
 
+            guard format.isLinear || background != nil else {
+                swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
+            }
+
             return readColorReducedGrayColormap(
-                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
-                composesCoverageOnBlack: true,
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
+                composeBackground: format.isLinear ? nil : background, composesCoverage: true,
                 buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
@@ -283,15 +289,14 @@ public func swift_swift_image_finish_read(
         // without a background, coverage kept is the same constant-alpha case, and colour asked
         // away is an averaging the entry itself absorbs — the rows are indices regardless.
         if header.colorType.isIndexed,
-            format.isLinear
-                || (format.hasColor && (format.hasAlpha || background != nil || !fileHasAlpha)) {
+            format.isLinear || format.hasAlpha || background != nil || !fileHasAlpha {
             return readPaletteColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
                 background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
             )
         }
 
-        if header.colorType.isIndexed, format.hasColor, !format.isLinear {
+        if header.colorType.isIndexed {
             swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
         }
 
@@ -328,17 +333,16 @@ public func swift_swift_image_finish_read(
     // drew.  With the palette compose taught the same distinction, expand is the whole story here
     // after all, the same as everywhere else.
     if !format.hasAlpha, fileHasAlpha, background == nil, !format.isLinear {
-        guard format.hasColor == header.colorType.hasColor || !format.hasColor else {
-            swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
-        }
-
         // What a file with no gAMA of its own is assumed to have been encoded with — the same
         // question requestConversion answers below, asked again here since a source with real
         // coverage to remove never reaches that call at all.
         let assumesLinearInput = header.bitDepth == 16
             && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
 
-        if format.hasColor == header.colorType.hasColor {
+        // Every shape but one goes the ordinary way: colour asked back from a grey source is the
+        // one channel repeated, which the library adds on the way through.  The exception is
+        // colour being *discarded*, below, whose averaging cannot share a pass with a compose.
+        if format.hasColor || !header.colorType.hasColor {
             return readComposite(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header, format: format,
                 assumesLinearInput: assumesLinearInput, buffer: buffer, rowStride: row_stride
@@ -886,19 +890,29 @@ private func readWideGrayColormap(
     )
 }
 
-/// Reads an opaque RGB source into a plain grey colour map, discarding its colour.  Unlike the
-/// grey-source case above, the map is not a correction of the raw file bytes: the file's samples
-/// never reach the row as themselves, only as the result of averaging three of them together, and
-/// that averaging already has to go through the gamma machinery to be correct — decode each to
-/// light, average there, and re-encode — which is exactly what `png_set_rgb_to_gray` does. So the
-/// row byte that comes out is already the client's answer in its own encoding, and the map is the
-/// identity, the same way the reference's `make_gray_colormap` builds it: 256 entries of `i, i, i`.
+/// Reads an RGB or RGBA source into a plain grey colour map, discarding its colour.  Unlike the
+/// grey-source case above, the map is usually not a correction of the raw file bytes: the file's
+/// samples never reach the row as themselves, only as the result of averaging three of them
+/// together, and that averaging already has to go through the gamma machinery to be correct —
+/// decode each to light, average there, and re-encode — which is exactly what
+/// `png_set_rgb_to_gray` does. So the row byte that comes out is already the client's answer in
+/// its own encoding, and the map is the identity, the same way the reference's
+/// `make_gray_colormap` builds it: 256 entries of `i, i, i`.
+///
+/// Usually, because coverage removed from a source whose gamma is not already sRGB's flips the
+/// arrangement around: the library's own compositing and its rgb-to-gray cannot share a pass with
+/// a real gamma correction without correcting twice, so the reference leaves the rows in the
+/// file's own encoding — averaged and composited there, uncorrected — and builds the map as the
+/// correction instead (`make_gray_file_colormap`).  A sixteen bit file with no gamma of its own
+/// is assumed linear, so every such file takes this path.
 private func readColorReducedGrayColormap(
     image: png_imagep,
     png_ptr: png_structrp,
     info_ptr: png_inforp,
+    info: InfoStore,
     header: Header,
-    composesCoverageOnBlack: Bool,
+    composeBackground: png_const_colorp?,
+    composesCoverage: Bool,
     buffer: UnsafeMutableRawPointer,
     rowStride: png_int_32,
     colormap: UnsafeMutableRawPointer?
@@ -912,14 +926,31 @@ private func readColorReducedGrayColormap(
     let map = colormap.assumingMemoryBound(to: UInt8.self)
     let wide = colormap.assumingMemoryBound(to: UInt16.self)
 
+    // What the file's samples are encoded with: its own gamma if it named one, otherwise linear
+    // for a sixteen bit file — the same assumption every other reader here makes — and the usual
+    // display encoding for an eight bit one.
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+    let fileGamma: FixedPoint = info.isValid(PNG_INFO_gAMA) ? info.gamma
+        : (assumesLinearInput ? 100_000 : 45455)
+    let correction = FileGammaCorrection(fileGamma: fileGamma)
+
+    // Removing coverage from a file whose encoding is not already the output's is the one
+    // combination the library cannot be asked to do in a single pass — see the function comment —
+    // so the rows stay file-encoded and the map is the correction.
+    let usesFileEncoding = composesCoverage && !correction.isSRGB
+
     for i in 0 ..< 256 {
         let base = i * channels
 
         // Identity only while the map holds what the row already is.  Asked for light instead, the
-        // entry is what that byte stands for rather than the byte itself — the row is still the
-        // sRGB one rgb-to-gray produced, so the index does not change, only what it points at.
+        // entry is what that byte stands for rather than the byte itself — decoded by the file's
+        // own curve when the rows stayed in its encoding, and by sRGB's when the library already
+        // corrected them on the way through.
         if format.isLinear {
-            let light = sRGBToLinear(UInt8(i))
+            let light = usesFileEncoding
+                ? UInt16(correction.toLinear16(UInt32(i)))
+                : sRGBToLinear(UInt8(i))
 
             wide[base] = light
             if format.hasColor { wide[base + 1] = light; wide[base + 2] = light }
@@ -928,7 +959,7 @@ private func readColorReducedGrayColormap(
             continue
         }
 
-        let value = UInt8(i)
+        let value = usesFileEncoding ? correction.correct(UInt32(i)) : UInt8(i)
 
         if format.hasColor {
             map[base] = value
@@ -945,15 +976,71 @@ private func readColorReducedGrayColormap(
 
     image.pointee.colormap_entries = 256
 
+    if usesFileEncoding {
+        // No gamma request at all: the rows are to stay in the file's own encoding, averaged and
+        // composited there, and the map above is what corrects them.  The background the library
+        // blends against has to be named in that same encoding — the client named it in the
+        // output's terms, so it goes to light by the output's curve and to the file's encoding by
+        // the file's own gamma, exactly the reference's two-step conversion; and the entry that
+        // byte then selects is overwritten with the named colour at full precision, so a wholly
+        // transparent pixel comes back as exactly what the client asked for.
+        //
+        // No blanket expand either, only the transparency: the reference registers exactly this
+        // set, and a generic expand is not the no-op it looks like — it changes how the library
+        // treats the background on the way through.
+        if header.colorType == .rgb, info.isValid(PNG_INFO_tRNS) {
+            png_set_tRNS_to_alpha(png_ptr)
+        }
+
+        png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
+
+        let greyLinear: UInt32 = format.isLinear
+            ? UInt32(composeBackground?.pointee.green ?? 0)
+            : UInt32(sRGBToLinear(UInt8(composeBackground?.pointee.green ?? 0)))
+        let greyFileValue: UInt32 = correction.isLinear
+            ? greyLinear
+            : UInt32(gamma16BitCorrect(greyLinear, exponent: Double(fileGamma) * 1e-5))
+        let greyIndex = Int((greyFileValue &* 255 &+ 32767) / 65535) // PNG_DIV257
+
+        if format.isLinear {
+            wide[greyIndex * channels] = UInt16(greyLinear)
+        } else {
+            map[greyIndex * channels] = UInt8(composeBackground?.pointee.green ?? 0)
+        }
+
+        // Widened back out for a sixteen bit source, because the blend happens before the
+        // narrowing does: the reference pre-expands a background it was told not to expand in
+        // exactly this one combination — sixteen bit rows, composed, then scaled — since a byte
+        // left at its own scale would be next to nothing against sixteen bit samples.
+        let widened: UInt32 = header.bitDepth == 16 ? 257 : 1
+        let backgroundValue = png_uint_16(UInt32(greyIndex) &* widened)
+        var colour = png_color_16()
+
+        colour.red = backgroundValue
+        colour.green = backgroundValue
+        colour.blue = backgroundValue
+        colour.gray = backgroundValue
+
+        withUnsafePointer(to: &colour) {
+            png_set_background_fixed(png_ptr, $0, PNG_BACKGROUND_GAMMA_SCREEN, 0, 0)
+        }
+
+        if header.bitDepth == 16 {
+            png_set_scale_16(png_ptr)
+        }
+
+        return readIndexRows(
+            image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+            buffer: buffer, rowStride: rowStride
+        )
+    }
+
     // What a file with no gAMA of its own is assumed to have been encoded with — the same default
     // requestConversion seeds for the ordinary reader, needed here for the same reason: rgb-to-gray's
     // decode step has to know what curve the samples it is decoding are in.  The second call is the
     // real request, the same two-call sequence every other coverage-aware reader in this file needs:
     // the output here is eight bit sRGB regardless of what the source turned out to be assumed as,
     // and only a second call after the seed settles that rather than leaving the seed as the answer.
-    let assumesLinearInput = header.bitDepth == 16
-        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
-
     png_set_alpha_mode_fixed(
         png_ptr,
         PNG_ALPHA_PNG,
@@ -963,11 +1050,19 @@ private func readColorReducedGrayColormap(
     png_set_expand(png_ptr)
     png_set_rgb_to_gray(png_ptr, PNG_ERROR_ACTION_NONE, -1, -1)
 
-    // Coverage removed on the way through, sixteen bit entries only (see the caller): light with
-    // no coverage is black, so the library composites against an all-zero background rather than
-    // one the client had to name — the identity map above never changes, only the rows do.
-    if composesCoverageOnBlack {
+    // Coverage removed on the way through: the library composites against a single grey — the
+    // named background's green channel at eight bits, black with nothing named, which is the
+    // sixteen bit case where light with no coverage is black — and the identity map above never
+    // changes, only the rows do.  Grey is the green channel by the API's own rule: green is most
+    // of what a viewer sees as brightness.
+    if composesCoverage {
+        let grey = png_uint_16(composeBackground?.pointee.green ?? 0)
         var colour = png_color_16()
+
+        colour.red = grey
+        colour.green = grey
+        colour.blue = grey
+        colour.gray = grey
 
         withUnsafePointer(to: &colour) {
             png_set_background_fixed(png_ptr, $0, PNG_BACKGROUND_GAMMA_SCREEN, 0, 0)
@@ -1038,6 +1133,51 @@ private func readPaletteColormap(
         let backgroundLight = UInt32(sRGBToLinear(backgroundByte)) &* UInt32(255 - alpha)
 
         return sRGBFromLinear(fileLight &+ backgroundLight)
+    }
+
+    // Grey asked back from three channels already decoded to light, encoded for the display: the
+    // reference's own weights, and its own two-step rescale on the way back to a byte — two
+    // roundings that compose, neither substitutable for a cleaner-looking one.
+    func encodedY(red: UInt32, green: UInt32, blue: UInt32) -> UInt8 {
+        var y = 6968 &* red &+ 23434 &* green &+ 2366 &* blue
+
+        y = (y &+ 128) >> 8
+        y &*= 255
+
+        return sRGBFromLinear((y &+ 64) >> 7)
+    }
+
+    // One entry's grey byte.  An entry already grey never decodes at all — the same short circuit
+    // the identity correction takes, and the reference's: its averaging only triggers when the
+    // channels differ, so an equal entry keeps the single correction's rounding.
+    func greyCorrected(_ source: Rgb8) -> UInt8 {
+        guard source.red != source.green || source.green != source.blue else {
+            return correction.correct(UInt32(source.green))
+        }
+
+        return encodedY(
+            red: correction.toLinear16(UInt32(source.red)),
+            green: correction.toLinear16(UInt32(source.green)),
+            blue: correction.toLinear16(UInt32(source.blue))
+        )
+    }
+
+    // The same, for an entry whose coverage is being removed against a named grey: each channel
+    // composes in light and re-encodes first — the reference feeds its averaging the *composed
+    // bytes*, decoded again, rather than the lights it just had, and matching it means doing the
+    // same.
+    func greyComposed(_ source: Rgb8, alpha: UInt8, against backgroundByte: UInt8) -> UInt8 {
+        let red = blend(source.red, alpha: alpha, against: backgroundByte)
+        let green = blend(source.green, alpha: alpha, against: backgroundByte)
+        let blue = blend(source.blue, alpha: alpha, against: backgroundByte)
+
+        guard red != green || green != blue else { return green }
+
+        return encodedY(
+            red: UInt32(sRGBToLinear(red)),
+            green: UInt32(sRGBToLinear(green)),
+            blue: UInt32(sRGBToLinear(blue))
+        )
     }
 
     // One decoded sample composed on black at its entry's own coverage, the reference's own
@@ -1114,6 +1254,26 @@ private func readPaletteColormap(
                     alpha: UInt32(alpha) &* 257
                 )
             }
+
+            continue
+        }
+
+        // Grey output at eight bits: the same cases as the colour entries below, collapsed to
+        // the one byte the averaging — or, wholly transparent, the background's green channel —
+        // settles into.  Coverage kept rides along unchanged, exactly as it does in colour.
+        if !format.hasColor {
+            let value: UInt8
+
+            if format.hasAlpha || alpha == 255 {
+                value = greyCorrected(source)
+            } else if alpha == 0 {
+                value = backgroundRGB!.g
+            } else {
+                value = greyComposed(source, alpha: alpha, against: backgroundRGB!.g)
+            }
+
+            map[base] = value
+            if format.hasAlpha { map[base + 1] = alpha }
 
             continue
         }
@@ -1234,8 +1394,13 @@ private func readComposite(
     png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_OPTIMIZED, png_fixed_point(PNG_DEFAULT_sRGB))
     png_set_scale_16(png_ptr)
 
-    // Colour reduced to grey or the reverse is a separate, still-refused case (see the caller); the
-    // shape asked for always matches the file's own here.
+    // Colour asked back from a grey source is the one channel repeated — the ordinary request,
+    // made before anything reads the shape.  The reverse never reaches this function: discarding
+    // colour cannot share a pass with a compose (see the caller).
+    if format.hasColor, !header.colorType.hasColor {
+        png_set_gray_to_rgb(png_ptr)
+    }
+
     if format.isReversed {
         png_set_bgr(png_ptr)
     }
