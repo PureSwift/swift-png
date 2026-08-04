@@ -197,8 +197,9 @@ public func swift_swift_image_finish_read(
         // `.rgba` is never reached here: that colour type carries an alpha channel by
         // definition, so `!fileHasAlpha` already rules it out — a source with genuinely no
         // coverage to remove is always `.rgb`.
-        if format.hasColor, !format.hasAlpha, !format.isLinear,
-            header.colorType == .rgb, !fileHasAlpha {
+        // Coverage asked for is a constant here, and light rather than sRGB is what one entry
+        // holds — neither changes which sources the cube can be built from, so both come through.
+        if format.hasColor, header.colorType == .rgb, !fileHasAlpha {
             return readRGBColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
                 buffer: buffer, rowStride: row_stride, colormap: colormap
@@ -1597,7 +1598,9 @@ private func readRGBColormap(
 
     let format = SimplifiedFormat(raw: image.pointee.format)
     let entries = 216
+    let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
+    let wide = colormap.assumingMemoryBound(to: UInt16.self)
 
     // Blue and red swap places for a client that asked for BGR; the cube's own indexing (below)
     // does not change, since that always works from the file's own component order regardless of
@@ -1608,12 +1611,24 @@ private func readRGBColormap(
     for r in 0 ..< 6 {
         for g in 0 ..< 6 {
             for b in 0 ..< 6 {
-                let entry = (r * 6 + g) * 6 + b
-                let base = entry * 3
+                let base = ((r * 6 + g) * 6 + b) * channels
+                let levels = (UInt8(r * 51), UInt8(g * 51), UInt8(b * 51))
 
-                map[base + redOffset] = UInt8(r * 51)
-                map[base + 1] = UInt8(g * 51)
-                map[base + blueOffset] = UInt8(b * 51)
+                // The cube's own levels are named in the display's terms whatever the map holds,
+                // so a linear entry is the light each of those bytes stands for rather than a
+                // differently-spaced cube.  Coverage is a constant here either way: the caller
+                // has already refused every source that has any to speak of.
+                if format.isLinear {
+                    wide[base + redOffset] = sRGBToLinear(levels.0)
+                    wide[base + 1] = sRGBToLinear(levels.1)
+                    wide[base + blueOffset] = sRGBToLinear(levels.2)
+                    if format.hasAlpha { wide[base + 3] = 65535 }
+                } else {
+                    map[base + redOffset] = levels.0
+                    map[base + 1] = levels.1
+                    map[base + blueOffset] = levels.2
+                    if format.hasAlpha { map[base + 3] = 255 }
+                }
             }
         }
     }
@@ -1623,8 +1638,22 @@ private func readRGBColormap(
     // Every source this handles becomes the same shape libpng hands the ordinary sRGB eight bit
     // reader: expand to samples, narrow sixteen bit ones, encode for sRGB.  There is no coverage
     // to add or remove and nothing to average, since the caller has already refused both.
+    //
+    // The rows are classified by the cube's own `div51`, which is defined on the display's own
+    // bytes — so they stay eight bit sRGB even when the map's entries are light, and the two calls
+    // below are the same either way.  The first only seeds what a file silent about its own gamma
+    // is assumed to have been encoded with, which a sixteen bit source needs and an eight bit one
+    // is unchanged by.
     png_set_expand(png_ptr)
     png_set_scale_16(png_ptr)
+
+    let assumesLinearInput = header.bitDepth == 16
+        && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
+
+    png_set_alpha_mode_fixed(
+        png_ptr, PNG_ALPHA_PNG,
+        assumesLinearInput ? png_fixed_point(PNG_FP_1) : png_fixed_point(PNG_DEFAULT_sRGB)
+    )
     png_set_alpha_mode_fixed(png_ptr, PNG_ALPHA_PNG, png_fixed_point(PNG_DEFAULT_sRGB))
 
     png_read_update_info(png_ptr, info_ptr)
