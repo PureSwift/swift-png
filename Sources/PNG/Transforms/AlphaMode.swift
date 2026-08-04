@@ -60,14 +60,14 @@ extension Transform {
         toLinear: GammaTable? = nil,
         fromLinear: GammaTable? = nil,
         corrected: GammaTable? = nil,
-        exponents: (toLinear: Double, fromLinear: Double, corrected: Double)? = nil
+        wide: (toLinear: WideGammaTable, fromLinear: WideGammaTable, corrected: WideGammaTable)? = nil
     ) {
         guard mode != .png, info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
 
         let colorChannels = info.channels - 1
 
         guard info.bitDepth == 8 else {
-            Self.alphaMode16(row, info, mode: mode, exponents: exponents)
+            Self.alphaMode16(row, info, mode: mode, wide: wide)
             return
         }
 
@@ -133,7 +133,7 @@ extension Transform {
         _ row: UnsafeMutableBufferPointer<UInt8>,
         _ info: RowInfo,
         mode: AlphaMode,
-        exponents: (toLinear: Double, fromLinear: Double, corrected: Double)?
+        wide: (toLinear: WideGammaTable, fromLinear: WideGammaTable, corrected: WideGammaTable)?
     ) {
         let colorChannels = info.channels - 1
 
@@ -147,19 +147,17 @@ extension Transform {
                 let value = Int(row[offset]) << 8 | Int(row[offset + 1])
                 let result: Int
 
-                if let exponents {
+                if let wide {
                     if alpha == 65535 {
-                        result = Int(GammaTable.correct16(UInt16(value), gamma: exponents.corrected))
+                        result = Int(wide.corrected.correct(UInt16(value)))
                     } else if alpha == 0 {
                         result = 0
                     } else {
-                        let light = Int(
-                            GammaTable.correct16(UInt16(value), gamma: exponents.toLinear)
-                        )
+                        let light = Int(wide.toLinear.correct(UInt16(value)))
                         let blended = Int(Self.blend16(light, alpha, 0))
 
                         result = mode == .optimized ? blended
-                            : Int(GammaTable.correct16(UInt16(blended), gamma: exponents.fromLinear))
+                            : Int(wide.fromLinear.correct(UInt16(blended)))
                     }
                 } else {
                     result = Int(Self.blend16(value, alpha, 0))
@@ -169,8 +167,8 @@ extension Transform {
                 row[offset + 1] = UInt8(truncatingIfNeeded: result)
             }
 
-            if mode == .broken, let exponents {
-                let encoded = GammaTable.correct16(UInt16(alpha), gamma: exponents.fromLinear)
+            if mode == .broken, let wide {
+                let encoded = wide.fromLinear.correct(UInt16(alpha))
 
                 row[alphaOffset] = UInt8(truncatingIfNeeded: encoded >> 8)
                 row[alphaOffset + 1] = UInt8(truncatingIfNeeded: encoded)
