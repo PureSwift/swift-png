@@ -203,13 +203,162 @@ public struct GammaTable {
     ///
     /// Computed rather than looked up.  A table over sixteen bits would be 65536 entries per image,
     /// and the reference builds a reduced-precision one instead; this computes at full precision,
-    /// which is a difference in the low bits for images whose significant-bits chunk asks for less.
+    /// which agrees with the reference's own single-value arithmetic — its per-value
+    /// `png_gamma_16bit_correct` is this same floating computation — but not with its row tables,
+    /// which quantize their inputs.  `WideGammaTable` below is those tables; this is the exact
+    /// answer, right for map entries and backgrounds, wrong for rows whenever the table is coarse.
     static func correct16(_ value: UInt16, gamma: Double) -> UInt16 {
         guard value > 0, value < 65535 else { return value }
 
         let corrected = (65535 * pow(Double(value) / 65535, gamma) + 0.5).rounded(.down)
 
         return UInt16(corrected)
+    }
+}
+
+/// The reference's segmented sixteen bit gamma table: what a sixteen bit *row sample* is corrected
+/// through, as opposed to the exact per-value computation above.
+///
+/// The reference never corrects a sixteen bit row sample exactly.  It answers from a table whose
+/// input is the sample's top `16 - shift` bits, where the shift comes from two places: a
+/// significant-bits chunk saying fewer than sixteen bits are real, and a request to narrow the
+/// samples to eight afterwards, which caps the input at eleven bits (the vendored configuration's
+/// `PNG_MAX_GAMMA_8`) since precision about to be discarded is not worth correcting.  With no
+/// shift at all there is no table to disagree with, and the exact computation stands.
+///
+/// Two constructions, the reference's own (`png_build_16bit_table` and `png_build_16to8_table`),
+/// ported arithmetic step for arithmetic step rather than approximated — the goal is to agree with
+/// the reference, not to be more accurate than it:
+///
+/// - The direct table corrects each quantized input as the sample it stands for, `pow` evaluated
+///   at the bucket over its own maximum.  An exponent too slight to matter still quantizes: the
+///   entry is the bucket's sample reconstructed, not the input passed through.
+/// - The narrowing table inverts the correction instead: it walks the 256 possible eight bit
+///   *outputs*, finds the input at the boundary between each adjacent pair — through the
+///   reference's fixed-point reciprocal of the exponent, whose rounding is visible in the result —
+///   and fills each span with the lower output, widened back out by 257.  This is why a narrowed
+///   sixteen bit correction is not "correct, then scale": the table already answers in the eight
+///   bit output's own terms.
+public struct WideGammaTable {
+    /// The exponent, for the exact path a zero shift takes.
+    let gamma: Double
+
+    /// How many low input bits the table ignores.
+    let shift: Int
+
+    /// The table, indexed by `value >> shift`; empty when the answer is exact.
+    let values: [UInt16]
+
+    /// The number of input bits a narrowed sixteen bit correction keeps — `PNG_MAX_GAMMA_8` in the
+    /// vendored configuration.
+    static let maxGamma8 = 11
+
+    /// The reference's shift for one image: insignificant bits by the significant-bits chunk,
+    /// floored at five when the samples are to be narrowed to eight, never more than eight so that
+    /// at least one segment survives.
+    static func shift(significantBits: Int, narrows: Bool) -> Int {
+        var shift = significantBits > 0 && significantBits < 16 ? 16 - significantBits : 0
+
+        if narrows, shift < 16 - Self.maxGamma8 {
+            shift = 16 - Self.maxGamma8
+        }
+
+        return min(shift, 8)
+    }
+
+    /// The exact computation, for a correction with no shift in force: no table, no quantization,
+    /// and the same answer `GammaTable.correct16` gives.
+    init(exact exponent: FixedPoint) {
+        self.gamma = Double(exponent) * 1e-5
+        self.shift = 0
+        self.values = []
+    }
+
+    /// The direct construction — `png_build_16bit_table`.
+    ///
+    /// The insignificant case still builds, and still quantizes: the entry is the bucket's sample
+    /// scaled back to sixteen bits, which is not the identity once the low bits are gone.  The
+    /// reference does the same, and the difference shows wherever a sixteen bit file's own curve
+    /// is close enough to linear that only the quantization is left.
+    init(direct exponent: FixedPoint, shift: Int) {
+        precondition(shift > 0)
+
+        self.gamma = Double(exponent) * 1e-5
+        self.shift = shift
+
+        let count = 1 << (16 - shift)
+        let maximum = count - 1
+        let half = 1 << (15 - shift)
+        let significant = GammaState.isSignificant(exponent)
+        let gamma = self.gamma
+
+        self.values = [UInt16](unsafeUninitializedCapacity: count) { buffer, filled in
+            for input in 0 ..< count {
+                if significant {
+                    let corrected = (65535 * pow(Double(input) / Double(maximum), gamma) + 0.5)
+                        .rounded(.down)
+
+                    buffer[input] = UInt16(corrected)
+                } else {
+                    buffer[input] = UInt16((input * 65535 + half) / maximum)
+                }
+            }
+
+            filled = count
+        }
+    }
+
+    /// The narrowing construction — `png_build_16to8_table`.
+    ///
+    /// Takes the forward correction and inverts it the way the reference does: through the
+    /// fixed-point reciprocal, rounded to five decimal places first, because that rounding is part
+    /// of where the boundaries land.
+    init(narrowing correction: FixedPoint, shift: Int) {
+        precondition(shift > 0)
+
+        self.gamma = Double(correction) * 1e-5
+        self.shift = shift
+
+        // png_reciprocal: the inverse exponent at the fixed-point scale.
+        let inverse = (1e10 / Double(correction) + 0.5).rounded(.down) * 1e-5
+
+        let count = 1 << (16 - shift)
+        let maximum = UInt32(count - 1)
+
+        self.values = [UInt16](unsafeUninitializedCapacity: count) { buffer, filled in
+            var last = 0
+
+            for output in 0 ..< 255 {
+                // The input at the boundary between this output value and the next, found by
+                // taking the midpoint of the two sixteen bit outputs back through the inverse —
+                // the reference's own `png_gamma_16bit_correct`, which is the exact computation.
+                let midpoint = UInt32(output) * 257 + 128
+                let boundary16 = (65535 * pow(Double(midpoint) / 65535, inverse) + 0.5)
+                    .rounded(.down)
+
+                // Adjusted (rounded) to the table's own input width.
+                let bound = Int((UInt32(boundary16) * maximum + 32768) / 65535 + 1)
+
+                while last < bound, last < count {
+                    buffer[last] = UInt16(output * 257)
+                    last += 1
+                }
+            }
+
+            while last < count {
+                buffer[last] = 65535
+                last += 1
+            }
+
+            filled = count
+        }
+    }
+
+    /// One sixteen bit row sample, corrected the way the reference's table answers it.
+    func correct(_ value: UInt16) -> UInt16 {
+        self.values.isEmpty
+            ? GammaTable.correct16(value, gamma: self.gamma)
+            : self.values[Int(value) >> self.shift]
     }
 }
 
@@ -222,7 +371,8 @@ extension Transform {
         _ row: UnsafeMutableBufferPointer<UInt8>,
         _ info: RowInfo,
         table: GammaTable,
-        exponent: FixedPoint
+        exponent: FixedPoint,
+        wide: WideGammaTable? = nil
     ) {
         // An indexed row holds indices, which name colours rather than being them.  The correction
         // belongs to the palette and is applied there instead.
@@ -243,7 +393,10 @@ extension Transform {
             }
 
         case 16:
-            let gamma = Double(exponent) * 1e-5
+            // Through the reference's segmented table when the caller built one — which is
+            // whenever a shift is in force — and the exact computation, which is the same as its
+            // full-precision table, otherwise.
+            let wide = wide ?? WideGammaTable(exact: exponent)
 
             for pixel in 0 ..< info.width {
                 let base = pixel * info.channels * 2
@@ -251,7 +404,7 @@ extension Transform {
                 for channel in 0 ..< colorChannels {
                     let offset = base + channel * 2
                     let value = UInt16(row[offset]) << 8 | UInt16(row[offset + 1])
-                    let corrected = GammaTable.correct16(value, gamma: gamma)
+                    let corrected = wide.correct(value)
 
                     row[offset] = UInt8(truncatingIfNeeded: corrected >> 8)
                     row[offset + 1] = UInt8(truncatingIfNeeded: corrected)
