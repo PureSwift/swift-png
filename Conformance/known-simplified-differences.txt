@@ -2,25 +2,18 @@
 #
 # Format: <image> <format> <reason>, or the single marker below.
 
-# -- this library's own gaps, still to be closed ------------------------------
+# -- this library's own gaps, all since closed --------------------------------
 
-unimplemented Every conversion this library refuses is recorded here as one thing rather than one file
-# at a time, because which files reach a refusal depends on what each one is and listing them would be
-# listing the corpus.  What is refused is the three conversions that change the light rather than the
-# arrangement of the samples: taking coverage away means compositing, taking colour away means
-# averaging, and moving between eight bits and sixteen means moving between an encoding and the light
-# it encodes.
+# A single `unimplemented` marker used to sit here, exempting every conversion this library refused
+# outright — compositing coverage away, averaging colour away, and moving between eight bits and
+# sixteen.  Each has since been built, and nothing in the sweep is refused any more except what the
+# reference itself refuses (an eight bit removal with no background named), which compares equal and
+# needs no exemption.  The marker is gone so that any future refusal fails the comparison instead of
+# hiding under it; what remains recorded below is low-bit differences with causes, one file and one
+# format at a time.
 #
-# The reference does all three through an intermediate wider than the ordinary requests can be made to
-# use — it expands to sixteen bits, works there, and narrows afterwards — and doing the same work at
-# eight bits differs in the low bits.  So this library says so rather than producing something nearly
-# right, and closing the gap means giving the simplified reader its own wide path rather than
-# assembling it out of the public calls.
-#
-# This line goes stale, and the build fails, as soon as nothing is refused any more.
-#
-# Part of the first of the three has since been pinned down, and is written here so that closing it
-# does not start from nothing.
+# What follows is the reasoning that closed the largest of the three, kept because it is what stops
+# the question being reopened.
 #
 # Compositing onto the buffer — which is what a client asks for by naming no colour — mixes in light
 # rather than in the numbers a display is driven with, and the curve is sRGB's own, a short straight
@@ -169,10 +162,12 @@ rgba16-filter1.png 0x11:bg The reference's sixteen bit gamma table is coarser th
 rgba16-filter1.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 
-# Reached through discarding colour into the sixteen bit colour-mapped formats — the map entries
-# are identical, and the rows are the same rgb-to-gray bytes the entries just above already record,
+# Reached through discarding colour into a colour map with the coverage kept — the map entries are
+# identical, and the rows are the same rgb-to-gray bytes the entries just above already record,
 # classified into indices; the classification carries a one-count difference straight through.
-rgba16-filter1.png 0x0c The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+# Only kept: removal takes the file-encoded map, where the library neither corrects nor averages
+# through the coarse table, and those reads are exact.
+rgba16-filter1.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 
 # A sixteen bit grey source into its identity colour map: the rows are the same narrowed bytes the
