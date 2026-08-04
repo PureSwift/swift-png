@@ -99,7 +99,17 @@ static size_t rowbytes_of(const struct write_case *c, int channels)
    png_uint_32 samples_per_row = c->width * (png_uint_32)channels;
 
    if (c->bit_depth < 8)
+   {
+      /* PNG_TRANSFORM_PACKING is the client saying its samples are *not* packed: it hands over one
+       * byte per sample and the library packs them down on the way into the file.  So the buffer to
+       * allocate is the unpacked one, and sizing it as the file's own packed row — which is what the
+       * arithmetic below computes — leaves the library reading past the end of it.
+       */
+      if ((c->transforms & PNG_TRANSFORM_PACKING) != 0)
+         return (size_t)samples_per_row;
+
       return (samples_per_row * (png_uint_32)c->bit_depth + 7) / 8;
+   }
 
    return (size_t)samples_per_row * (size_t)(c->bit_depth > 8 ? 2 : 1);
 }
@@ -200,6 +210,7 @@ static int dump_file(const char *path)
    png_bytep row;
    png_uint_32 width, height, y;
    int bit_depth, color_type;
+   png_byte tail_mask;
 
    if (fp == NULL) { printf("missing\n"); return 1; }
 
@@ -224,6 +235,19 @@ static int dump_file(const char *path)
    rowbytes = png_get_rowbytes(p, i);
    row = malloc(rowbytes != 0 ? rowbytes : 1);
 
+   /* A row whose samples do not fill a whole number of bytes ends with bits that are not part of
+    * the picture.  The format leaves them undefined and the two libraries genuinely differ there —
+    * this one clears them, the reference leaves whatever its own row buffer held, which is not even
+    * the same from one run to the next.  Comparing them would be comparing noise, so the bits past
+    * the last sample are masked off here and the comparison is about the picture.
+    */
+   {
+      png_uint_32 bits = width * (png_uint_32)png_get_channels(p, i) * (png_uint_32)bit_depth;
+      unsigned int spare = (unsigned int)(bits % 8);
+
+      tail_mask = spare == 0 ? 0xFF : (png_byte)(0xFF << (8 - spare));
+   }
+
    for (y = 0; y < height; ++y)
    {
       size_t k;
@@ -233,7 +257,7 @@ static int dump_file(const char *path)
       printf("row %u", (unsigned)y);
 
       for (k = 0; k < rowbytes; ++k)
-         printf(" %02x", row[k]);
+         printf(" %02x", k + 1 == rowbytes ? (row[k] & tail_mask) : row[k]);
 
       printf("\n");
    }
