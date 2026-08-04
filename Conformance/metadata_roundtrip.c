@@ -180,13 +180,25 @@ report_derived(png_structp png_ptr, png_infop info_ptr)
 
    /* The switches that are not about the image.  Each is asked twice, because what these return is
     * the setting they replaced rather than the one they took.
+    *
+    * One call per statement, deliberately: these are calls whose whole purpose is the state they
+    * leave behind, and C does not say what order it evaluates a call's arguments in.  Written as
+    * five arguments to one printf they ran back to front on x86-64 and front to back on arm64, so
+    * the same library printed two different lines depending on the machine — which is not a
+    * difference between the two libraries, and is exactly what this comparison must not report.
     */
-   printf("option on %d again %d off %d unknown %d odd %d\n",
-          png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON),
-          png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON),
-          png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_OFF),
-          png_set_option(png_ptr, 99, PNG_OPTION_ON),
-          png_set_option(png_ptr, 3, PNG_OPTION_ON));
+   {
+      int option_on, option_again, option_off, option_unknown, option_odd;
+
+      option_on = png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON);
+      option_again = png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_ON);
+      option_off = png_set_option(png_ptr, PNG_MAXIMUM_INFLATE_WINDOW, PNG_OPTION_OFF);
+      option_unknown = png_set_option(png_ptr, 99, PNG_OPTION_ON);
+      option_odd = png_set_option(png_ptr, 3, PNG_OPTION_ON);
+
+      printf("option on %d again %d off %d unknown %d odd %d\n",
+             option_on, option_again, option_off, option_unknown, option_odd);
+   }
 
    printf("mng one %u all %u none %u\n",
           (unsigned)png_permit_mng_features(png_ptr, PNG_FLAG_MNG_FILTER_64),
