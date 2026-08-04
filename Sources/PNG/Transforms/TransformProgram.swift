@@ -425,7 +425,7 @@ struct TransformProgram {
                     toLinear: inputs.toLinear,
                     fromLinear: inputs.fromLinear,
                     corrected: inputs.gammaTable,
-                    exponents: inputs.linearExponents
+                    wide: inputs.wideBlend
                 ) {
                     observations.sawColor = true
                 }
@@ -453,7 +453,7 @@ struct TransformProgram {
                     toLinear: inputs.toLinear,
                     fromLinear: inputs.fromLinear,
                     corrected: inputs.blendCorrected,
-                    exponents: inputs.linearExponents
+                    wide: inputs.wideBlend
                 )
 
             case let .compose(background):
@@ -464,7 +464,7 @@ struct TransformProgram {
                     toLinear: inputs.toLinear,
                     fromLinear: inputs.fromLinear,
                     corrected: inputs.blendCorrected,
-                    exponents: inputs.linearExponents
+                    wide: inputs.wideBlend
                 )
 
             case .scale16:
@@ -489,7 +489,10 @@ struct TransformProgram {
                 Transform.shift(row, &info, significant: inputs.significantBits)
 
             case let .gamma(exponent):
-                Transform.gamma(row, info, table: inputs.gammaTable, exponent: exponent)
+                Transform.gamma(
+                    row, info, table: inputs.gammaTable, exponent: exponent,
+                    wide: inputs.wideGamma
+                )
 
             case .packing:
                 Transform.packing(row, &info)
