@@ -697,7 +697,43 @@ public final class PngContext {
         // The identity is a real table rather than an absence, so that the three always agree about
         // what space a sample is in.
         var blend: (toLinear: GammaTable, fromLinear: GammaTable, corrected: GammaTable)?
-        var blendExponents: (toLinear: Double, fromLinear: Double, corrected: Double)?
+        var wideBlend: (toLinear: WideGammaTable, fromLinear: WideGammaTable, corrected: WideGammaTable)?
+        var wideGamma: WideGammaTable?
+
+        // The shift the reference's sixteen bit tables quantize their inputs by, and whether the
+        // narrowing construction is the one in force — see WideGammaTable.  Zero for an eight bit
+        // image, where no sixteen bit row ever exists to be corrected.
+        let narrows = header.bitDepth == 16
+            && (self.transformFlags.contains(.scale16) || self.transformFlags.contains(.strip16))
+        let significantBits = header.colorType.hasColor
+            ? max(info.significantBits.red, info.significantBits.green, info.significantBits.blue)
+            : info.significantBits.gray
+        let wideShift = header.bitDepth == 16
+            ? WideGammaTable.shift(significantBits: Int(significantBits), narrows: narrows)
+            : 0
+
+        // One sixteen bit correction under the reference's rule: the narrowing construction when
+        // the samples are to be narrowed, the direct one under a significant-bits shift, and the
+        // exact computation — which is also the reference's full-precision table — with no shift
+        // at all.  The exact case snaps an insignificant exponent to the identity the way the
+        // eight bit tables do; the quantized constructions must not, because their insignificant
+        // entries are the quantization itself, which is the reference's answer too.
+        func wideCorrection(_ exponent: FixedPoint) -> WideGammaTable {
+            guard wideShift > 0 else {
+                return WideGammaTable(
+                    exact: GammaState.isSignificant(exponent) ? exponent : GammaState.one
+                )
+            }
+
+            return narrows
+                ? WideGammaTable(narrowing: exponent, shift: wideShift)
+                : WideGammaTable(direct: exponent, shift: wideShift)
+        }
+
+        if let exponent = gamma.correctionExponent, GammaState.isSignificant(exponent),
+           header.bitDepth == 16 {
+            wideGamma = wideCorrection(exponent)
+        }
 
         if self.transformFlags.contains(.rgbToGray) || self.transformFlags.contains(.compose)
             || self.transformFlags.contains(.alphaMode),
@@ -716,11 +752,20 @@ public final class PngContext {
                     GammaTable(exponent: significant(combined))
                 )
 
-                blendExponents = (
-                    toLinear: Double(significant(toLinear)) * 1e-5,
-                    fromLinear: Double(significant(fromLinear)) * 1e-5,
-                    corrected: Double(significant(combined)) * 1e-5
-                )
+                if header.bitDepth == 16 {
+                    // The two legs are always the direct construction — the narrowing one exists
+                    // only for the combined table, since only a whole correction lands on the
+                    // eight bit result directly.
+                    wideBlend = (
+                        toLinear: wideShift > 0
+                            ? WideGammaTable(direct: toLinear, shift: wideShift)
+                            : WideGammaTable(exact: significant(toLinear)),
+                        fromLinear: wideShift > 0
+                            ? WideGammaTable(direct: fromLinear, shift: wideShift)
+                            : WideGammaTable(exact: significant(fromLinear)),
+                        corrected: wideCorrection(combined)
+                    )
+                }
             }
         }
 
@@ -791,8 +836,10 @@ public final class PngContext {
             self.transformInputs.toLinear = blend.toLinear
             self.transformInputs.fromLinear = blend.fromLinear
             self.transformInputs.blendCorrected = blend.corrected
-            self.transformInputs.linearExponents = blendExponents
+            self.transformInputs.wideBlend = wideBlend
         }
+
+        self.transformInputs.wideGamma = wideGamma
 
         // What the client asked for wins over what the file recorded: png_set_shift says how far to
         // move the samples, while the chunk only says what was done to them originally.
