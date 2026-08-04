@@ -169,6 +169,32 @@ rgba16-filter1.png 0x11:bg The reference's sixteen bit gamma table is coarser th
 rgba16-filter1.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 rgba16-filter1.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
 
+# Reached through discarding colour into the sixteen bit colour-mapped formats — the map entries
+# are identical, and the rows are the same rgb-to-gray bytes the entries just above already record,
+# classified into indices; the classification carries a one-count difference straight through.
+rgba16-filter1.png 0x0c The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+rgba16-filter1.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
+# A sixteen bit grey source into its identity colour map: the rows are the same narrowed bytes the
+# ordinary 0x01 conversion above already records for this file, used as indices unchanged, so every
+# one-count difference there recurs here at every colour-mapped format — the identity map hides
+# nothing the way the colour cube's fifty-one-wide buckets absorb it for the RGB files above.
+gray16-filter2.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0a:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0a:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0b The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0b:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x8b The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0c The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0e The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+gray16-filter2.png 0x0f The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+
 # -- a real bug in the reference, not this library --------------------------------
 
 # The twenty-seven partially-covered entries the RGB-alpha colour cube's own classification picks
