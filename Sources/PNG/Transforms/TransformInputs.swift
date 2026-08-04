@@ -56,10 +56,14 @@ struct TransformInputs {
     /// hands over the palette to work from at that moment and is free to change it afterwards.
     var quantization = Quantization()
 
-    /// The same three curves as exponents, for sixteen bit samples.
-    ///
-    /// Computed rather than tabulated: a table over sixteen bits would be 65536 entries an image.
-    var linearExponents: (toLinear: Double, fromLinear: Double, corrected: Double)?
+    /// The same three curves for sixteen bit samples, answered the way the reference's segmented
+    /// tables answer them — exactly when no shift is in force, and through the quantized
+    /// constructions when one is.  See `WideGammaTable` for the two constructions and where the
+    /// shift comes from.
+    var wideBlend: (toLinear: WideGammaTable, fromLinear: WideGammaTable, corrected: WideGammaTable)?
+
+    /// The plain correction for sixteen bit rows, under the same rule.
+    var wideGamma: WideGammaTable?
 
 
     init() {}
