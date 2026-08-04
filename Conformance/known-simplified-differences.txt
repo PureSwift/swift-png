@@ -51,144 +51,43 @@
 # eight, so the two disagree about the colour rather than about the blend.  Driven both ways round
 # above so that the line between them stays visible.
 
-# -- the coarse gamma table, reached through this API -------------------------
+# -- the coarse gamma table: closed --------------------------------------------
 #
-# Every entry below is a sixteen bit file, and every one differs by a count or two in the low
-# byte and nowhere else.  This is the difference already set out at length in
-# known-transform-differences.txt: a table over sixteen bit samples would need 65536 entries per
-# image, so the reference builds a coarser one and looks samples up in it, losing the low bits on
-# purpose, while this library computes each sample exactly.  Nothing about this API is involved
-# beyond it being another way to reach that table — no eight bit file differs here at all.
-#
-# Listed one image and format at a time rather than as a class, so that a real regression on a
-# sixteen bit file still fails rather than landing in a catch-all.
-gray16-filter2.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-meta-rgb16-sbit-bkgd.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+# A long list of sixteen bit files used to sit here, every one differing by a count or two in the
+# low byte, recorded against the reference's segmented sixteen bit gamma table — it quantizes a row
+# sample to its top bits before correcting, and narrows through a boundary-search construction,
+# where this library computed each sample exactly.  The construction has since been ported
+# (WideGammaTable, Sources/PNG/Transforms/Gamma.swift), arithmetic step for arithmetic step, and
+# every one of those reads is now exact.  See known-transform-differences.txt for the construction
+# itself; nothing about this API was ever involved beyond being another way to reach the table.
 
-rgba16-filter1.png 0x02:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x02:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x03 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x12:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x12:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x13 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x23 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+# -- a real bug in the reference: interlaced sixteen-to-eight reads smear rows ---
 
-# Reached through composing onto the buffer with no background named, rather than one of the
-# ordinary formats above, but the same file and the same cause.  0x12 is the BGR order of 0x02.
-rgba16-filter1.png 0x02 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x12 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-
-# Reached through discarding an RGB source's colour into a grey colour map, rather than one of the
-# ordinary formats above, but the same file and the same cause: png_set_rgb_to_gray decodes each
-# sixteen bit sample through the reference's coarse table before averaging.  A background named or
-# not makes no difference to an opaque source — nothing here is ever composited away — so the same
-# entries recur for :bg and :bg0, and 0x09 (coverage kept rather than colour) reaches the identical
-# rgb-to-gray step regardless.
-interlaced-rgb16-11x7.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x0c The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-interlaced-rgb16-11x7.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x0c The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgb16-filter4.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-
-# Reached through discarding colour while keeping the coverage a sixteen bit source already has,
-# the same cause again: png_set_rgb_to_gray decodes each sample through the reference's coarse
-# table before averaging.
-rgba16-filter1.png 0x01 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x11 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x21 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x11:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-
-# Reached through discarding colour and coverage together, rather than one of the ordinary formats
-# above, but the same file and the same cause.
-rgba16-filter1.png 0x00 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x00:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-
-# Reached through discarding colour into a colour map with the coverage kept — the map entries are
-# identical, and the rows are the same rgb-to-gray bytes the entries just above already record,
-# classified into indices; the classification carries a one-count difference straight through.
-# Only kept: removal takes the file-encoded map, where the library neither corrects nor averages
-# through the coarse table, and those reads are exact.
-rgba16-filter1.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-rgba16-filter1.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-
-# A sixteen bit grey source into its identity colour map: the rows are the same narrowed bytes the
-# ordinary 0x01 conversion above already records for this file, used as indices unchanged, so every
-# one-count difference there recurs here at every colour-mapped format — the identity map hides
-# nothing the way the colour cube's fifty-one-wide buckets absorb it for the RGB files above.
-gray16-filter2.png 0x08 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x08:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x08:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x09 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0a:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0a:bg0 The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x8a The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0b The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0b:bg The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x8b The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0c The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0d The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0e The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
-gray16-filter2.png 0x0f The reference's sixteen bit gamma table is coarser than an exact computation, as set out above.
+# The reference's simplified reader takes a dedicated path for an interlaced sixteen bit file
+# narrowed to eight (png_image_read_direct_scaled, added alongside the CVE-2025-66293 hardening):
+# each pass is read through a local row, copied whole to the output row on *every* sweep step —
+# including the steps that fall on rows the pass does not carry, where png_read_row leaves the
+# local buffer holding whatever row it held last.  The result, confirmed by reading the output
+# rather than the source alone: after the final pass, each even row is a copy of the odd row above
+# it, and row zero holds the previous pass's leftovers.  This library de-interlaces correctly, so
+# the two disagree on every interlaced sixteen bit file at every eight bit output — by whole rows,
+# not low bits.  Guarded at the version in the room; earlier references take a different path with
+# different behaviour, and no claim is made about them here.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x00 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x00:bg The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x01 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x02 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x02:bg The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x02:bg0 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x03 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x11 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x11:bg The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x12 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x12:bg The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x12:bg0 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x13 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x21 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
+[>=1.6.58] interlaced-rgb16-11x7.png 0x23 The reference's own interlaced sixteen-to-eight read smears rows — see the header above.
 
 # -- a real bug in the reference, not this library --------------------------------
 
