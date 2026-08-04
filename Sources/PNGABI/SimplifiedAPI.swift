@@ -187,7 +187,7 @@ public func swift_swift_image_finish_read(
         // file bytes: png_set_rgb_to_gray decodes, averages and re-encodes each pixel itself, so
         // what reaches the row is already the sRGB byte the client wants, and the map is the
         // identity — the reference builds it the same way, as 256 entries of `i, i, i`.
-        if !format.hasColor, !format.isLinear, header.colorType == .rgb, !fileHasAlpha {
+        if !format.hasColor, header.colorType == .rgb, !fileHasAlpha {
             return readColorReducedGrayColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
                 buffer: buffer, rowStride: row_stride, colormap: colormap
@@ -797,9 +797,24 @@ private func readColorReducedGrayColormap(
     let format = SimplifiedFormat(raw: image.pointee.format)
     let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
+    let wide = colormap.assumingMemoryBound(to: UInt16.self)
 
     for i in 0 ..< 256 {
         let base = i * channels
+
+        // Identity only while the map holds what the row already is.  Asked for light instead, the
+        // entry is what that byte stands for rather than the byte itself — the row is still the
+        // sRGB one rgb-to-gray produced, so the index does not change, only what it points at.
+        if format.isLinear {
+            let light = sRGBToLinear(UInt8(i))
+
+            wide[base] = light
+            if format.hasColor { wide[base + 1] = light; wide[base + 2] = light }
+            if format.hasAlpha { wide[base + channels - 1] = 65535 }
+
+            continue
+        }
+
         let value = UInt8(i)
 
         if format.hasColor {
