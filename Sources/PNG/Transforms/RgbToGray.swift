@@ -91,7 +91,7 @@ extension Transform {
         toLinear: GammaTable? = nil,
         fromLinear: GammaTable? = nil,
         corrected: GammaTable? = nil,
-        exponents: (toLinear: Double, fromLinear: Double, corrected: Double)? = nil
+        wide: (toLinear: WideGammaTable, fromLinear: WideGammaTable, corrected: WideGammaTable)? = nil
     ) -> Bool {
         guard info.colorType.hasColor, !info.colorType.isIndexed, info.bitDepth >= 8 else {
             return false
@@ -164,28 +164,23 @@ extension Transform {
 
                 let gray: Int
 
-                if let exponents {
+                if let wide {
                     // The same shape as the eight bit path: through linear to average, and back
                     // again — except that an already grey sample takes the combined correction
                     // directly rather than making the round trip.
                     if r == g, r == b {
-                        gray = Int(
-                            GammaTable.correct16(UInt16(r), gamma: exponents.corrected)
-                        )
+                        gray = Int(wide.corrected.correct(UInt16(r)))
                     } else {
-                        let linear = Int(GammaTable.correct16(UInt16(r), gamma: exponents.toLinear))
+                        let linear = Int(wide.toLinear.correct(UInt16(r)))
                             * red
-                            + Int(GammaTable.correct16(UInt16(g), gamma: exponents.toLinear))
+                            + Int(wide.toLinear.correct(UInt16(g)))
                             * green
-                            + Int(GammaTable.correct16(UInt16(b), gamma: exponents.toLinear))
+                            + Int(wide.toLinear.correct(UInt16(b)))
                             * blue
                             + 16384
 
                         gray = Int(
-                            GammaTable.correct16(
-                                UInt16(clamping: linear >> 15),
-                                gamma: exponents.fromLinear
-                            )
+                            wide.fromLinear.correct(UInt16(clamping: linear >> 15))
                         )
                     }
                 } else {
