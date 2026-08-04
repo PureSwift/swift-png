@@ -29,9 +29,15 @@ fi
 # drives a background named to remove coverage a colour-mapped source carries, the same as it does
 # for the ordinary formats above.  0x04 and 0x05 discard colour into a sixteen bit result, removed
 # and kept; 0x25 is 0x05 with the channel order swapped, the one variation worth driving there too.
+#
+# 0x0c to 0x0f are the colour-mapped formats whose *map entries* are sixteen bit linear light rather
+# than eight bit sRGB — the colour-mapped half of the same distinction 0x04 to 0x07 draw for plain
+# samples.  They are driven here because they were not: this library refuses all four, the reference
+# reads all four, and nothing in the sweep asked, so the gap was invisible rather than recorded.
 formats="header 0x00 0x01 0x02 0x03 0x11 0x12 0x13 0x21 0x23 0x04 0x05 0x06 0x07 0x25
 0x02:bg 0x12:bg 0x00:bg 0x11:bg 0x02:bg0 0x12:bg0 0x08 0x08:bg 0x08:bg0 0x09
-0x0a 0x0a:bg 0x0a:bg0 0x8a 0x0b 0x0b:bg 0x8b"
+0x0a 0x0a:bg 0x0a:bg0 0x8a 0x0b 0x0b:bg 0x8b
+0x0c 0x0d 0x0e 0x0f"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
