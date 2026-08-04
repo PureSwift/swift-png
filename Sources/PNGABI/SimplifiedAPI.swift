@@ -321,15 +321,14 @@ public func swift_swift_image_finish_read(
     // all: naming none is itself an answer, the client's own buffer, and that case is built below
     // rather than refused.
     //
-    // Not for an indexed source, and this one is not the same free extension every other colour-
-    // mapped case in this file turned out to be: tried once, against the corpus rather than by
-    // inspection, an indexed source through this exact path produced real wrong bytes, not the
-    // refusal message this comment used to describe — png_set_expand alone was not the whole story
-    // the way it was everywhere else, and finding what else differs is its own piece of work rather
-    // than a small extension of this one.  Left refused, correctly, rather than shipped wrong.
+    // An indexed source comes through here too, now: the wrong bytes it once produced were the
+    // engine's, not this path's — the optimized arrangement is settled in an indexed image's
+    // palette, and the palette compose used to encode a partly covered entry for the display where
+    // this arrangement leaves it as light, exactly the distinction the row step next to it always
+    // drew.  With the palette compose taught the same distinction, expand is the whole story here
+    // after all, the same as everywhere else.
     if !format.hasAlpha, fileHasAlpha, background == nil, !format.isLinear {
-        guard !header.colorType.isIndexed,
-            format.hasColor == header.colorType.hasColor || !format.hasColor else {
+        guard format.hasColor == header.colorType.hasColor || !format.hasColor else {
             swift_c_error(png_ptr, "png_image: removing alpha onto the buffer not implemented")
         }
 
@@ -363,7 +362,7 @@ public func swift_swift_image_finish_read(
     // client named instead of the client's own buffer.  Named or not is the same operation once the
     // colour is already gone, so both reach the one function.
     if !format.hasAlpha, fileHasAlpha, let background, !format.isLinear,
-        !format.hasColor, header.colorType.hasColor, !header.colorType.isIndexed {
+        !format.hasColor, header.colorType.hasColor {
         let assumesLinearInput = header.bitDepth == 16
             && image.pointee.flags & png_uint_32(PNG_IMAGE_FLAG_16BIT_sRGB) == 0
 
@@ -1292,6 +1291,16 @@ private func readComposite(
                     // Already corrected, the same as any other opaque pixel: nothing left to
                     // blend against.
                     destination[index] = component
+                } else if header.colorType.isIndexed {
+                    // An indexed source's arrangement was settled in its palette, where the
+                    // library premultiplies and then re-encodes for the display — so what
+                    // reaches this row is *not* the light every other source leaves here, and
+                    // the reference blends it as the encoded byte it is, in sRGB space, wrong
+                    // by however much the curve bends and matching the palette it came from.
+                    let blended = UInt32(component)
+                        &+ (UInt32(255 - alpha) &* UInt32(destination[index]) &+ 127) / 255
+
+                    destination[index] = UInt8(min(blended, 255))
                 } else {
                     // The file's own light, scaled to the table's domain, plus what survives of
                     // the buffer's own byte — decoded to light first, since blending encoded
