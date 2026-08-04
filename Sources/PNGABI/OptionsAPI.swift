@@ -29,9 +29,14 @@ public func png_set_option(_ png_ptr: png_structrp?, _ option: Int32, _ onoff: I
     let index = Int(option) / 2
     let previous = context.options[index]
 
-    context.options[index] = onoff == PNG_OPTION_ON
-        ? PNG_OPTION_ON
-        : (onoff == PNG_OPTION_OFF ? PNG_OPTION_OFF : PNG_OPTION_UNSET)
+    // The argument names four states and carries one bit.  What the reference stores is
+    // `2 + (onoff != 0)` — so anything that is not zero is on, and only zero is off, which means
+    // PNG_OPTION_OFF (2) turns an option *on* and PNG_OPTION_UNSET (0) is the way to turn one off.
+    // That reads backwards, and it is what a client linking against libpng gets; the names are the
+    // trap rather than the behaviour.  Note also that a setting is never stored back as unset: the
+    // previous value can be unset because that is what an untouched option reads as, but the value
+    // written is always one of the two the reference can express.
+    context.options[index] = onoff != 0 ? PNG_OPTION_ON : PNG_OPTION_OFF
 
     return previous
 }
