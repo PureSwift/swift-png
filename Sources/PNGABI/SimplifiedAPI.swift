@@ -143,9 +143,20 @@ public func swift_swift_image_finish_read(
         // there — see the function itself for why.  A single named transparent value never
         // reaches here: the branch above already handles every `.grayscale` source, coverage kept
         // or not, since nothing about a value that is either wholly there or wholly gone needs
-        // this map's finer alpha grading.
-        if header.colorType == .grayscaleAlpha, format.hasAlpha, !format.isLinear {
+        // this map's finer alpha grading.  Light instead of sRGB changes what an entry holds —
+        // decoded, and premultiplied by the entry's own coverage — not the layout or the rows.
+        if header.colorType == .grayscaleAlpha, format.hasAlpha {
             return readGAColormap(
+                image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
+                background: nil, buffer: buffer, rowStride: row_stride, colormap: colormap
+            )
+        }
+
+        // Sixteen bit entries removing coverage need no background at all: light with none is
+        // black, so the reference composes on black and never reads a colour it was passed — and
+        // black is a shade of grey, so the finer graded layout below is never needed either.
+        if header.colorType == .grayscaleAlpha, !format.hasAlpha, format.isLinear {
+            return readGrayAlphaComposedColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, header: header,
                 background: nil, buffer: buffer, rowStride: row_stride, colormap: colormap
             )
@@ -1375,9 +1386,40 @@ private func readGAColormap(
     let format = SimplifiedFormat(raw: image.pointee.format)
     let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
+    let wide = colormap.assumingMemoryBound(to: UInt16.self)
 
     func writeEntry(_ index: Int, red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
         let base = index * channels
+
+        // A sixteen bit entry holds the light its byte stands for, premultiplied by its own
+        // coverage — compose-on-black by construction, which is how the reference's transparent
+        // entry comes out all zero where the eight bit one is white.  The layout and the rows
+        // never change, only what an index points at.
+        if format.isLinear {
+            let wideAlpha = UInt32(alpha) &* 257
+
+            func premultiplied(_ byte: UInt8) -> UInt16 {
+                let light = UInt32(sRGBToLinear(byte))
+
+                return wideAlpha >= 65535
+                    ? UInt16(light)
+                    : UInt16((light &* wideAlpha &+ 32767) / 65535)
+            }
+
+            if format.hasColor {
+                wide[base] = premultiplied(red)
+                wide[base + 1] = premultiplied(green)
+                wide[base + 2] = premultiplied(blue)
+            } else {
+                wide[base] = premultiplied(red)
+            }
+
+            if format.hasAlpha {
+                wide[base + channels - 1] = UInt16(wideAlpha)
+            }
+
+            return
+        }
 
         if format.hasColor {
             map[base] = red
@@ -1527,12 +1569,16 @@ private func readGAColormap(
 /// call already used for a source with no colour change at all does the whole job here too.  The
 /// map is the identity: `png_set_background_fixed` leaves the row already in the sRGB the map
 /// holds, the same reason `readColorReducedGrayColormap`'s map next door is.
+///
+/// No background at all means black — the one caller that passes none is the sixteen bit one,
+/// where light with no coverage is black and the reference composes on it without ever reading a
+/// colour it was passed.
 private func readGrayAlphaComposedColormap(
     image: png_imagep,
     png_ptr: png_structrp,
     info_ptr: png_inforp,
     header: Header,
-    background: png_const_colorp,
+    background: png_const_colorp?,
     buffer: UnsafeMutableRawPointer,
     rowStride: png_int_32,
     colormap: UnsafeMutableRawPointer?
@@ -1544,9 +1590,23 @@ private func readGrayAlphaComposedColormap(
     let format = SimplifiedFormat(raw: image.pointee.format)
     let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
+    let wide = colormap.assumingMemoryBound(to: UInt16.self)
 
     for i in 0 ..< 256 {
         let base = i * channels
+
+        // Identity only while the map holds what the row already is; asked for light instead,
+        // each entry is what its byte stands for — the row is still the composited sRGB byte, so
+        // the index does not change, only what it points at.
+        if format.isLinear {
+            let light = sRGBToLinear(UInt8(i))
+
+            wide[base] = light
+            if format.hasColor { wide[base + 1] = light; wide[base + 2] = light }
+
+            continue
+        }
+
         let value = UInt8(i)
 
         if format.hasColor {
@@ -1575,9 +1635,9 @@ private func readGrayAlphaComposedColormap(
     // Grey output takes the green channel, the API's own rule — green is most of what a viewer
     // sees as brightness, and it is what the map's own grey ramp is built in terms of either way.
     var colour = png_color_16()
-    colour.red = png_uint_16(background.pointee.red)
-    colour.green = png_uint_16(background.pointee.green)
-    colour.blue = png_uint_16(background.pointee.blue)
+    colour.red = png_uint_16(background?.pointee.red ?? 0)
+    colour.green = png_uint_16(background?.pointee.green ?? 0)
+    colour.blue = png_uint_16(background?.pointee.blue ?? 0)
     colour.gray = colour.green
 
     withUnsafePointer(to: &colour) {
