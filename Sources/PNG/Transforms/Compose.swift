@@ -235,7 +235,7 @@ extension Transform {
         toLinear: GammaTable? = nil,
         fromLinear: GammaTable? = nil,
         corrected: GammaTable? = nil,
-        exponents: (toLinear: Double, fromLinear: Double, corrected: Double)? = nil
+        wide: (toLinear: WideGammaTable, fromLinear: WideGammaTable, corrected: WideGammaTable)? = nil
     ) {
         guard info.colorType.hasAlpha, info.bitDepth >= 8 else { return }
 
@@ -305,22 +305,17 @@ extension Transform {
                     // The same three cases as at eight bits, with the curve computed for each sample
                     // rather than looked up: a table over sixteen bit samples would be sixty five
                     // thousand entries per image.
-                    if let exponents {
+                    if let wide {
                         if alpha == 65535 {
-                            blended = Int(
-                                GammaTable.correct16(UInt16(foreground), gamma: exponents.corrected)
-                            )
+                            blended = Int(wide.corrected.correct(UInt16(foreground)))
                         } else if alpha == 0 {
                             blended = screenSamples[channel]
                         } else {
-                            let light = Int(
-                                GammaTable.correct16(UInt16(foreground), gamma: exponents.toLinear)
-                            )
+                            let light = Int(wide.toLinear.correct(UInt16(foreground)))
 
                             blended = Int(
-                                GammaTable.correct16(
-                                    Self.blend16(light, alpha, linearSamples[channel]),
-                                    gamma: exponents.fromLinear
+                                wide.fromLinear.correct(
+                                    Self.blend16(light, alpha, linearSamples[channel])
                                 )
                             )
                         }
