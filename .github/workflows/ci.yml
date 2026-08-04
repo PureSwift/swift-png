@@ -51,32 +51,49 @@ jobs:
       - name: Benchmark, the engine driven from Swift
         run: .build/release/pngbench-swift build/ci/Conformance/corpus/rgb8-filter0.png
 
-  # The reference here is the distribution's own libpng, because that is what this
-  # library has to replace: a Debian client links against what Debian ships, so that
-  # is the thing to be substitutable for.  Debian stable carries 1.6.39 where macOS
-  # has 1.6.58, which makes the pair of jobs a check on more than the platform — a
-  # difference recorded against one version and not the other shows up here.
+  # The reference here is built from source rather than taken from the distribution,
+  # because the distribution's is old: Debian stable carries 1.6.39, where this library
+  # implements the ABI of the version its own vendored headers come from.  Comparing
+  # against 1.6.39 meant eight suites had to be excluded — not because this library was
+  # wrong in them, but because the two libpngs disagree with each other, and in most of
+  # those cases it is 1.6.39 that is the odd one out: it accepts png_set_shift values a
+  # newer libpng rejects, it lacks the palette-index warning, it synthesises gAMA and
+  # cHRM from an sRGB chunk.  Building the reference pins that variable instead of
+  # recording its consequences, so the whole suite runs here, the same as on macOS.
   #
-  # It also keeps the reference where the loader expects it.  A reference installed
-  # somewhere else needs LD_LIBRARY_PATH to be found, and LD_LIBRARY_PATH outranks
-  # the RUNPATH our own harnesses carry — so setting it made every "ours" binary
-  # load the reference and quietly compare the reference against itself.
-  #
-  # The suites still excluded are the ones whose differences are the two versions
-  # disagreeing rather than this library being wrong; each is being recorded.
+  # It is installed where the loader finds it on its own.  A reference somewhere else
+  # would need LD_LIBRARY_PATH, and LD_LIBRARY_PATH outranks the RUNPATH our own
+  # harnesses carry — so setting it made every "ours" binary load the reference and
+  # quietly compare the reference against itself.  /usr/local/lib is already on the
+  # default search path, so ldconfig is all this needs; the distribution's libpng-dev
+  # is deliberately not installed, so there is only one reference to find.
   linux:
     runs-on: ubuntu-latest
     container: swift:6.3.3-bookworm
+    env:
+      LIBPNG_VERSION: "1.6.58"
     steps:
       - uses: actions/checkout@v4
 
       # The distribution's cmake is too old to drive Swift, so a current one comes from
-      # pip.  Its libpng is the reference and is left exactly where it was installed.
+      # pip.  No libpng-dev: the reference is the one built in the next step.
       - name: Install dependencies
         run: |
           apt-get update -qq
-          apt-get install -y -qq zlib1g-dev libpng-dev ninja-build pkg-config python3-pip
+          apt-get install -y -qq zlib1g-dev ninja-build pkg-config python3-pip curl
           pip3 install -q --break-system-packages cmake
+
+      # The tag archive ships a pre-generated `configure`, so this needs no autotools.
+      - name: Build the reference libpng
+        run: |
+          curl -fsSL "https://github.com/pnggroup/libpng/archive/refs/tags/v${LIBPNG_VERSION}.tar.gz" -o libpng.tar.gz
+          tar xf libpng.tar.gz
+          cd "libpng-${LIBPNG_VERSION}"
+          ./configure --prefix=/usr/local
+          make -j"$(nproc)"
+          make install
+          ldconfig
+          test "$(pkg-config --modversion libpng16)" = "${LIBPNG_VERSION}"
 
       - name: Build (SwiftPM)
         run: swift build -c release
@@ -91,9 +108,7 @@ jobs:
         run: cmake --build build/ci
 
       - name: Test (CTest)
-        run: >
-          ctest --test-dir build/ci --output-on-failure
-          -E '^version_probe|^metadata_roundtrip$|differential_(readpng|roundtrip|transforms|transform_fuzz|decode)$'
+        run: ctest --test-dir build/ci --output-on-failure
 
       - name: Benchmark, C API against the reference
         run: cmake --build build/ci --target benchmark
