@@ -162,7 +162,6 @@ meta-gray-sbit-trns.png gray_to_rgb,background As above.
 
 rgba16-filter1.png gamma_dark,strip_16 Not implemented here: the reference's table is coarser than an exact computation, as set out above.
 rgba16-filter1.png strip_16,gamma_dark As above.
-rgba16-filter1.png background,strip_16 As above, reached through compositing.
 rgba16-filter1.png alpha_premultiplied,strip_16 As above, reached through the alpha arrangement.
 gray16-filter2.png alpha_premultiplied,strip_16 As above.
 rgb16-filter4.png alpha_premultiplied,strip_16 As above.
