@@ -128,74 +128,26 @@ meta-gray-sbit-trns.png gray_to_rgb,background As above.
 # These are defects here, not there.  They are listed so the suite stays honest about what it is and
 # is not checking, and each one is a piece of work rather than a decision.
 
-# Sixteen bit gamma, where the reference deliberately works at reduced precision.
+# Sixteen bit gamma: closed, by porting the reference's segmented table.
 #
-# A table over sixteen bit samples would need 65536 entries per image, so the reference does not build
-# one.  It builds a coarser table instead and looks samples up in it, which loses the low bits on
-# purpose.  How coarse depends on the image: the significant-bits chunk saying fewer than sixteen bits
-# makes it coarser, and asking to narrow the samples to eight afterwards makes it coarser still, since
-# precision that is about to be discarded is not worth keeping.
+# The reference never corrects a sixteen bit row sample exactly.  It builds a table whose input is
+# the sample's top bits — coarsened by a significant-bits chunk, and capped at eleven bits (its
+# PNG_MAX_GAMMA_8) when the samples are to be narrowed to eight — and, for the narrowing case, it
+# builds that table backwards: walking the 256 possible outputs and finding the input at each
+# boundary through the fixed-point reciprocal of the exponent.  That inverse construction is why
+# roughly sixty of its two thousand and forty eight entries could never be fitted by any forward
+# formula: they are not corrections of any input, they are boundaries, and the reciprocal's own
+# rounding moves them.
 #
-# This library computes each sixteen bit sample exactly instead.  That agrees with the reference
-# wherever its table happens to be at full precision — which is every sixteen bit image here that has
-# no significant-bits chunk and is not being narrowed — and differs by a bit or two elsewhere.
-#
-# So the two lists below are exactly the cases where the reference's table is coarse: one image with a
-# significant-bits chunk, and the narrowing combinations on the others.
-#
-# Closing this means reproducing the coarse table rather than improving on it, since the goal is to
-# agree rather than to be more accurate.
-#
-# Part of it has been recovered.  Every one of the sixty five thousand sixteen bit values was put
-# through both libraries with a correction applied and the samples narrowed afterwards, which settles
-# two things.  The answer depends on the top eleven bits of the sample and nothing else — eleven being
-# the vendored configuration's PNG_MAX_GAMMA_8 — so the table has two thousand and forty eight entries
-# and a bucket spans thirty two values.  And all but sixty of those entries are the exact answer at the
-# bucket's lowest value, scaled to eight bits and rounded.
-#
-# The sixty are the difficulty.  Each of them lands within a few thousandths of a rounding boundary and
-# falls the other way, which is the reference's own fixed point arithmetic showing through rather than
-# anything a formula fits — every candidate tried, by sample point and by scaling and by index, stops
-# at the same one thousand nine hundred and eighty eight.  So what remains is to port the construction
-# rather than to fit it, and until that is done this library gives the exact answer, which is the
-# better one to hand a client as well as the easier one to write.
+# This library used to compute each sample exactly instead, and a long list of one-count
+# differences sat here to say so.  Both constructions are now ported — WideGammaTable in
+# Sources/PNG/Transforms/Gamma.swift, arithmetic step for arithmetic step, the quantized identity
+# for an insignificant exponent included — and every sixteen bit gamma case in the sweep is exact.
+# The exact computation survives where it always agreed: a sixteen bit image with no
+# significant-bits chunk and no narrowing, where the reference's table is at full precision, and
+# every single-value correction (map entries, backgrounds), which the reference itself computes
+# exactly rather than through the table.
 
-rgba16-filter1.png gamma_dark,strip_16 Not implemented here: the reference's table is coarser than an exact computation, as set out above.
-rgba16-filter1.png strip_16,gamma_dark As above.
-rgba16-filter1.png alpha_premultiplied,strip_16 As above, reached through the alpha arrangement.
-gray16-filter2.png alpha_premultiplied,strip_16 As above.
-rgb16-filter4.png alpha_premultiplied,strip_16 As above.
-interlaced-rgb16-11x7.png alpha_premultiplied,strip_16 As above.
-gray16-filter2.png gamma_dark,strip_16 Not implemented here: the reference's table is coarser than an exact computation, as set out above.
-gray16-filter2.png strip_16,gamma_dark As above.
-rgb16-filter4.png gamma_dark,strip_16 As above.
-rgb16-filter4.png strip_16,gamma_dark As above.
-interlaced-rgb16-11x7.png gamma_dark,strip_16 As above.
-interlaced-rgb16-11x7.png strip_16,gamma_dark As above.
-meta-rgb16-sbit-bkgd.png gamma_bright Not implemented here: this image's significant-bits chunk asks for fewer than sixteen bits, so the reference's gamma table is coarser than exact computation.
-meta-rgb16-sbit-bkgd.png gamma_dark As above.
-meta-rgb16-sbit-bkgd.png gamma_steep As above.
-meta-rgb16-sbit-bkgd.png gamma_shallow As above.
-meta-rgb16-sbit-bkgd.png gamma_bright,expand As above.
-meta-rgb16-sbit-bkgd.png expand,gamma_bright As above.
-meta-rgb16-sbit-bkgd.png gamma_bright,gray_to_rgb As above.
-meta-rgb16-sbit-bkgd.png gray_to_rgb,gamma_bright As above.
-meta-rgb16-sbit-bkgd.png gamma_bright,strip_alpha As above.
-meta-rgb16-sbit-bkgd.png gamma_dark,expand_16 As above.
-meta-rgb16-sbit-bkgd.png gamma_dark,strip_16 As above.
-meta-rgb16-sbit-bkgd.png strip_16,gamma_dark As above.
-meta-rgb16-sbit-bkgd.png gamma_steep,packing As above.
-meta-rgb16-sbit-bkgd.png gamma_bright,bgr,add_alpha As above.
-meta-rgb16-sbit-bkgd.png background,gamma_bright As above, reached through compositing: the blend goes through linear and the trip uses the same coarse table.
-meta-rgb16-sbit-bkgd.png gamma_bright,background As above.
-meta-rgb16-sbit-bkgd.png rgb_to_gray,gamma_bright As above, reached through the colour conversion rather than the gamma step: averaging goes through linear, and the trip uses the same coarse table.
-meta-rgb16-sbit-bkgd.png alpha_premultiplied As above, reached through the alpha arrangement: multiplying colour by coverage goes through linear as compositing does.
-meta-rgb16-sbit-bkgd.png alpha_premultiplied,expand As above.
-meta-rgb16-sbit-bkgd.png expand,alpha_premultiplied As above.
-meta-rgb16-sbit-bkgd.png alpha_premultiplied,gray_to_rgb As above.
-meta-rgb16-sbit-bkgd.png gray_to_rgb,alpha_premultiplied As above.
-meta-rgb16-sbit-bkgd.png alpha_premultiplied,strip_16 As above.
-meta-rgb16-sbit-bkgd.png gamma_bright,user_invert As above, seen through a transform of the client's own: it inverts bytes that already differ.
 
 # Reversing sub-byte samples within a byte, for an interlaced image.
 #
