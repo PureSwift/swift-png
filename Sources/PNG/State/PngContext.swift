@@ -496,6 +496,29 @@ public final class PngContext {
                                   bitDepth: header.bitDepth)
         }
 
+        // A background the client said was already at the output's depth is still not always at
+        // the depth the *blend* happens at, because the blend runs before the depth changes.  The
+        // reference moves the colour to the blend's own scale in exactly two combinations, and
+        // this mirrors both: sixteen bit rows about to be narrowed blend against the colour
+        // widened out to their scale, and eight bit rows about to be widened blend against it
+        // narrowed — each with the reference's own arithmetic, a truncating multiply one way and
+        // its rounding divide the other.
+        if self.transformFlags.contains(.compose) {
+            func rescale(_ value: inout UInt16) {
+                if header.bitDepth == 16,
+                   self.transformFlags.contains(.scale16) || self.transformFlags.contains(.strip16) {
+                    value = value &* 257
+                } else if header.bitDepth != 16, self.transformFlags.contains(.expand16) {
+                    value = UInt16((UInt32(value) &* 255 &+ 32767) / 65535)
+                }
+            }
+
+            rescale(&background.red)
+            rescale(&background.green)
+            rescale(&background.blue)
+            rescale(&background.gray)
+        }
+
         return self.corrected(background, gamma: gamma, bitDepth: header.bitDepth)
     }
 
