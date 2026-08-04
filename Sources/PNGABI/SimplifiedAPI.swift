@@ -129,8 +129,10 @@ public func swift_swift_image_finish_read(
         // the same free addition it is for the palette case, for the same reason: every entry but
         // one is opaque either way, and unlike coverage carried a channel at a time, a single
         // named transparent value never touches the rows — only the one map entry it points at.
-        if !format.isLinear, header.colorType == .grayscale, header.bitDepth <= 8,
-            format.hasAlpha || background != nil || !fileHasAlpha {
+        // Linear reaches here as well as sRGB: what the flag changes is what one map entry holds,
+        // which the builder settles, not which sources it can be built from.
+        if header.colorType == .grayscale, header.bitDepth <= 8,
+            format.isLinear || format.hasAlpha || background != nil || !fileHasAlpha {
             return readGrayColormap(
                 image: image, png_ptr: png_ptr, info_ptr: info_ptr, info: info, header: header,
                 background: background, buffer: buffer, rowStride: row_stride, colormap: colormap
@@ -673,16 +675,73 @@ private func readGrayColormap(
     let step = 255 / (entries - 1)
     let channels = format.channels
     let map = colormap.assumingMemoryBound(to: UInt8.self)
+    let wide = colormap.assumingMemoryBound(to: UInt16.self)
+
+    // A colour map holds one of two things, and which is the format's business rather than the
+    // caller's: the eight bit byte a display is driven with, or the sixteen bit light that byte
+    // stands for.  Both writers below take what the *source* is — a sample of the file's own, or a
+    // colour already in the display's terms — because the two reach linear light by different
+    // routes and neither goes through the other's answer.  Correcting a sample to its byte and
+    // then decoding that byte would lose what the wider entry exists to keep.
+    func putSample(_ index: Int, grey: UInt32, opaque: Bool) {
+        let base = index * channels
+        let last = base + channels - 1
+
+        if format.isLinear {
+            let light = UInt16(correction.toLinear16(grey))
+
+            wide[base] = light
+            if format.hasColor { wide[base + 1] = light; wide[base + 2] = light }
+            if format.hasAlpha { wide[last] = opaque ? 65535 : 0 }
+        } else {
+            let byte = correction.correct(grey)
+
+            map[base] = byte
+            if format.hasColor { map[base + 1] = byte; map[base + 2] = byte }
+            if format.hasAlpha { map[last] = opaque ? 255 : 0 }
+        }
+    }
+
+    func putDisplayColour(_ index: Int, _ colour: (UInt8, UInt8, UInt8), opaque: Bool) {
+        let base = index * channels
+        let last = base + channels - 1
+
+        if format.isLinear {
+            wide[base] = format.hasColor ? sRGBToLinear(colour.0) : sRGBToLinear(colour.1)
+            if format.hasColor {
+                wide[base + 1] = sRGBToLinear(colour.1)
+                wide[base + 2] = sRGBToLinear(colour.2)
+            }
+            if format.hasAlpha { wide[last] = opaque ? 65535 : 0 }
+        } else {
+            map[base] = format.hasColor ? colour.0 : colour.1
+            if format.hasColor { map[base + 1] = colour.1; map[base + 2] = colour.2 }
+            if format.hasAlpha { map[last] = opaque ? 255 : 0 }
+        }
+    }
 
     for i in 0 ..< entries {
-        let base = i * channels
-
         if i == transparentIndex {
             // Kept in the output, coverage needs no colour at all to be meaningful, so the
             // reference does not ask the client for one here: white, the same default it falls
             // back to everywhere a colour is wanted but none is required.  Removed, a colour is
             // required — there is no row-by-row buffer for a fixed map to fall back on, the same
             // rule the indexed case follows.
+            // Sixteen bit output holds light, and light with no coverage at all is black — so the
+            // reference composes on black there and neither asks the client for a colour nor
+            // reads one it was given.  That is not the eight bit rule with a wider entry: at eight
+            // bits the same entry comes out white when the coverage is kept, and a named colour is
+            // required when it is not.
+            if format.isLinear {
+                let base = i * channels
+
+                wide[base] = 0
+                if format.hasColor { wide[base + 1] = 0; wide[base + 2] = 0 }
+                if format.hasAlpha { wide[base + channels - 1] = 0 }
+
+                continue
+            }
+
             guard format.hasAlpha || background != nil else {
                 swift_c_error(png_ptr, "background color must be supplied to remove alpha/transparency")
             }
@@ -692,41 +751,18 @@ private func readGrayColormap(
             // meaningful, so a named background is not even consulted here — same as the
             // reference, which never reads it in this branch either.
             let colour = format.hasAlpha
-                ? (255, 255, 255)
+                ? (UInt8(255), UInt8(255), UInt8(255))
                 : background.map { (UInt8($0.pointee.red), UInt8($0.pointee.green), UInt8($0.pointee.blue)) }!
 
-            if format.hasColor {
-                map[base] = colour.0
-                map[base + 1] = colour.1
-                map[base + 2] = colour.2
-            } else {
-                map[base] = colour.1
-            }
-
-            if format.hasAlpha {
-                map[base + channels - 1] = 0
-            }
+            putDisplayColour(i, colour, opaque: false)
 
             continue
         }
 
-        let corrected = correction.correct(UInt32(i * step))
-
         // A grey value asked back as colour is the same value repeated across every channel —
-        // there is only one light level here for red, green and blue to agree on.
-        if format.hasColor {
-            map[base] = corrected
-            map[base + 1] = corrected
-            map[base + 2] = corrected
-        } else {
-            map[base] = corrected
-        }
-
-        // Opaque: every entry but the one transparent value above, so every entry that asked for
-        // an alpha channel gets full alpha here.
-        if format.hasAlpha {
-            map[base + channels - 1] = 255
-        }
+        // there is only one light level here for red, green and blue to agree on.  Opaque: every
+        // entry but the one transparent value above.
+        putSample(i, grey: UInt32(i * step), opaque: true)
     }
 
     image.pointee.colormap_entries = png_uint_32(entries)
