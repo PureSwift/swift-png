@@ -1008,18 +1008,15 @@ private func readColorReducedGrayColormap(
             map[greyIndex * channels] = UInt8(composeBackground?.pointee.green ?? 0)
         }
 
-        // Widened back out for a sixteen bit source, because the blend happens before the
-        // narrowing does: the reference pre-expands a background it was told not to expand in
-        // exactly this one combination — sixteen bit rows, composed, then scaled — since a byte
-        // left at its own scale would be next to nothing against sixteen bit samples.
-        let widened: UInt32 = header.bitDepth == 16 ? 257 : 1
-        let backgroundValue = png_uint_16(UInt32(greyIndex) &* widened)
+        // Named at the eight bit scale the index lives at, whatever the source's depth: for a
+        // sixteen bit source the blend happens before the narrowing, and the library itself moves
+        // the colour to the blend's own scale — the same rescale the reference applies.
         var colour = png_color_16()
 
-        colour.red = backgroundValue
-        colour.green = backgroundValue
-        colour.blue = backgroundValue
-        colour.gray = backgroundValue
+        colour.red = png_uint_16(greyIndex)
+        colour.green = png_uint_16(greyIndex)
+        colour.blue = png_uint_16(greyIndex)
+        colour.gray = png_uint_16(greyIndex)
 
         withUnsafePointer(to: &colour) {
             png_set_background_fixed(png_ptr, $0, PNG_BACKGROUND_GAMMA_SCREEN, 0, 0)
