@@ -4,11 +4,15 @@
 # SwiftPM drives the desktop and WASM builds, but a bare-metal target has no Swift SDK bundle to
 # hand it: what exists is the toolchain's own Embedded Swift standard library, shipped as one
 # .swiftmodule per target triple.  So this drives swiftc directly — two modules, compiled in
-# dependency order with whole-module optimisation, each packed into a static archive.
+# dependency order with whole-module optimisation, each packed into a static archive.  Three of
+# them now: DEFLATE and its zlib wrapper come from the sibling package rather than from this
+# repository, so they are fetched once into the build tree at the pinned tag and compiled from
+# there — SwiftPM's own checkout is used when one is already present, so an ordinary working
+# copy needs no second clone.
 #
 # What comes out is half of a firmware: the decode and encode engine, expecting the platform to
 # provide what Embedded Swift requires of it — an allocator (posix_memalign or malloc), and
-# nothing else.  No C library is assumed: the compression module is the Swift implementation,
+# nothing else.  No C library is assumed: the compression modules are the Swift implementation,
 # and the one libm call the gamma tables want has a fallback built from series when no libm is
 # declared importable, which on these triples it is not.
 #
@@ -50,7 +54,27 @@ fi
 
 mkdir -p "$output"
 
+# The compression package, at the tag Package.resolved pins.  A checkout SwiftPM has already
+# made is preferred over cloning a second one; otherwise this is a shallow clone into the build
+# tree, which is also what CI gets.
+zlib_tag=1.0.0
+zlib_source="$root/.build/checkouts/swift-zlib"
+
+if [ ! -d "$zlib_source/Sources/LZ77" ]; then
+    zlib_source="$root/build/embedded/deps/swift-zlib"
+
+    if [ ! -d "$zlib_source/Sources/LZ77" ]; then
+        echo "fetching swift-zlib $zlib_tag"
+        rm -rf "$zlib_source"
+        mkdir -p "$(dirname "$zlib_source")"
+        git clone --quiet --depth 1 --branch "$zlib_tag" \
+            https://github.com/PureSwift/swift-zlib.git "$zlib_source"
+    fi
+fi
+
 flags="-target $triple -enable-experimental-feature Embedded -wmo -parse-as-library -O"
+
+ar=$( (command -v llvm-ar || xcrun --find llvm-ar || command -v ar) 2>/dev/null | head -1 )
 
 echo "building LZ77 for $triple"
 # shellcheck disable=SC2086
@@ -58,10 +82,20 @@ echo "building LZ77 for $triple"
     -module-name LZ77 \
     -emit-module -emit-module-path "$output/LZ77.swiftmodule" \
     -c -o "$output/LZ77.o" \
-    "$root"/Sources/LZ77/*.swift
+    "$zlib_source"/Sources/LZ77/*.swift
 
-ar=$( (command -v llvm-ar || xcrun --find llvm-ar || command -v ar) 2>/dev/null | head -1 )
 "$ar" rcs "$output/libLZ77.a" "$output/LZ77.o"
+
+echo "building Zlib for $triple"
+# shellcheck disable=SC2086
+"$swiftc" $flags \
+    -module-name Zlib \
+    -I "$output" \
+    -emit-module -emit-module-path "$output/Zlib.swiftmodule" \
+    -c -o "$output/Zlib.o" \
+    "$zlib_source"/Sources/Zlib/*.swift
+
+"$ar" rcs "$output/libZlib.a" "$output/Zlib.o"
 
 echo "building PNG for $triple"
 # shellcheck disable=SC2086
@@ -74,4 +108,4 @@ echo "building PNG for $triple"
 
 "$ar" rcs "$output/libPNG.a" "$output/PNG.o"
 
-echo "wrote $output/libLZ77.a and $output/libPNG.a"
+echo "wrote $output/libLZ77.a, $output/libZlib.a and $output/libPNG.a"
