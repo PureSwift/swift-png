@@ -12,7 +12,12 @@
 // pipeline is resolved, rather than per row.
 
 /// A snapshot of the metadata the transforms read.
-struct TransformInputs {
+/// A class rather than a struct, and for speed rather than identity: this is written once when the
+/// pipeline is resolved and read once per row, and as a value it was *copied* once per row — every
+/// array field retained and released on every scanline, which on a tiny image was a measurable
+/// share of the whole decode.  Nothing mutates it between rows, so sharing the one instance is the
+/// semantics the copies were paying to imitate.
+final class TransformInputs {
     /// The palette, for expanding indices into colours.
     var palette: [Rgb8] = []
 
