@@ -106,12 +106,20 @@ final class ChunkLexer {
         // callback will see the library while a chunk is being consumed.
         context?.noteIO(0x0040, chunk: name)
 
-        // The checksum covers the type code as well as the payload.
+        // The checksum covers the type code as well as the payload.  All four bytes in one call:
+        // the checksum may be the platform's own, where a call per byte is four function calls
+        // and four times the setup for four bytes of work — and a file whose image data is split
+        // across many chunks pays that on every one of them.
         self.crc.reset()
-        self.crc.update(raw.4)
-        self.crc.update(raw.5)
-        self.crc.update(raw.6)
-        self.crc.update(raw.7)
+
+        withUnsafeBytes(of: &raw) {
+            self.crc.update(
+                UnsafeBufferPointer(
+                    start: $0.baseAddress!.advanced(by: 4).assumingMemoryBound(to: UInt8.self),
+                    count: 4
+                )
+            )
+        }
 
         let header = ChunkHeader(name: name, length: Int(length))
         self.current = header
