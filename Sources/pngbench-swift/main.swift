@@ -194,7 +194,12 @@ func decode(_ console: Console, want: Want) throws -> Int {
 // -- keeping rows for the encode ---------------------------------------------
 
 func keepRows(_ console: Console) throws
-    -> (rows: [UnsafeMutableBufferPointer<UInt8>], header: Header)
+    -> (
+        rows: [UnsafeMutableBufferPointer<UInt8>],
+        header: Header,
+        palette: [Rgb8],
+        transparency: [UInt8]
+    )
 {
     let host = makeHost(console)
     let context = PngContext(host: host, isReading: true)
@@ -232,14 +237,22 @@ func keepRows(_ console: Console) throws
 
     try context.readEnd(into: nil)
 
-    return (rows, header)
+    // An indexed image's rows are indices into its palette, so the palette (and any
+    // transparency graded over it) has to travel with them or the encode below has
+    // nothing to write and rightly refuses.
+    let palette = Array(UnsafeBufferPointer(info.palette.elements))
+    let transparency = Array(UnsafeBufferPointer(info.transparentAlpha.elements))
+
+    return (rows, header, palette, transparency)
 }
 
 // -- one encode --------------------------------------------------------------
 
 func encode(
     _ rows: [UnsafeMutableBufferPointer<UInt8>],
-    header: Header
+    header: Header,
+    palette: [Rgb8] = [],
+    transparency: [UInt8] = []
 ) throws -> Int {
     let console = Console()
     let host = makeHost(console)
@@ -261,6 +274,21 @@ func encode(
             interlaceMethod: 0
         )
     )
+
+    if !palette.isEmpty {
+        info.palette = try .allocated(palette.count, host: host)
+        for (index, entry) in palette.enumerated() { info.palette.elements[index] = entry }
+        info.markValid(0x0008) // PNG_INFO_PLTE
+
+        if !transparency.isEmpty {
+            info.transparentAlpha = try .allocated(transparency.count, host: host)
+            for (index, alpha) in transparency.enumerated() {
+                info.transparentAlpha.elements[index] = alpha
+            }
+            info.transparentCount = transparency.count
+            info.markValid(0x0010) // PNG_INFO_tRNS
+        }
+    }
 
     // The same sequence png_write_info runs.
     try context.writeHeader(
@@ -334,7 +362,10 @@ let kept = try! keepRows(console)
 
 for _ in 0 ..< rounds {
     let started = now()
-    written = try! encode(kept.rows, header: kept.header)
+    written = try! encode(
+        kept.rows, header: kept.header,
+        palette: kept.palette, transparency: kept.transparency
+    )
     bestEncode = min(bestEncode, now() - started)
 }
 
