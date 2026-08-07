@@ -1,0 +1,15 @@
+{
+  "originHash" : "4a73c4abecc816490e95af6dd761da959b92668656e564dd2a9d33d6eae97f12",
+  "pins" : [
+    {
+      "identity" : "swift-zlib",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PureSwift/swift-zlib.git",
+      "state" : {
+        "revision" : "83427e2d7f41423f11738f38bab2697fbb8754dc",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}
