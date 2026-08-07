@@ -18,8 +18,12 @@ project(swift-png
 
 include(GNUInstallDirs)
 
+# Off by default: the shipped library is Swift throughout, compression included, and needs no
+# zlib to link against.  Turning this on swaps in the system zlib, which is faster and matches
+# what the reference build links — the conformance comparisons are semantic either way, since two
+# correct encoders need not produce the same bytes.
 option(SPNG_USE_SYSTEM_ZLIB
-    "Compress with the system zlib rather than the Swift implementation" ON)
+    "Compress with the system zlib rather than the Swift implementation" OFF)
 option(SPNG_STATIC_STDLIB
     "Link the Swift runtime statically, so the library needs no toolchain at run time" OFF)
 option(SPNG_BUILD_TESTS "Build the conformance programs" ON)
