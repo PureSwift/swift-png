@@ -36,13 +36,17 @@ now works at sixteen bits as well as eight, the same workaround applied a second
 there composites in the library either, so there is no background to ask for and no bug to trip
 over.
 
-What is left is one narrow corner: an indexed source, asked to remove its coverage onto the
-client's own buffer with no background named. Every other colour type reaches this through
-`PNG_ALPHA_OPTIMIZED`, and an indexed one should too once expanded — but tried against the
-corpus rather than assumed, it produces real wrong bytes, because the optimized alpha arrangement
-is a step the transform pipeline (`TransformProgram.swift`) never adds for an indexed image at
-all, only for `PNG_ALPHA_STANDARD` and `PNG_ALPHA_BROKEN`. Left refused rather than shipped wrong;
-closing it is engine work, not a small extension of the reading shortcut around it.
+That last corner — an indexed source asked to remove its coverage onto the client's own buffer
+with no background named — is closed now, and what it needed was not what it looked like. The
+transform pipeline was right all along. An indexed image's coverage is arranged in its *palette*,
+where the reference premultiplies each partly covered entry and then re-encodes it for the
+display, so the row that reaches the blend holds sRGB bytes rather than the linear light every
+other colour type leaves there — and the reference blends them as sRGB bytes, which is not
+gamma-correct and is exactly what it did to the palette. Reproducing that is the whole of it.
+
+So nothing in the colour-mapped or simplified reader refuses a conversion any more. The only
+refusals left are the reference's own, which this library returns the same way and which the
+comparison therefore reads as agreement rather than as a gap.
 
 ## Building
 
@@ -63,6 +67,24 @@ Two build options matter. `SPNG_USE_SYSTEM_ZLIB` (on by default) compresses with
 zlib, matching what the reference build links against; turning it off uses the
 Swift implementation instead. `SPNG_STATIC_STDLIB` links the Swift runtime into
 the library, which is worth doing on platforms that do not ship one.
+
+## Speed
+
+Substituting for a library is not much use if it costs the program that substitutes it. So the
+same benchmark is compiled twice and linked against each library, the way the conformance
+programs are, and run over the whole corpus:
+
+```bash
+cmake --build build/release --target benchmark
+```
+
+It reports decode, decode-with-transforms and encode per image and adds them up. As of this
+writing the total is **0.97×** the reference's — this library is the faster of the two. Encode
+carries that, at 0.96×, and it is most of the work the corpus does; decode is still behind, at
+1.11×, and what is behind is the fixed cost of setting a decode up rather than anything per row —
+the corpus is mostly small images, and on a large one decode lands within a few percent either
+way. The total moves by about ±0.01 between runs, so it is worth reading three of them rather
+than one.
 
 ## Platforms without a C library underneath
 
@@ -93,7 +115,8 @@ All of this is what `.github/workflows/embedded.yml` checks on every push.
 CPNG        the published C API, and the parts that have to be C:
             error dispatch and the jump boundary, allocation, callbacks
   PNGABI    one @c function per published entry point
-    PNG     the engine: chunks, row pipeline, transforms, compression
+    PNG     the engine: chunks, row pipeline, transforms
+      Zlib  DEFLATE and INFLATE, from swift-zlib rather than vendored here
 ```
 
 Two decisions shape everything else.
@@ -158,14 +181,26 @@ as it averages. And asking for the conversion suppresses the gamma step even on 
 where the conversion does not run — so a client asking for both on such an image gets no gamma at all,
 which is peculiar, but is what clients see.
 
-Gamma is the one place where agreeing to the last bit is both the point and straightforwardly
-reachable, because the reference build computes it in double precision rather than through its
-fixed-point logarithm path — so the arithmetic is reproducible rather than a reimplementation of an
+Gamma looks like the one place where agreeing to the last bit is straightforwardly reachable,
+because the reference build computes it in double precision rather than through its fixed-point
+logarithm path — so the arithmetic is reproducible rather than a reimplementation of an
 approximation. The comparison then found the parts that are not arithmetic at all: an indexed image is
 corrected in its palette, once, and its rows expanded from the corrected entries, so correcting the
 rows as well double-corrects them; the palette a client reads back afterwards is the corrected one;
 and samples narrower than a byte are corrected without being widened, by repeating each sample across
 a byte, looking it up in the eight bit table, and keeping the top bits.
+
+At sixteen bits it is not straightforward at all, and computing the curve exactly is the wrong
+answer. A table over sixteen bit samples would need 65536 entries, so the reference does not build
+one: it quantizes a *row* sample to its top bits first — coarsened by a significant-bits chunk, and
+capped at eleven bits whenever the samples are to be narrowed to eight, since precision about to be
+discarded is not worth correcting. Single values it still computes exactly, so a colour-map entry
+and a row sample of the same number can legitimately differ. And the narrowing table is built
+backwards: it walks the two hundred and fifty six possible outputs and finds the input at each
+boundary through the fixed-point reciprocal of the exponent, whose own rounding then shows in the
+result. That is why about sixty of its entries defeat every forward formula — they are not
+corrections of any input, they are boundaries. Both constructions are reproduced rather than fitted,
+which is what it takes to agree.
 
 Almost every rule it found was one that could not have been guessed. The shift moves samples *down*
 rather than up: it recovers the narrower values an image was made from rather than filling the depth,
