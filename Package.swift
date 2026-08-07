@@ -74,6 +74,7 @@ let package = Package(
                 .product(name: "LZ77", package: "swift-zlib"),
                 .product(name: "Zlib", package: "swift-zlib"),
                 .target(name: "CSystemZlib", condition: .when(traits: ["SystemZlib"])),
+                "CChecksum",
             ],
             path: "Sources/PNG"
         ),
@@ -97,6 +98,15 @@ let package = Package(
             name: "wasm-smoke-test",
             dependencies: ["PNG"],
             path: "Sources/wasm-smoke-test"
+        ),
+
+        // The CRC-32 instruction, where the processor has one.  Header-only — nothing to link —
+        // so the library it serves still depends on nothing; the stub .c exists because the
+        // package manager requires a compiled file in a C target.
+        .target(
+            name: "CChecksum",
+            path: "Sources/CChecksum",
+            publicHeadersPath: "include"
         ),
 
         .systemLibrary(
