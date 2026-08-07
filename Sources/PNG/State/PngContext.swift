@@ -162,11 +162,55 @@ public final class PngContext {
         self.highestPaletteIndex = largest
     }
 
+    /// The fixed row of switch settings behind `options`.
+    ///
+    /// Inline storage rather than an array: eight integers do not deserve a heap allocation on
+    /// every context ever created.  The build that has the standard library's fixed-size array
+    /// uses it; the portable fallback is a tuple read and written through its bytes, which is the
+    /// same eight integers in the same places.
+    public struct OptionSwitches {
+        #if InlineArrays
+        private var storage = InlineArray<8, Int32>(repeating: 0)
+        #else
+        private var storage: (Int32, Int32, Int32, Int32, Int32, Int32, Int32, Int32)
+            = (0, 0, 0, 0, 0, 0, 0, 0)
+        #endif
+
+        public subscript(index: Int) -> Int32 {
+            get {
+                #if InlineArrays
+                return self.storage[index]
+                #else
+                precondition(0 <= index && index < 8)
+
+                return withUnsafeBytes(of: self.storage) {
+                    $0.load(fromByteOffset: index * MemoryLayout<Int32>.stride, as: Int32.self)
+                }
+                #endif
+            }
+            set {
+                #if InlineArrays
+                self.storage[index] = newValue
+                #else
+                precondition(0 <= index && index < 8)
+
+                withUnsafeMutableBytes(of: &self.storage) {
+                    $0.storeBytes(
+                        of: newValue,
+                        toByteOffset: index * MemoryLayout<Int32>.stride,
+                        as: Int32.self
+                    )
+                }
+                #endif
+            }
+        }
+    }
+
     /// What each of the library's own switches is set to, indexed by half the option number.
     ///
     /// Half, because only the even numbers are options: the odd ones are reserved for asking whether
     /// the same option is supported at all.  Eight of them, which is what the API defines room for.
-    public var options = [Int32](repeating: 0, count: 8)
+    public var options = OptionSwitches()
 
     /// Which extensions of a related format are allowed.
     public var mngFeatures: UInt32 = 0
