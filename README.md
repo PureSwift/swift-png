@@ -63,10 +63,11 @@ the two generators CMake can compile Swift with:
 cmake --preset release && cmake --build build/release && ctest --test-dir build/release
 ```
 
-Two build options matter. `SPNG_USE_SYSTEM_ZLIB` (on by default) compresses with
-zlib, matching what the reference build links against; turning it off uses the
-Swift implementation instead. `SPNG_STATIC_STDLIB` links the Swift runtime into
-the library, which is worth doing on platforms that do not ship one.
+Two build options matter. `SPNG_USE_SYSTEM_ZLIB` (off by default) swaps the
+compression for the system zlib; the default library is Swift throughout,
+[swift-zlib](https://github.com/PureSwift/swift-zlib) included, and links against
+nothing. `SPNG_STATIC_STDLIB` links the Swift runtime into the library, which is
+worth doing on platforms that do not ship one.
 
 ## Speed
 
@@ -79,12 +80,20 @@ cmake --build build/release --target benchmark
 ```
 
 It reports decode, decode-with-transforms and encode per image and adds them up. As of this
-writing the total is **0.97×** the reference's — this library is the faster of the two. Encode
-carries that, at 0.96×, and it is most of the work the corpus does; decode is still behind, at
-1.11×, and what is behind is the fixed cost of setting a decode up rather than anything per row —
-the corpus is mostly small images, and on a large one decode lands within a few percent either
-way. The total moves by about ±0.01 between runs, so it is worth reading three of them rather
-than one.
+writing the default build — the one that compresses through Swift and links no zlib — totals
+**0.91×** the reference's, and the build that swaps the system zlib in totals **0.77×**; either
+way this library is the faster of the two, and the number moves by about ±0.01 between runs, so
+read three.
+
+The two builds are faster in different places, and the difference is worth knowing before
+choosing. Encode is where this library wins — 0.68× on the corpus in the default build, and a
+2048×2048 gradient encodes in 54ms against the reference's 96 — partly from filtering sixteen
+bytes at a time and partly because the Swift compressor does less entropy work, which also
+means its files run a few percent larger on compressible images. Decode is where the system
+zlib still earns its keep: the Swift INFLATE is two to four times slower than zlib's, which the
+small images of the corpus feel as about 2.8× on the decode column and a large photograph feels
+directly. A program that mostly writes wants the default; one that mostly reads large images
+wants `SPNG_USE_SYSTEM_ZLIB=ON`, where decode runs within a few percent of the reference.
 
 ## Platforms without a C library underneath
 
