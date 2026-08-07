@@ -17,7 +17,7 @@ output="${1:-$root/build/embedded/$triple/firmware}"
 
 mkdir -p "$output"
 
-echo "building LZ77 and PNG for $triple"
+echo "building the compression modules and PNG for $triple"
 "$root/scripts/build_embedded.sh" "$triple" "$output/libs"
 
 swiftc=$(xcrun --find swiftc 2>/dev/null || command -v swiftc)
@@ -52,7 +52,7 @@ echo "linking"
     -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -nostdlib -nostartfiles -ffreestanding \
     -Os -T "$here/link.ld" -Wl,--gc-sections \
     "$here/startup.c" "$here/shim.c" "$here/main.c" \
-    "$output/App.o" "$output/libs/PNG.o" "$output/libs/LZ77.o" \
+    "$output/App.o" "$output/libs/PNG.o" "$output/libs/Zlib.o" "$output/libs/LZ77.o" \
     -lgcc \
     -o "$output/firmware.elf"
 
