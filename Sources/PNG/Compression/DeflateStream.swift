@@ -11,9 +11,13 @@
 // gets the same bytes here.
 
 #if SystemZlib
-import CZlib
+import CSystemZlib
 #else
+// Both, and the second is not redundant: `Ending` and `DeflateError` are declared in `LZ77` and
+// only re-exposed through `Zlib`, and Embedded Swift refuses a type whose defining module this
+// file has not imported itself.
 import LZ77
+import Zlib
 #endif
 
 /// How the image data is to be compressed.
@@ -45,7 +49,7 @@ final class DeflateStream {
     private var stream = z_stream()
     private var isInitialized = false
     #else
-    private let stream: Deflate
+    private let stream: Compressor
     #endif
 
     init(settings: CompressionSettings) throws(Diagnostic) {
@@ -69,7 +73,7 @@ final class DeflateStream {
 
         self.isInitialized = true
         #else
-        self.stream = Deflate(level: settings.level)
+        self.stream = Compressor(level: settings.level)
         #endif
     }
 
@@ -138,7 +142,7 @@ final class DeflateStream {
         case .finish: mode = Z_FINISH
         }
 
-        let status = CZlib.deflate(&self.stream, mode)
+        let status = CSystemZlib.deflate(&self.stream, mode)
 
         switch status {
         case Z_OK, Z_BUF_ERROR:
@@ -160,7 +164,7 @@ final class DeflateStream {
 
         return count - Int(self.stream.avail_out)
         #else
-        let mode: Deflate.Ending
+        let mode: Compressor.Ending
 
         switch ending {
         case .none: mode = .none
