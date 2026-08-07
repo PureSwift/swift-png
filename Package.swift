@@ -69,6 +69,7 @@ let package = Package(
         .target(
             name: "PNG",
             dependencies: [
+                .product(name: "LZ77", package: "swift-zlib"),
                 .product(name: "Zlib", package: "swift-zlib"),
                 .target(name: "CSystemZlib", condition: .when(traits: ["SystemZlib"])),
             ],
