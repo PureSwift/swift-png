@@ -16,6 +16,11 @@ import PackageDescription
 
 let package = Package(
     name: "swift-png",
+    // Only Apple platforms need saying, and this is not our floor but the one we inherit:
+    // swift-zlib offers a `Span` interface, and that is as far back as `Span` back-deploys.
+    // Everywhere else the standard library ships with the compiler, and the C library built
+    // by CMakeLists.txt sets its own deployment target independently of this.
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "PNG", targets: ["PNG"]),
 
@@ -35,6 +40,11 @@ let package = Package(
             name: "SystemZlib",
             description: "Use the system zlib for compression instead of the Swift implementation."
         )
+    ],
+    dependencies: [
+        // DEFLATE and INFLATE in Swift, extracted so that the two libraries share one
+        // implementation rather than each carrying its own copy of it.
+        .package(url: "https://github.com/PureSwift/swift-zlib.git", from: "1.0.0"),
     ],
     targets: [
         // The published C API, the completed control structures, and the parts
@@ -59,16 +69,10 @@ let package = Package(
         .target(
             name: "PNG",
             dependencies: [
-                "LZ77",
-                .target(name: "CZlib", condition: .when(traits: ["SystemZlib"])),
+                .product(name: "Zlib", package: "swift-zlib"),
+                .target(name: "CSystemZlib", condition: .when(traits: ["SystemZlib"])),
             ],
             path: "Sources/PNG"
-        ),
-
-        // DEFLATE and INFLATE in Swift.
-        .target(
-            name: "LZ77",
-            path: "Sources/LZ77"
         ),
 
         // Times the engine driven from Swift, over the same images and in the same
@@ -93,16 +97,11 @@ let package = Package(
         ),
 
         .systemLibrary(
-            name: "CZlib",
-            path: "Sources/CZlib",
+            name: "CSystemZlib",
+            path: "Sources/CSystemZlib",
             providers: [.brew(["zlib"]), .apt(["zlib1g-dev"])]
         ),
 
-        .testTarget(
-            name: "LZ77Tests",
-            dependencies: ["LZ77"],
-            path: "Tests/LZ77Tests"
-        ),
         .testTarget(
             name: "PNGTests",
             dependencies: ["PNG"],
