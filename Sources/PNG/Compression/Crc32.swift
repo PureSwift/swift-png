@@ -14,6 +14,8 @@
 
 #if SystemZlib
 import CSystemZlib
+#elseif canImport(CChecksum)
+import CChecksum
 #endif
 
 /// The CRC-32 that PNG appends to each chunk, over its type code and payload.
@@ -75,6 +77,16 @@ struct Crc32 {
             uInt(bytes.count)
         ))
         #else
+        #if canImport(CChecksum)
+        // The processor's own instruction computes this exact polynomial where the extension
+        // exists, and the compiler knows at build time whether it does — the branch below folds
+        // to one side or the other, and the table loop remains for the processors without it.
+        if spng_crc32_in_hardware() != 0 {
+            self.state = spng_crc32(self.state, base, bytes.count)
+            return
+        }
+        #endif
+
         var state = self.state
 
         Self.table.withUnsafeBufferPointer { table in
