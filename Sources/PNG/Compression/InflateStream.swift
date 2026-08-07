@@ -136,8 +136,27 @@ final class InflateStream {
             self.isFinished = self.stream.isFinished
             return produced
         } catch {
-            throw Diagnostic(error.message, chunk: .idat)
+            throw Diagnostic(Self.inZlibsWords(error.message), chunk: .idat)
         }
         #endif
     }
+
+    #if !SystemZlib
+    /// The wording a damaged stream is reported with, in zlib's phrasing rather than the Swift
+    /// decompressor's own.
+    ///
+    /// Not cosmetic: the reference passes zlib's message strings through to the client, so the
+    /// strings are part of what a substitute has to say — a client that matches on "invalid
+    /// block type" is entitled to keep working.  Only the conditions zlib can also reach are
+    /// renamed; one it cannot express keeps the Swift decompressor's own words, since there is
+    /// nothing for a client to have matched on.
+    private static func inZlibsWords(_ message: StaticString) -> StaticString {
+        switch "\(message)" {
+        case "reserved block type":             return "invalid block type"
+        case "stored block length check failed": return "invalid stored block lengths"
+        case "Adler-32 checksum mismatch":      return "incorrect data check"
+        default:                                 return message
+        }
+    }
+    #endif
 }
