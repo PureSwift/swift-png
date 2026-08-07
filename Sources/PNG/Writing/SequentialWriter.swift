@@ -496,11 +496,16 @@ final class SequentialWriter {
     /// decided when to send.
     func flush(context: PngContext) throws(Diagnostic) {
         if let deflater = self.deflater, self.startedImageData, !deflater.isFinished {
+            // Repeated while the output buffer comes back *full*, which is the contract's own
+            // way of asking whether the flush is done — not while anything at all was produced.
+            // The distinction matters beyond taste: one backend answers a flush with nothing
+            // pending by producing nothing, the other by re-emitting the empty sync block every
+            // time it is asked, and a loop on `produced > 0` never ends against the second.
             var produced = 0
 
             repeat {
                 produced = try self.drainOnce(deflater, context: context, ending: .flush)
-            } while produced > 0
+            } while produced == context.inputBuffer.count
         }
 
         context.host.flush()
