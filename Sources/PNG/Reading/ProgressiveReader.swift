@@ -250,11 +250,11 @@ final class ProgressiveReader {
             throw Diagnostic("chunk data is too large")
         }
 
+        // All four type bytes in one call, for the reason the sequential lexer does the same: a
+        // checksum that may be the platform's own charges per call, not per byte.
         self.crc.reset()
-        self.crc.update(header[4])
-        self.crc.update(header[5])
-        self.crc.update(header[6])
-        self.crc.update(header[7])
+
+        self.crc.update(UnsafeBufferPointer(start: header.baseAddress! + 4, count: 4))
 
         if name == .idat {
             try self.beginImageData(context: context, info: info)
