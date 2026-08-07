@@ -12,9 +12,9 @@
 // implementation in the LZ77 module, so that it needs no C dependency at all.
 
 #if SystemZlib
-import CZlib
+import CSystemZlib
 #else
-import LZ77
+import Zlib
 #endif
 
 /// A zlib stream being decompressed.
@@ -26,7 +26,7 @@ final class InflateStream {
     private var stream = z_stream()
     private var isInitialized = false
     #else
-    private let stream = Inflate()
+    private let stream = Decompressor()
     #endif
 
     init() throws(Diagnostic) {
@@ -93,7 +93,7 @@ final class InflateStream {
         self.stream.next_out = destination
         self.stream.avail_out = UInt32(count)
 
-        let status = CZlib.inflate(&self.stream, Z_NO_FLUSH)
+        let status = CSystemZlib.inflate(&self.stream, Z_NO_FLUSH)
 
         switch status {
         case Z_OK, Z_BUF_ERROR:
