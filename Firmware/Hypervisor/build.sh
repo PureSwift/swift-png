@@ -19,7 +19,7 @@ output="${1:-$root/build/embedded/$triple/hypervisor}"
 
 mkdir -p "$output"
 
-echo "building LZ77 and PNG for $triple"
+echo "building the compression modules and PNG for $triple"
 "$root/scripts/build_embedded.sh" "$triple" "$output/libs"
 
 swiftc=$(xcrun --find swiftc 2>/dev/null || command -v swiftc)
@@ -54,7 +54,7 @@ ld -static -arch arm64 -platform_version macos 11.0 11.0 -e _reset_entry \
     -pagezero_size 0x0 -image_base 0x40000000 -segaddr __TEXT 0x40000000 \
     -o "$output/firmware.macho" \
     "$output/guest.o" "$output/vectors.o" "$output/App.o" \
-    "$output/libs/PNG.o" "$output/libs/LZ77.o"
+    "$output/libs/PNG.o" "$output/libs/Zlib.o" "$output/libs/LZ77.o"
 
 echo "building the host loader"
 xcrun -sdk macosx clang -o "$output/loader" "$here/loader.c" -framework Hypervisor
