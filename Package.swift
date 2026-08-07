@@ -34,10 +34,10 @@ let package = Package(
         // produce the same compressed bytes.  A client that wants no C dependency at all asks
         // for it with `--disable-default-traits`, and the suites run both ways.
         .default(enabledTraits: ["SystemZlib"]),
-        // The engine reaches DEFLATE through one interface with two backends.
-        // Swift clients get the Swift implementation so the library stays
-        // dependency-free; the C library defaults to zlib, matching what the
-        // reference build links against.
+        // The engine reaches DEFLATE through one interface with two backends: the
+        // swift-zlib package, which is the default everywhere now — the shipped C
+        // library is Swift throughout, compression included — and the system zlib,
+        // which is faster and available wherever there is a system to provide it.
         .trait(
             name: "SystemZlib",
             description: "Use the system zlib for compression instead of the Swift implementation."
