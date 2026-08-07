@@ -113,13 +113,93 @@ enum FilterSelect {
         return best
     }
 
+    /// Sixteen bytes of the row, loaded and stored at once.
+    ///
+    /// Filtering has no serial dependency, and that is the whole reason a block can be done at a
+    /// time: every input a predictor reads comes from the source row or the row above, and this
+    /// writes to neither.  Decoding is the opposite — there the left neighbour is a byte the same
+    /// loop has just reconstructed — which is why the defilter's loops are shaped differently.
+    @inline(__always)
+    private static func load(_ bytes: UnsafeBufferPointer<UInt8>, _ index: Int) -> SIMD16<UInt8> {
+        UnsafeRawPointer(bytes.baseAddress! + index).loadUnaligned(as: SIMD16<UInt8>.self)
+    }
+
+    @inline(__always)
+    private static func store(
+        _ bytes: UnsafeMutableBufferPointer<UInt8>, _ index: Int, _ value: SIMD16<UInt8>
+    ) {
+        UnsafeMutableRawPointer(bytes.baseAddress! + index)
+            .storeBytes(of: value, as: SIMD16<UInt8>.self)
+    }
+
     /// Writes one filtered scanline and returns the reference's measure of how good it is.
     ///
     /// The measure is the sum of the differences read as signed bytes and taken as distances from
-    /// zero, which is what the reference sums and what its choice therefore depends on.
-    /// Gives up once `cost` passes `abandonAbove`, leaving the rest of `destination` unwritten: a
-    /// candidate that has already lost is not worth finishing.  The check sits between blocks of the
-    /// row rather than between bytes, so the loops inside a block stay straight enough to vectorise.
+    /// zero, which is what the reference sums and what its choice therefore depends on.  Gives up
+    /// once the cost passes `abandonAbove`, leaving the rest of `destination` unwritten: a
+    /// candidate that has already lost is not worth finishing, and the caller only compares the
+    /// answer against the best so far.
+    ///
+    /// `lead` is how many leading bytes have no left neighbour, the format defining theirs as
+    /// zero; there are at most eight, so they are done one at a time.
+    ///
+    /// Between flushes the running cost lives in sixteen bit lanes.  A lane takes at most 128 a
+    /// step and the block is sixteen steps, so a lane cannot reach its own ceiling; the sum
+    /// *across* lanes is widened before it is folded in, which is the step that silently
+    /// overflowed when this was first written and made every cost wrong rather than merely slow.
+    @inline(__always)
+    private static func measure(
+        count: Int,
+        lead: Int,
+        into destination: UnsafeMutableBufferPointer<UInt8>,
+        abandonAbove: Int,
+        leadByte: (Int) -> UInt8,
+        block: (Int) -> SIMD16<UInt8>,
+        byte: (Int) -> UInt8
+    ) -> Int {
+        var cost = 0
+        var index = 0
+
+        while index < lead {
+            let value = leadByte(index)
+
+            destination[index] = value
+            cost += Int(min(value, 0 &- value))
+            index += 1
+        }
+
+        let vectorEnd = lead + ((count - lead) & ~15)
+
+        while index < vectorEnd {
+            // Two hundred and fifty six bytes between checks, which is what the byte-at-a-time
+            // form used, so a hopeless candidate is abandoned no later than it was before.
+            let stop = min(index + 256, vectorEnd)
+            var lanes = SIMD16<UInt16>()
+
+            while index < stop {
+                let value = block(index)
+
+                Self.store(destination, index, value)
+                lanes &+= SIMD16<UInt16>(truncatingIfNeeded: pointwiseMin(value, 0 &- value))
+                index += 16
+            }
+
+            cost += Int(SIMD16<UInt32>(truncatingIfNeeded: lanes).wrappedSum())
+
+            guard cost <= abandonAbove else { return cost }
+        }
+
+        while index < count {
+            let value = byte(index)
+
+            destination[index] = value
+            cost += Int(min(value, 0 &- value))
+            index += 1
+        }
+
+        return cost
+    }
+
     private static func apply(
         _ filter: Filter,
         _ row: UnsafeBufferPointer<UInt8>,
@@ -129,99 +209,90 @@ enum FilterSelect {
         abandonAbove: Int
     ) -> Int {
         let count = row.count
-        var cost = 0
-        let block = 256
-
-        @inline(__always)
-        func record(_ index: Int, _ value: UInt8) {
-            destination[index] = value
-
-            // The distance from zero, read as a signed byte, without the branch that says so:
-            // for anything below 128 the value itself is nearer, and for anything above it the
-            // wrapped negation is — and `min` of the two is that answer for every byte, zero
-            // included.  Written this way because a branch here is per byte of every candidate
-            // filter of every row, and it is what stops the loop being vectorised.
-            cost += Int(min(value, 0 &- value))
-        }
-
-        // Each filter is two loops rather than one with a branch in it: the first `stride` bytes are
-        // the ones whose left-hand neighbours the format defines as zero, and once they are done the
-        // test for them has nothing left to catch.
-        let prefix = min(stride, count)
+        let lead = min(stride, count)
 
         switch filter {
         case .none:
-            var start = 0
-            while start < count, cost <= abandonAbove {
-                for index in start ..< min(start + block, count) {
-                    record(index, row[index])
-                }
-                start += block
-            }
+            return Self.measure(
+                count: count, lead: 0, into: destination, abandonAbove: abandonAbove,
+                leadByte: { _ in 0 },
+                block: { Self.load(row, $0) },
+                byte: { row[$0] }
+            )
 
         case .sub:
-            for index in 0 ..< prefix {
-                record(index, row[index])
-            }
-
-            var start = prefix
-            while start < count, cost <= abandonAbove {
-                for index in start ..< min(start + block, count) {
-                    record(
-                        index,
-                        UInt8(truncatingIfNeeded: Int(row[index]) - Int(row[index - stride]))
-                    )
-                }
-                start += block
-            }
+            return Self.measure(
+                count: count, lead: lead, into: destination, abandonAbove: abandonAbove,
+                leadByte: { row[$0] },
+                block: { Self.load(row, $0) &- Self.load(row, $0 - stride) },
+                byte: { row[$0] &- row[$0 - stride] }
+            )
 
         case .up:
-            var start = 0
-            while start < count, cost <= abandonAbove {
-                for index in start ..< min(start + block, count) {
-                    record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index])))
-                }
-                start += block
-            }
+            return Self.measure(
+                count: count, lead: 0, into: destination, abandonAbove: abandonAbove,
+                leadByte: { _ in 0 },
+                block: { Self.load(row, $0) &- Self.load(previous, $0) },
+                byte: { row[$0] &- previous[$0] }
+            )
 
         case .average:
-            for index in 0 ..< prefix {
-                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index]) / 2))
-            }
+            // The mean of two bytes wants nine bits before it is halved, which a byte lane has
+            // not got.  `(l & a) + ((l ^ a) >> 1)` is that floored mean exactly and stays in
+            // eight bits throughout: the bits the AND keeps are the carry the sum would have
+            // overflowed into, and halving the rest puts them back where they belong.
+            return Self.measure(
+                count: count, lead: lead, into: destination, abandonAbove: abandonAbove,
+                leadByte: { row[$0] &- (previous[$0] >> 1) },
+                block: {
+                    let left = Self.load(row, $0 - stride)
+                    let above = Self.load(previous, $0)
 
-            var start = prefix
-            while start < count, cost <= abandonAbove {
-                for index in start ..< min(start + block, count) {
-                    let predicted = (Int(row[index - stride]) + Int(previous[index])) / 2
-                    record(index, UInt8(truncatingIfNeeded: Int(row[index]) - predicted))
+                    return Self.load(row, $0) &- ((left & above) &+ ((left ^ above) &>> 1))
+                },
+                byte: {
+                    let predicted = (Int(row[$0 - stride]) + Int(previous[$0])) / 2
+
+                    return UInt8(truncatingIfNeeded: Int(row[$0]) - predicted)
                 }
-                start += block
-            }
+            )
 
         case .paeth:
-            // For the first pixel the prediction collapses to the byte above: with nothing to the
-            // left both other candidates are zero, and the tie-breaking picks the same value either
-            // way.
-            for index in 0 ..< prefix {
-                record(index, UInt8(truncatingIfNeeded: Int(row[index]) - Int(previous[index])))
+            // With no left neighbour the estimate reduces to the byte above, so the leading bytes
+            // are the upward filter.  The predictor itself is still one pixel at a time — see
+            // `paeth` below for why it is the one that resists this treatment.
+            var cost = 0
+            var index = 0
+
+            while index < lead {
+                let value = row[index] &- previous[index]
+
+                destination[index] = value
+                cost += Int(min(value, 0 &- value))
+                index += 1
             }
 
-            var start = prefix
-            while start < count, cost <= abandonAbove {
-                for index in start ..< min(start + block, count) {
+            while index < count {
+                let stop = min(index + 256, count)
+
+                while index < stop {
                     let predicted = Self.paeth(
                         left: Int(row[index - stride]),
                         above: Int(previous[index]),
                         aboveLeft: Int(previous[index - stride])
                     )
+                    let value = UInt8(truncatingIfNeeded: Int(row[index]) - predicted)
 
-                    record(index, UInt8(truncatingIfNeeded: Int(row[index]) - predicted))
+                    destination[index] = value
+                    cost += Int(min(value, 0 &- value))
+                    index += 1
                 }
-                start += block
-            }
-        }
 
-        return cost
+                guard cost <= abandonAbove else { return cost }
+            }
+
+            return cost
+        }
     }
 
     /// The prediction the fifth filter subtracts.
