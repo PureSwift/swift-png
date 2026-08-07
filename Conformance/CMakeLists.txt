@@ -218,6 +218,25 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
         DEPENDS pngbench pngbench_reference
         USES_TERMINAL)
 
+    # The same question as pngbench asks, at a resolution pngbench cannot reach.  It reports the
+    # best single operation to a hundredth of a microsecond, which is a handful of ticks for a
+    # small image and cannot show a change worth making; this times a whole batch and divides, so
+    # what limits the answer is the batch size rather than the clock.  It also separates the fixed
+    # cost from the work: `life` creates and destroys the structures and does nothing else, `info`
+    # reads the header as well, and `full` reads the rows.
+    add_executable(lifeprobe lifeprobe.c)
+    target_link_libraries(lifeprobe PRIVATE png16)
+
+    add_executable(lifeprobe_reference lifeprobe.c)
+    target_include_directories(lifeprobe_reference BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIRS})
+    target_link_libraries(lifeprobe_reference PRIVATE ${SPNG_REFERENCE_LINK_LIBRARIES})
+
+    if(SPNG_REFERENCE_INCLUDE_DIR AND EXISTS ${SPNG_REFERENCE_INCLUDE_DIR}/png.h)
+        target_include_directories(lifeprobe BEFORE PRIVATE ${SPNG_REFERENCE_INCLUDE_DIR})
+    endif()
+
+    add_dependencies(lifeprobe spng_corpus)
+
     # Fitting an image into fewer colours than it has.  Generated palettes rather than corpus images:
     # what the reduction does depends on how the colours are spread, not on what the picture is of.
     add_executable(pngquantize pngquantize.c)
