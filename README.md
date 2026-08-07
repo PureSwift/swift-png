@@ -66,11 +66,12 @@ the library, which is worth doing on platforms that do not ship one.
 
 ## Platforms without a C library underneath
 
-`PNG` and the `LZ77` module it compresses through have no dependency on zlib, libc, or an
+`PNG` and the compression modules it works through have no dependency on zlib, libc, or an
 operating system, and compile under Embedded Swift for targets that have none of the three:
 WebAssembly, and bare-metal ARM. Building `PNG` for one of these disables the
 `SystemZlib` trait (`swift build --disable-default-traits ...`), which switches DEFLATE and
-INFLATE to the from-scratch, zlib-compatible codec in `LZ77` — the same code path exercised by
+INFLATE to the from-scratch, zlib-compatible codec in
+[swift-zlib](https://github.com/PureSwift/swift-zlib) — the same code path exercised by
 `swift test --disable-default-traits` on every hosted platform, so it is not only ever tested on
 targets that are otherwise hard to test at all.
 
