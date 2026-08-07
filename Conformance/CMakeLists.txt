@@ -218,6 +218,19 @@ if(SPNG_REFERENCE_FOUND AND SPNG_REFERENCE_LINK_LIBRARIES)
         DEPENDS pngbench pngbench_reference
         USES_TERMINAL)
 
+    # The engine driven from Swift, over the same corpus and through the same comparison as
+    # `benchmark`, so the two tables read side by side.  The Swift benchmark is built by SwiftPM
+    # rather than here — it exercises the package product a Swift client actually imports — and
+    # prints pngbench's own format, which is what lets one script serve both.
+    add_custom_target(benchmark-swift
+        COMMAND swift build -c release --product pngbench-swift
+                --package-path ${CMAKE_CURRENT_SOURCE_DIR}/..
+        COMMAND ${SPNG_SCRIPTS}/compare_bench.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/../.build/release/pngbench-swift
+                $<TARGET_FILE:pngbench_reference> ${SPNG_CORPUS}
+        DEPENDS pngbench_reference spng_corpus
+        USES_TERMINAL)
+
     # The same question as pngbench asks, at a resolution pngbench cannot reach.  It reports the
     # best single operation to a hundredth of a microsecond, which is a handful of ticks for a
     # small image and cannot show a change worth making; this times a whole batch and divides, so
