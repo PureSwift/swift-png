@@ -79,9 +79,8 @@ add_custom_target(spng_export_lists
 # competitive.
 set(SPNG_COMPILATION_MODE $<IF:$<CONFIG:Release>,wholemodule,incremental>)
 
-function(spng_add_swift_module name)
-    file(GLOB_RECURSE sources CONFIGURE_DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/Sources/${name}/*.swift)
+function(spng_add_swift_module_at name directory)
+    file(GLOB_RECURSE sources CONFIGURE_DEPENDS ${directory}/*.swift)
 
     add_library(${name} STATIC ${sources})
 
@@ -98,11 +97,32 @@ function(spng_add_swift_module name)
         $<$<CONFIG:Release>:-enforce-exclusivity=unchecked>)
 endfunction()
 
-spng_add_swift_module(LZ77)
+# The ordinary case: a module whose sources are this repository's own.
+function(spng_add_swift_module name)
+    spng_add_swift_module_at(${name} ${CMAKE_CURRENT_SOURCE_DIR}/Sources/${name})
+endfunction()
+
+# DEFLATE and INFLATE come from the sibling package rather than being carried here, so that the
+# two libraries share one implementation instead of each keeping its own copy.  Only the sources
+# are wanted: that package's own CMakeLists builds a C library this build has no use for, so
+# SOURCE_SUBDIR names a directory that does not exist and nothing of it is configured.
+include(FetchContent)
+
+FetchContent_Declare(swift_zlib
+    GIT_REPOSITORY https://github.com/PureSwift/swift-zlib.git
+    GIT_TAG 1.0.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR sources-only)
+
+FetchContent_MakeAvailable(swift_zlib)
+
+spng_add_swift_module_at(LZ77 ${swift_zlib_SOURCE_DIR}/Sources/LZ77)
+spng_add_swift_module_at(Zlib ${swift_zlib_SOURCE_DIR}/Sources/Zlib)
 spng_add_swift_module(PNG)
 spng_add_swift_module(PNGABI)
 
-target_link_libraries(PNG PUBLIC LZ77)
+target_link_libraries(Zlib PUBLIC LZ77)
+target_link_libraries(PNG PUBLIC Zlib)
 target_link_libraries(PNGABI PUBLIC PNG)
 
 # Only the boundary module sees the C API.
@@ -137,7 +157,7 @@ if(SPNG_USE_SYSTEM_ZLIB)
     # to PNG itself: a clang module a Swift module depends on has to be
     # loadable wherever that Swift module is imported.
     set(SPNG_ZLIB_MODULE_MAP
-        ${CMAKE_CURRENT_SOURCE_DIR}/Sources/CZlib/module.modulemap)
+        ${CMAKE_CURRENT_SOURCE_DIR}/Sources/CSystemZlib/module.modulemap)
 
     foreach(target PNG PNGABI)
         target_compile_options(${target} PRIVATE
@@ -215,6 +235,7 @@ else()
     target_link_options(png16 PRIVATE
         "LINKER:--whole-archive,$<TARGET_FILE:PNGABI>,--no-whole-archive"
         "LINKER:$<TARGET_FILE:PNG>"
+        "LINKER:$<TARGET_FILE:Zlib>"
         "LINKER:$<TARGET_FILE:LZ77>")
 
     if(SPNG_STATIC_STDLIB)
