@@ -135,7 +135,13 @@ enum FilterSelect {
         @inline(__always)
         func record(_ index: Int, _ value: UInt8) {
             destination[index] = value
-            cost += value < 128 ? Int(value) : 256 - Int(value)
+
+            // The distance from zero, read as a signed byte, without the branch that says so:
+            // for anything below 128 the value itself is nearer, and for anything above it the
+            // wrapped negation is — and `min` of the two is that answer for every byte, zero
+            // included.  Written this way because a branch here is per byte of every candidate
+            // filter of every row, and it is what stops the loop being vectorised.
+            cost += Int(min(value, 0 &- value))
         }
 
         // Each filter is two loops rather than one with a branch in it: the first `stride` bytes are
