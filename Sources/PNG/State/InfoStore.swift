@@ -145,7 +145,9 @@ public final class InfoStore {
     /// One slot per field, and not one shared buffer: a client may call two of these
     /// accessors and hold both pointers, and a shared buffer would have the second call
     /// overwrite the first client's data.
-    var exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
+    /// Empty until an accessor first needs a slot, because most decodes never call one: the array
+    /// and its eight empty buffers were a heap allocation paid by every structure ever created.
+    var exportSlots: [RawBuffer] = []
 
     public init(host: Host) {
         self.host = host
@@ -160,7 +162,7 @@ public final class InfoStore {
         for slot in self.exportSlots {
             slot.deallocate(host: self.host)
         }
-        self.exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
+        self.exportSlots = []
 
         // Cleared as well as freed, which every field here does and which is not tidiness: this runs
         // once per structure in the ordinary case and more than once when a client destroys one it has
@@ -251,6 +253,10 @@ public final class InfoStore {
         byteCount: Int
     ) throws(Diagnostic) -> UnsafeMutableRawPointer? {
         guard byteCount > 0 else { return nil }
+
+        if self.exportSlots.isEmpty {
+            self.exportSlots = [RawBuffer](repeating: .empty, count: ExportSlot.count)
+        }
 
         if self.exportSlots[slot.rawValue].count < byteCount {
             let fresh = try RawBuffer.allocate(byteCount, host: self.host)
