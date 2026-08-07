@@ -229,7 +229,6 @@ final class SequentialReader {
 
         // The reference row only ever holds stored bytes, so it is sized for those alone.
         try context.reserve(.previousRow, widestStored)
-        try context.reserve(.inputBuffer, Self.inputBufferSize)
 
         context.inflater = try InflateStream()
 
@@ -807,6 +806,17 @@ final class SequentialReader {
                 throw Diagnostic("Not enough image data")
             }
         }
+
+        // Sized here rather than when the rows begin, and to what this chunk actually holds: an
+        // image whose whole compressed form is a few bytes should not hold eight kilobytes to read
+        // it, which on the targets this library is built for is worth more than the nothing it
+        // costs.  A real image asks for the full size on its first refill and keeps it — `reserve`
+        // only ever grows, so the check here is a comparison rather than an allocation.  Measured
+        // as neither faster nor slower; the gain is the memory, not the time.
+        try context.reserve(
+            .inputBuffer,
+            min(Self.inputBufferSize, max(self.lexer.remainingInChunk, 1))
+        )
 
         let buffer = context.inputBuffer.bytes
         let read = self.lexer.readPayload(
