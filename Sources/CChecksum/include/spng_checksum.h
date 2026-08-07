@@ -91,17 +91,121 @@ static inline uint32_t spng_crc32_advance(size_t n)
    return p;
 }
 
+#if defined(__ARM_FEATURE_AES) || defined(__ARM_FEATURE_CRYPTO)
+
+#include <arm_neon.h>
+
+#define SPNG_CRC32_FOLDED 1
+
+/* Folding moves a 128-bit block of the message forward past `n` bits of zeros by carryless
+ * multiplication: each 64-bit half times x^(distance to where that half's contribution must
+ * land), both products XORed.  The multipliers are x^n mod P in the same reflected bit order
+ * the instruction uses, shifted up one so the product's alignment matches what the final
+ * per-doubleword reduction below expects; with that convention a fold by the constant pair
+ * for n advances the block n+32 bits, which the distances here already account for.
+ */
+static inline uint64x2_t spng_crc32_fold128(uint64x2_t block, poly64x2_t k)
+{
+   uint64x2_t low = vreinterpretq_u64_p128(
+      vmull_p64((poly64_t)vgetq_lane_u64(block, 0), (poly64_t)vgetq_lane_p64(k, 0)));
+   uint64x2_t high = vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(block), k));
+   return veorq_u64(low, high);
+}
+
+static inline poly64x2_t spng_crc32_fold_k(uint64_t low, uint64_t high)
+{
+   return vreinterpretq_p64_u64(vcombine_u64(vcreate_u64(low), vcreate_u64(high)));
+}
+
+/* Standing distances from each accumulator's block to the last one's: seven blocks
+ * ahead down to one, each less the 32 bits the reduction convention already advances.
+ */
+static const uint64_t spng_crc32_fold_comb[7][2] = {
+   {0x1ea89367eull, 0x1d7cfc6acull},
+   {0x0df068dc2ull, 0x18cb44e58ull},
+   {0x1c7569e54ull, 0x0ae0b5394ull},
+   {0x154442bd4ull, 0x1c6e41596ull},
+   {0x03db1ecdcull, 0x174359406ull},
+   {0x0f1da05aaull, 0x15a546366ull},
+   {0x1751997d0ull, 0x0ccaa009eull},
+};
+
+/* The wide bulk loop: eight 128-bit accumulators stride 128 bytes a step, each folded
+ * over the 1024 bits between one of its blocks and the next and XORed with the incoming
+ * block.  Eight independent fold-XOR chains cover the multiplier's latency the same way
+ * the braid below covers the CRC instruction's — eight is the measured knee, wider
+ * spills registers and pays a longer combine for nothing.  The accumulators are then
+ * folded onto the last one at their standing distances, reduced to the 32-bit register
+ * with two CRC instruction steps (which divide by x^128 exactly, since a fold by zero
+ * bits is the identity), and the sub-stride remainder goes through the plain chain.
+ *
+ * Same raw-register contract as everything here: no inversion at either end.
+ */
+static inline uint32_t spng_crc32_folded(uint32_t crc, const uint8_t *bytes, size_t count)
+{
+   /* x^(n+64) and x^n for n = 992: one 128-byte stride back from the same block position. */
+   const poly64x2_t step = spng_crc32_fold_k(0x1e88ef372ull, 0x14a7fe880ull);
+
+   uint64x2_t a[8];
+
+   for (int i = 0; i < 8; i++)
+   {
+      a[i] = vreinterpretq_u64_u8(vld1q_u8(bytes + 16 * i));
+   }
+
+   /* The incoming register enters as the first four message bytes do: XORed in place. */
+   a[0] = veorq_u64(a[0], vcombine_u64(vcreate_u64((uint64_t)crc), vcreate_u64(0)));
+
+   size_t offset = 128;
+
+   while (offset + 128 <= count)
+   {
+      for (int i = 0; i < 8; i++)
+      {
+         a[i] = veorq_u64(
+            spng_crc32_fold128(a[i], step),
+            vreinterpretq_u64_u8(vld1q_u8(bytes + offset + 16 * i)));
+      }
+
+      offset += 128;
+   }
+
+   uint64x2_t total = a[7];
+
+   for (int i = 0; i < 7; i++)
+   {
+      total = veorq_u64(total, spng_crc32_fold128(
+         a[i], spng_crc32_fold_k(spng_crc32_fold_comb[i][0], spng_crc32_fold_comb[i][1])));
+   }
+
+   crc = __crc32d(0, vgetq_lane_u64(total, 0));
+   crc = __crc32d(crc, vgetq_lane_u64(total, 1));
+
+   return spng_crc32_chain(crc, bytes + offset, count - offset);
+}
+
+#endif
+
 /* `crc` is the raw shift register, uninverted at both ends: the caller owns the
  * pre- and post-conditioning, the same contract its own table loop uses.
  *
- * A large buffer is split into three braided chains walked in one loop, because a single
- * chain is bound by the instruction's own latency: three registers in flight hide it, and
- * the three answers are stitched with the zero-block advance above.  Small buffers take
- * the plain chain — the stitching costs a fixed few microseconds of matrix arithmetic,
- * which a large buffer amortises and a chunk header would not.
+ * A large buffer goes through the carryless-multiply fold where the processor has one:
+ * that path moves 64 bytes per step and is bound only by the multiplier's throughput.
+ * Otherwise it is split into three braided chains walked in one loop, because a single
+ * chain of the CRC instruction is bound by its own latency: three registers in flight
+ * hide it, and the three answers are stitched with the zero-block advance above.  Small
+ * buffers take the plain chain — both wide paths cost a fixed setup that a large buffer
+ * amortises and a chunk header would not.
  */
 static inline uint32_t spng_crc32(uint32_t crc, const uint8_t *bytes, size_t count)
 {
+#if defined(SPNG_CRC32_FOLDED)
+   if (count >= 192)
+   {
+      return spng_crc32_folded(crc, bytes, count);
+   }
+#endif
+
    while (((uintptr_t)bytes & 7) != 0 && count > 0)
    {
       crc = __crc32b(crc, *bytes++);
