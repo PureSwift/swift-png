@@ -154,6 +154,14 @@ if(SPNG_INLINE_ARRAYS)
     target_compile_definitions(PNG PRIVATE InlineArrays)
 endif()
 
+# The CRC-32 instruction's header-only module, visible to the engine on every build: whether
+# the instruction exists is the compiler's answer, taken inside the header.
+foreach(target PNG PNGABI)
+    target_compile_options(${target} PRIVATE
+        "SHELL:-Xcc -fmodule-map-file=${CMAKE_CURRENT_SOURCE_DIR}/Sources/CChecksum/include/module.modulemap"
+        "SHELL:-Xcc -I${CMAKE_CURRENT_SOURCE_DIR}/Sources/CChecksum/include")
+endforeach()
+
 if(SPNG_USE_SYSTEM_ZLIB)
     target_compile_definitions(PNG PRIVATE SystemZlib)
 
