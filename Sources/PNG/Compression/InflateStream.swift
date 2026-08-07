@@ -14,6 +14,10 @@
 #if SystemZlib
 import CSystemZlib
 #else
+// Both, and the second is not redundant: `Ending` and `DeflateError` are declared in `LZ77` and
+// only re-exposed through `Zlib`, and Embedded Swift refuses a type whose defining module this
+// file has not imported itself.
+import LZ77
 import Zlib
 #endif
 
