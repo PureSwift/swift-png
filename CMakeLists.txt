@@ -24,6 +24,11 @@ option(SPNG_STATIC_STDLIB
     "Link the Swift runtime statically, so the library needs no toolchain at run time" OFF)
 option(SPNG_BUILD_TESTS "Build the conformance programs" ON)
 
+# ON, OFF, or AUTO, which probes the toolchain: the fixed-size array type needs a compiler and
+# deployment target new enough to have it, and the portable fallback is what every other build gets.
+set(SPNG_INLINE_ARRAYS AUTO CACHE STRING
+    "Use the standard library's fixed-size arrays where small fixed storage is needed")
+
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -104,6 +109,26 @@ target_link_libraries(PNGABI PUBLIC PNG)
 target_compile_options(PNGABI PRIVATE
     "SHELL:-Xcc -I${SPNG_INCLUDE_DIR}"
     "SHELL:-Xcc -fmodule-map-file=${SPNG_MODULE_MAP}")
+
+if(SPNG_INLINE_ARRAYS STREQUAL "AUTO")
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/inline_array_probe.swift
+        "let probe = InlineArray<8, Int32>(repeating: 0)\nlet _ = probe[0]\n")
+    execute_process(
+        COMMAND ${CMAKE_Swift_COMPILER} -typecheck
+            ${CMAKE_CURRENT_BINARY_DIR}/inline_array_probe.swift
+        RESULT_VARIABLE SPNG_INLINE_ARRAY_PROBE
+        OUTPUT_QUIET ERROR_QUIET)
+
+    if(SPNG_INLINE_ARRAY_PROBE EQUAL 0)
+        set(SPNG_INLINE_ARRAYS ON)
+    else()
+        set(SPNG_INLINE_ARRAYS OFF)
+    endif()
+endif()
+
+if(SPNG_INLINE_ARRAYS)
+    target_compile_definitions(PNG PRIVATE InlineArrays)
+endif()
 
 if(SPNG_USE_SYSTEM_ZLIB)
     target_compile_definitions(PNG PRIVATE SystemZlib)
