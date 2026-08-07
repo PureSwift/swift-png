@@ -227,8 +227,10 @@ final class SequentialReader {
         // each scanline.
         try context.reserve(.rowBuffer, widest + 1)
 
-        // The reference row only ever holds stored bytes, so it is sized for those alone.
-        try context.reserve(.previousRow, widestStored)
+        // The reference row shares the row buffer's size and layout — stored bytes after a
+        // leading spare byte — because for a plain read the two are not a buffer and a copy but
+        // a pair that trade places: see the swap below.
+        try context.reserve(.previousRow, widest + 1)
 
         context.inflater = try InflateStream()
 
@@ -301,6 +303,24 @@ final class SequentialReader {
 
         let stored = self.bytesInCurrentPass(header: header)
 
+        let runsPipeline = !(context.transforms?.isEmpty ?? true)
+        let runsUserTransform = context.transformFlags.contains(.userTransform)
+
+        // Whether the decoded row survives the rest of this function as the bytes that were
+        // stored.  Nothing below touches it for a plain read of whole-byte samples — the
+        // trailing-bit mask only exists below eight bits — and that is what lets the reference
+        // row be this buffer *itself* next time, by trading places with the other buffer,
+        // instead of a copy of it.  The encoder filtered against stored bytes, so anything that
+        // rewrites the row — a transform, or the client's own — forces the copy back.
+        let rowStaysStored = header.bitDepth >= 8 && !runsPipeline && !runsUserTransform
+
+        // The trade, before this row is decoded: what the buffer holds from last time becomes
+        // the reference, and the reference's storage is decoded into.  Not on a pass's first
+        // row, whose reference the pass change zeroed.
+        if rowStaysStored, self.rowIndex > 0 {
+            swap(&context.rowBuffer, &context.previousRow)
+        }
+
         // The filter byte and the scanline are one contiguous run in the stream.
         try self.inflateExactly(count: stored + 1, context: context)
 
@@ -316,16 +336,21 @@ final class SequentialReader {
             filter,
             to: row,
             previous: UnsafeBufferPointer(
-                start: context.previousRow.bytes.baseAddress,
+                start: context.previousRow.bytes.baseAddress! + 1,
                 count: stored
             ),
             stride: header.filterStride
         )
 
-        // This row becomes the reference for the next one, and it has to be the
-        // bytes as stored: the encoder computed its filters against those, so
-        // discarding anything first would decode the next row wrongly.
-        context.previousRow.bytes.baseAddress!.update(from: row.baseAddress!, count: stored)
+        // This row becomes the reference for the next one, and it has to be the bytes as
+        // stored: the encoder computed its filters against those, so discarding anything first
+        // would decode the next row wrongly.  When the row is about to be rewritten below, that
+        // means a copy; when it is not, the trade above has already made this buffer the next
+        // reference, and there is nothing to do.
+        if !rowStaysStored {
+            context.previousRow.bytes.baseAddress!.advanced(by: 1)
+                .update(from: row.baseAddress!, count: stored)
+        }
 
         self.rowIndex += 1
 
@@ -335,9 +360,6 @@ final class SequentialReader {
         var shape = header.isInterlaced
             ? RowInfo(header, pass: self.pass)
             : RowInfo(header)
-
-        let runsPipeline = !(context.transforms?.isEmpty ?? true)
-        let runsUserTransform = context.transformFlags.contains(.userTransform)
 
         // The bits past the end of a row are cleared last of all, which is where the reference clears
         // them and not merely a place that happens to work.  Until then they hold whatever the encoder
