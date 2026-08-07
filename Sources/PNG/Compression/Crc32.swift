@@ -13,7 +13,7 @@
 // once the single largest line in a whole decode's profile.
 
 #if SystemZlib
-import CZlib
+import CSystemZlib
 #endif
 
 /// The CRC-32 that PNG appends to each chunk, over its type code and payload.
