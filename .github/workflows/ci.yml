@@ -22,6 +22,13 @@ concurrency:
 jobs:
   macos:
     runs-on: macos-26
+    # Both compression backends, because they are different code from the chunk framing down:
+    # the default is the Swift codec and links nothing, and the system-zlib build is what a
+    # distribution wanting zlib's speed would ship — a regression in either should say which.
+    strategy:
+      fail-fast: false
+      matrix:
+        zlib: [OFF, ON]
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +45,7 @@ jobs:
 
       - name: Configure (CMake)
         run: cmake -G Ninja -B build/ci -DCMAKE_BUILD_TYPE=Release
+              -DSPNG_USE_SYSTEM_ZLIB=${{ matrix.zlib }}
 
       - name: Build (CMake)
         run: cmake --build build/ci
@@ -70,6 +78,11 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     container: swift:6.3.3-bookworm
+    # The same two backends as the macos job, for the same reason.
+    strategy:
+      fail-fast: false
+      matrix:
+        zlib: [OFF, ON]
     env:
       LIBPNG_VERSION: "1.6.58"
     steps:
@@ -103,6 +116,7 @@ jobs:
 
       - name: Configure (CMake)
         run: cmake -G Ninja -B build/ci -DCMAKE_BUILD_TYPE=Release
+              -DSPNG_USE_SYSTEM_ZLIB=${{ matrix.zlib }}
 
       - name: Build (CMake)
         run: cmake --build build/ci
