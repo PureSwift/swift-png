@@ -81,7 +81,7 @@ cmake --build build/release --target benchmark
 
 It reports decode, decode-with-transforms and encode per image and adds them up. As of this
 writing the default build — the one that compresses through Swift and links no zlib — totals
-**0.91×** the reference's, and the build that swaps the system zlib in totals **0.77×**; either
+**0.87×** the reference's, and the build that swaps the system zlib in totals **0.77×**; either
 way this library is the faster of the two, and the number moves by about ±0.01 between runs, so
 read three.
 
@@ -89,11 +89,16 @@ The two builds are faster in different places, and the difference is worth knowi
 choosing. Encode is where this library wins — 0.68× on the corpus in the default build, and a
 2048×2048 gradient encodes in 54ms against the reference's 96 — partly from filtering sixteen
 bytes at a time and partly because the Swift compressor does less entropy work, which also
-means its files run a few percent larger on compressible images. Decode is where the system
-zlib still earns its keep: the Swift INFLATE is two to four times slower than zlib's, which the
-small images of the corpus feel as about 2.8× on the decode column and a large photograph feels
-directly. A program that mostly writes wants the default; one that mostly reads large images
-wants `SPNG_USE_SYSTEM_ZLIB=ON`, where decode runs within a few percent of the reference.
+means its files run a few percent larger on compressible images. Decode depends on what the
+bytes look like. A large photograph — noisy, so the compressed stream is mostly stored bytes
+and the time goes to checksums and copying — decodes *faster* than the reference in the default
+build: a 16MB noise image reads in 2.5ms against the reference's 2.9, because the checksums run
+through an eight-lane carryless-multiply fold where the processor has one. What still favors
+the system zlib is highly compressible data, where the Swift INFLATE's entropy decoding runs
+slower — about 1.4× on a large gradient, more on the tiny images of the corpus. A program
+that mostly writes, or reads photographs, wants the default; one that mostly reads large
+compressible images wants `SPNG_USE_SYSTEM_ZLIB=ON`, where decode runs within a few percent of
+the reference everywhere.
 
 ## Platforms without a C library underneath
 
