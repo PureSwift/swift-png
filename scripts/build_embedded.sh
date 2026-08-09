@@ -57,7 +57,7 @@ mkdir -p "$output"
 # The compression package, at the tag Package.resolved pins.  A checkout SwiftPM has already
 # made is preferred over cloning a second one; otherwise this is a shallow clone into the build
 # tree, which is also what CI gets.
-zlib_tag=1.0.3
+zlib_tag=1.0.4
 zlib_source="$root/.build/checkouts/swift-zlib"
 
 if [ ! -d "$zlib_source/Sources/LZ77" ]; then
