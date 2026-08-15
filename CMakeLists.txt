@@ -114,7 +114,7 @@ include(FetchContent)
 
 FetchContent_Declare(swift_zlib
     GIT_REPOSITORY https://github.com/PureSwift/swift-zlib.git
-    GIT_TAG 1.0.5
+    GIT_TAG 1.0.6
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR sources-only)
 
