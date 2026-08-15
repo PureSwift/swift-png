@@ -46,7 +46,7 @@ let package = Package(
     dependencies: [
         // DEFLATE and INFLATE in Swift, extracted so that the two libraries share one
         // implementation rather than each carrying its own copy of it.
-        .package(url: "https://github.com/PureSwift/swift-zlib.git", from: "1.0.4"),
+        .package(url: "https://github.com/PureSwift/swift-zlib.git", from: "1.0.5"),
     ],
     targets: [
         // The published C API, the completed control structures, and the parts
