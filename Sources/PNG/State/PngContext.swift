@@ -32,6 +32,14 @@ public final class PngContext {
     /// The previous reconstructed scanline, which the upward-looking filters need.
     var previousRow = RawBuffer.empty
 
+    /// Decompressed scanlines waiting to be served, filter bytes and all.
+    ///
+    /// The decompressor's fast loop pays a fixed cost to enter and leave — tables bound,
+    /// state spilled, over-read bytes handed back — and a row at a time that cost is paid
+    /// hundreds of times per image.  Decoding ahead into this buffer pays it once per fill
+    /// instead, and rows are then served out of what is already here.
+    var decodeRing = RawBuffer.empty
+
     /// Compressed bytes drawn from the current image data chunk.
     var inputBuffer = RawBuffer.empty
 
@@ -404,6 +412,7 @@ public final class PngContext {
         // allocated on every destruction to name buffers that are usually all empty.
         self.rowBuffer.deallocate(host: self.host)
         self.previousRow.deallocate(host: self.host)
+        self.decodeRing.deallocate(host: self.host)
         self.inputBuffer.deallocate(host: self.host)
         self.scratch.deallocate(host: self.host)
         self.writeStaging.deallocate(host: self.host)
@@ -414,6 +423,7 @@ public final class PngContext {
 
         self.rowBuffer = .empty
         self.previousRow = .empty
+        self.decodeRing = .empty
         self.inputBuffer = .empty
         self.scratch = .empty
         self.writeStaging = .empty
@@ -427,7 +437,7 @@ public final class PngContext {
     /// than a key path: a key path is resolved through the runtime on every access,
     /// and this is called per chunk and per row.
     enum BufferSlot {
-        case rowBuffer, previousRow, inputBuffer, scratch, writeStaging
+        case rowBuffer, previousRow, decodeRing, inputBuffer, scratch, writeStaging
         case textStaging, filterScratch, writeRowBuffer, timeText
     }
 
@@ -436,6 +446,7 @@ public final class PngContext {
             switch slot {
             case .rowBuffer: self.rowBuffer
             case .previousRow: self.previousRow
+            case .decodeRing: self.decodeRing
             case .inputBuffer: self.inputBuffer
             case .scratch: self.scratch
             case .writeStaging: self.writeStaging
@@ -449,6 +460,7 @@ public final class PngContext {
             switch slot {
             case .rowBuffer: self.rowBuffer = newValue
             case .previousRow: self.previousRow = newValue
+            case .decodeRing: self.decodeRing = newValue
             case .inputBuffer: self.inputBuffer = newValue
             case .scratch: self.scratch = newValue
             case .writeStaging: self.writeStaging = newValue
