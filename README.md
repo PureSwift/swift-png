@@ -81,25 +81,26 @@ cmake --build build/release --target benchmark
 
 It reports decode, decode-with-transforms and encode per image and adds them up. As of this
 writing the default build — the one that compresses through Swift and links no zlib — totals
-**0.82×** the reference's, and the build that swaps the system zlib in totals **0.77×**; either
+**0.72×** the reference's, and the build that swaps the system zlib in totals **0.70×**; either
 way this library is the faster of the two, and the number moves by about ±0.01 between runs, so
 read three.
 
-The two builds are faster in different places, and the difference is worth knowing before
-choosing. Encode is where this library wins — 0.65× on the corpus in the default build, and a
-2048×2048 gradient encodes in 52ms against the reference's 98 — partly from filtering sixteen
-bytes at a time and partly from a compressor that reaches the same answer with less work: the
-files it writes are the size the reference writes, byte-identical on most of the benchmark
-images and a whisker smaller on the rest. Decode depends on what the
-bytes look like. A large photograph — noisy, so the compressed stream is mostly stored bytes
-and the time goes to checksums and copying — decodes *faster* than the reference in the default
-build: a 16MB noise image reads in 2.5ms against the reference's 2.9, because the checksums run
-through an eight-lane carryless-multiply fold where the processor has one. Highly compressible
-data, where the entropy decoder does the work, is the one place the reference still leads, and
-narrowly: a large gradient decodes about 1.15× the reference's time, with more of a gap on the
-corpus's tiny images. A program that mostly writes, or reads photographs, wants the default;
-one that mostly reads large compressible images can still take `SPNG_USE_SYSTEM_ZLIB=ON`,
-where decode runs within a few percent of the reference everywhere.
+Encode wins by doing less — 0.65× on the corpus in the default build, and a 2048×2048 gradient
+encodes in 52ms against the reference's 98 — partly from filtering sixteen bytes at a time and
+partly from a compressor that reaches the same answer with less work: the files it writes are
+the size the reference writes, byte-identical on most of the benchmark images and a whisker
+smaller on the rest. Decode wins by reading ahead. Scanlines are decompressed a quarter
+megabyte at a time and served from that buffer, and the difference is not the bookkeeping but
+what a roomy output buffer lets the decompressor's fast path do: with a scanline's worth of
+room it must step carefully near the end of every row, and with a fill's worth it almost never
+leaves the fast path. A large gradient — the entropy decoder's hardest case, and the one place
+the reference used to lead — decodes in well under half the reference's time in either build.
+A 16MB noise image, where the stream is mostly stored bytes and the time goes to checksums and
+copying, reads in 2.6ms against the reference's 2.9, because the checksums run through an
+eight-lane carryless-multiply fold where the processor has one. What remains for
+`SPNG_USE_SYSTEM_ZLIB=ON` is mostly the per-image fixed cost: on a corpus of tiny images it
+starts decoders a few microseconds faster apiece, which is what separates the two totals
+above — and nothing else does.
 
 ## Platforms without a C library underneath
 
