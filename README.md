@@ -69,6 +69,139 @@ compression for the system zlib; the default library is Swift throughout,
 nothing. `SPNG_STATIC_STDLIB` links the Swift runtime into the library, which is
 worth doing on platforms that do not ship one.
 
+## Using the Swift API
+
+The `PNG` module is the engine itself, with the same working model the C API has — a context, an
+info store, and callbacks for memory and bytes — but with Swift types, typed throws, and no
+pointer-to-struct boundary to cross. The callbacks live in a `Host`; they are C-compatible
+function pointers, so state travels through the `owner` pointer rather than a capture. This host
+reads from and writes to an in-memory buffer, which is the whole of the boilerplate:
+
+```swift
+import Foundation
+import PNG
+
+final class Buffer {
+    var bytes: [UInt8]
+    var offset = 0
+    init(_ bytes: [UInt8] = []) { self.bytes = bytes }
+}
+
+// `PNG.Host` written in full, because Foundation exports a `Host` of its own.
+func makeHost(_ buffer: Buffer) -> PNG.Host {
+    PNG.Host(
+        owner: Unmanaged.passUnretained(buffer).toOpaque(),
+        allocate: { _, size in malloc(Int(size)) },
+        deallocate: { _, memory in free(memory) },
+        read: { owner, destination, count in
+            let buffer = Unmanaged<Buffer>.fromOpaque(owner!).takeUnretainedValue()
+            precondition(buffer.offset + Int(count) <= buffer.bytes.count, "file truncated")
+            buffer.bytes.withUnsafeBufferPointer {
+                destination!.update(from: $0.baseAddress! + buffer.offset, count: Int(count))
+            }
+            buffer.offset += Int(count)
+        },
+        warn: { _, _, _ in },
+        warnChunk: { _, _, _, _ in },
+        writeBytes: { owner, data, count in
+            let buffer = Unmanaged<Buffer>.fromOpaque(owner!).takeUnretainedValue()
+            guard let data else { return }
+            buffer.bytes.append(contentsOf: UnsafeBufferPointer(start: data, count: Int(count)))
+        },
+        flushBytes: { _ in }
+    )
+}
+```
+
+Decoding reads the header, then rows, each into a buffer of `info.rowBytes`:
+
+```swift
+func decode(_ pngBytes: [UInt8]) throws(Diagnostic) -> [[UInt8]] {
+    let file = Buffer(pngBytes)
+    let host = makeHost(file)
+
+    let context = PngContext(host: host, isReading: true)
+    let info = InfoStore(host: host)
+    defer {
+        info.release()
+        context.release()
+    }
+
+    try context.readInfo(into: info)
+
+    guard let header = info.header else { throw Diagnostic("no header") }
+
+    try context.updateInfoForClient(info)
+
+    var image = [[UInt8]]()
+    var row = [UInt8](repeating: 0, count: info.rowBytes)
+
+    for _ in 0 ..< header.height {
+        try row.withUnsafeMutableBufferPointer { (buffer) throws(Diagnostic) in
+            try context.readRow(into: buffer.baseAddress)
+        }
+        image.append(row)
+    }
+
+    try context.readEnd(into: nil)
+
+    return image
+}
+```
+
+The read transforms are requested between `readInfo` and `updateInfoForClient`, as flags on the
+context rather than calls: `context.transformFlags.insert([.expand, .scale16])` asks for
+palettes and sub-byte depths expanded and 16-bit samples folded to 8, the way
+`png_set_expand` and `png_set_scale_16` would. An interlaced image wants
+`context.enableInterlaceHandling()` there too, after which the same row loop reads full-width
+rows and knows nothing about passes.
+
+Encoding is the mirror image — describe the image, write the info, feed rows, finish:
+
+```swift
+func encodeGradient() throws(Diagnostic) -> [UInt8] {
+    let out = Buffer()
+    let host = makeHost(out)
+
+    let context = PngContext(host: host, isReading: false)
+    let info = InfoStore(host: host)
+    defer {
+        info.release()
+        context.release()
+    }
+
+    try context.writeHeader(
+        Header.Fields(
+            width: 256, height: 256, bitDepth: 8, colorType: 2,
+            compressionMethod: 0, filterMethod: 0, interlaceMethod: 0
+        )
+    )
+    try context.writePalette(info)
+
+    var row = [UInt8](repeating: 0, count: 256 * 3)
+
+    for y in 0 ..< 256 {
+        for x in 0 ..< 256 {
+            row[x * 3] = UInt8(x)
+            row[x * 3 + 1] = UInt8(y)
+            row[x * 3 + 2] = UInt8(x ^ y)
+        }
+        try row.withUnsafeMutableBufferPointer { (buffer) throws(Diagnostic) in
+            try context.writeRow(buffer.baseAddress)
+        }
+    }
+
+    try context.writeEnd(info)
+
+    // out.bytes is now a complete PNG file.
+    return out.bytes
+}
+```
+
+Two complete programs in this repository use the API this way and stay compiling:
+`Sources/pngbench-swift` drives every read transform and both whole-image and row-at-a-time
+reading, and `Sources/wasm-smoke-test` is the round trip above, built for embedded WebAssembly.
+
 ## Speed
 
 Substituting for a library is not much use if it costs the program that substitutes it. So the
@@ -102,6 +235,26 @@ microsecond-scale affair in both builds — the Swift decompressor keeps its fix
 once for the whole process, the way zlib carries them as constant data — so there is no
 workload left where `SPNG_USE_SYSTEM_ZLIB=ON` buys anything; it remains for clients who want
 zlib underneath for their own reasons.
+
+The numbers behind those claims, measured on an Apple M1 Pro against Homebrew libpng 1.6.58
+over the system zlib, default build, best of ten alternating rounds. The gradients are the
+entropy coder's hardest case and the noise image is the filter's; the two encoders write
+byte-identical files for the 2048×2048 gradient, so the encode column compares the same work.
+
+| image                          | decode, reference | decode, this library | encode, reference | encode, this library |
+|--------------------------------|------------------:|---------------------:|------------------:|---------------------:|
+| 512×512 gray gradient          |           0.24 ms |          **0.05 ms** |           2.00 ms |          **1.20 ms** |
+| 512×512 RGB gradient           |           0.31 ms |          **0.11 ms** |           6.06 ms |          **3.34 ms** |
+| 512×512 RGBA gradient          |           0.35 ms |          **0.15 ms** |           8.15 ms |          **4.36 ms** |
+| 2048×2048 RGB gradient         |           2.44 ms |          **1.47 ms** |           97.8 ms |          **52.2 ms** |
+| 2048×2048 RGBA noise, 16 MB    |           2.84 ms |          **2.63 ms** |                 — |                    — |
+| 1×1, the whole lifecycle       |            1.4 µs |               2.5 µs |                 — |                    — |
+| whole corpus, all three phases |           27.2 ms |          **17.3 ms** |                 — |                    — |
+
+The one row the reference still wins is the degenerate one: creating and destroying a decoder
+around a one-pixel image, where what is measured is object setup rather than decoding, and a
+microsecond of Swift allocation stands next to a microsecond of C. Everything an image is
+actually made of decodes and encodes faster here.
 
 ## Platforms without a C library underneath
 
