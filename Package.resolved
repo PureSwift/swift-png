@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PureSwift/swift-zlib.git",
       "state" : {
-        "revision" : "9248157efd4252d4d88ca3ed92558efd9e402213",
-        "version" : "1.0.7"
+        "revision" : "a937e711592ad4c59675cca92e2b6dab5b1dc187",
+        "version" : "1.0.8"
       }
     }
   ],
