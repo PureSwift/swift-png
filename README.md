@@ -81,7 +81,7 @@ cmake --build build/release --target benchmark
 
 It reports decode, decode-with-transforms and encode per image and adds them up. As of this
 writing the default build — the one that compresses through Swift and links no zlib — totals
-**0.72×** the reference's, and the build that swaps the system zlib in totals **0.70×**; either
+**0.64×** the reference's, and the build that swaps the system zlib in totals **0.70×**; either
 way this library is the faster of the two, and the number moves by about ±0.01 between runs, so
 read three.
 
@@ -97,10 +97,11 @@ leaves the fast path. A large gradient — the entropy decoder's hardest case, a
 the reference used to lead — decodes in well under half the reference's time in either build.
 A 16MB noise image, where the stream is mostly stored bytes and the time goes to checksums and
 copying, reads in 2.6ms against the reference's 2.9, because the checksums run through an
-eight-lane carryless-multiply fold where the processor has one. What remains for
-`SPNG_USE_SYSTEM_ZLIB=ON` is mostly the per-image fixed cost: on a corpus of tiny images it
-starts decoders a few microseconds faster apiece, which is what separates the two totals
-above — and nothing else does.
+eight-lane carryless-multiply fold where the processor has one. Setting up a decoder is a
+microsecond-scale affair in both builds — the Swift decompressor keeps its fixed tables built
+once for the whole process, the way zlib carries them as constant data — so there is no
+workload left where `SPNG_USE_SYSTEM_ZLIB=ON` buys anything; it remains for clients who want
+zlib underneath for their own reasons.
 
 ## Platforms without a C library underneath
 
