@@ -60,6 +60,44 @@ final class SequentialReader {
     /// the stream, not present as nothing.
     private(set) var pass = 0
 
+    // -- decode-ahead state ------------------------------------------------------
+    //
+    // Scanlines are decompressed into the ring many at a time and served from it, because
+    // the decompressor's fast loop costs real time to enter and leave, and a row at a time
+    // pays that cost per scanline.  The ring is a byte fifo, not a table of slots: the
+    // compressed stream knows nothing of rows, and at a pass change the same bytes simply
+    // start being carved into spans of a different width.
+
+    /// Where the next unserved scanline's filter byte sits in the ring.
+    private var ringServe = 0
+
+    /// One past the last decompressed byte in the ring.
+    private var ringFill = 0
+
+    /// Where the scanline the next one reconstructs against sits, or negative when the next
+    /// scanline is a pass's first and reconstructs against the notional row of zeroes.
+    ///
+    /// Only meaningful when rows are served straight from the ring: on the copying path the
+    /// reference lives in its own buffer, as it always has.
+    private var ringReference = -1
+
+    /// How many decompressed bytes have entered the ring over the whole image.
+    ///
+    /// What bounds every fill: the image's scanlines amount to a known total, and decoding
+    /// even one byte past it would move the moment a corrupt checksum or trailing garbage
+    /// is discovered — the end-of-image walk asks those questions, in the order it always
+    /// has, and a greedy fill must not ask them first.
+    private var ringDecodedTotal = 0
+
+    /// The image's scanlines in stream bytes: every pass's rows, filter bytes included.
+    private var imageSpanTotal = 0
+
+    /// Whether the scanline last decoded sits in the ring or in the row buffer.
+    private var servedFromRing = false
+
+    /// Where the scanline last decoded starts in the ring, filter byte included.
+    private var servedOffset = 0
+
     /// Set when the checksum of a chunk did not match. What to do about it is the
     /// client's choice, so it is recorded rather than acted on here.
     private(set) var sawBadChecksum = false
@@ -232,6 +270,37 @@ final class SequentialReader {
         // a pair that trade places: see the swap below.
         try context.reserve(.previousRow, widest + 1)
 
+        // Everything the stream owes the image, in bytes: each pass's rows with their filter
+        // bytes.  Fills never decode past this, so the end-of-stream questions — the checksum,
+        // whether anything is left over — are still asked afterwards, where they always were.
+        if header.isInterlaced {
+            var total = 0
+            for pass in 0 ..< Adam7.passCount
+                where !Adam7.isEmpty(
+                    pass: pass, imageWidth: header.width, imageHeight: header.height
+                ) {
+                total += Adam7.height(ofPass: pass, imageHeight: header.height)
+                    * (Adam7.rowBytes(ofPass: pass, header: header) + 1)
+            }
+            self.imageSpanTotal = total
+        } else {
+            self.imageSpanTotal = header.height * (header.rowBytes + 1)
+        }
+
+        // Big enough to make a fill's decompression run long, small enough not to matter
+        // next to the image it serves; never larger than the image, and never smaller than
+        // what one serve needs with a reference span and a recycle's slack around it.
+        try context.reserve(
+            .decodeRing,
+            max(4 * (widestStored + 1), min(1 << 18, self.imageSpanTotal))
+        )
+
+        self.ringServe = 0
+        self.ringFill = 0
+        self.ringReference = -1
+        self.ringDecodedTotal = 0
+        self.servedFromRing = false
+
         context.inflater = try InflateStream()
 
         self.phase = .rows
@@ -311,47 +380,88 @@ final class SequentialReader {
         // trailing-bit mask only exists below eight bits — and that is what lets the reference
         // row be this buffer *itself* next time, by trading places with the other buffer,
         // instead of a copy of it.  The encoder filtered against stored bytes, so anything that
-        // rewrites the row — a transform, or the client's own — forces the copy back.
+        // rewrites the row — a transform, or the client's own — forces it through the row
+        // buffer instead, and the reference row into its own.
         let rowStaysStored = header.bitDepth >= 8 && !runsPipeline && !runsUserTransform
 
-        // The trade, before this row is decoded: what the buffer holds from last time becomes
-        // the reference, and the reference's storage is decoded into.  Not on a pass's first
-        // row, whose reference the pass change zeroed.
-        if rowStaysStored, self.rowIndex > 0 {
-            swap(&context.rowBuffer, &context.previousRow)
-        }
+        // The filter byte and the scanline are one contiguous span in the stream, and the
+        // ring holds it — along with as many spans after it as one decompression call could
+        // produce, which is the point.
+        let span = stored + 1
+        try self.fillRing(until: span, context: context)
 
-        // The filter byte and the scanline are one contiguous run in the stream.
-        try self.inflateExactly(count: stored + 1, context: context)
+        let ring = context.decodeRing.bytes
+        let row: UnsafeMutableBufferPointer<UInt8>
 
-        let raw = context.rowBuffer.bytes
+        if rowStaysStored {
+            // Served straight from the ring: reconstructed in place, against the span before
+            // it — or against whatever the reference buffer holds, which is zeroes at a
+            // pass's start and the last copied-path row after one of those.
+            let base = ring.baseAddress! + self.ringServe
 
-        guard let filter = Filter(rawValue: raw[0]) else {
-            throw Diagnostic("bad adaptive filter value")
-        }
+            guard let filter = Filter(rawValue: base.pointee) else {
+                throw Diagnostic("bad adaptive filter value")
+            }
 
-        let row = UnsafeMutableBufferPointer(start: raw.baseAddress! + 1, count: stored)
+            row = UnsafeMutableBufferPointer(start: base + 1, count: stored)
 
-        Defilter.apply(
-            filter,
-            to: row,
-            previous: UnsafeBufferPointer(
-                start: context.previousRow.bytes.baseAddress! + 1,
-                count: stored
-            ),
-            stride: header.filterStride
-        )
+            Defilter.apply(
+                filter,
+                to: row,
+                previous: UnsafeBufferPointer(
+                    start: self.ringReference >= 0
+                        ? ring.baseAddress! + self.ringReference + 1
+                        : context.previousRow.bytes.baseAddress! + 1,
+                    count: stored
+                ),
+                stride: header.filterStride
+            )
 
-        // This row becomes the reference for the next one, and it has to be the bytes as
-        // stored: the encoder computed its filters against those, so discarding anything first
-        // would decode the next row wrongly.  When the row is about to be rewritten below, that
-        // means a copy; when it is not, the trade above has already made this buffer the next
-        // reference, and there is nothing to do.
-        if !rowStaysStored {
+            self.ringReference = self.ringServe
+            self.servedFromRing = true
+            self.servedOffset = self.ringServe
+        } else {
+            // The copying path: the row buffer receives the span, because everything below
+            // rewrites the row in place and the ring's bytes are the next row's reference.
+            //
+            // The reference has to sit in its own buffer here — the encoder filtered against
+            // the bytes as stored, and the row buffer is about to hold something else — so a
+            // reference still in the ring is copied out first.  Ordinarily the paths do not
+            // alternate and this copy runs never, or once.
+            if self.ringReference >= 0 {
+                context.previousRow.bytes.baseAddress!.advanced(by: 1).update(
+                    from: ring.baseAddress! + self.ringReference + 1,
+                    count: stored
+                )
+                self.ringReference = -1
+            }
+
+            let raw = context.rowBuffer.bytes
+
+            raw.baseAddress!.update(from: ring.baseAddress! + self.ringServe, count: span)
+
+            guard let filter = Filter(rawValue: raw[0]) else {
+                throw Diagnostic("bad adaptive filter value")
+            }
+
+            row = UnsafeMutableBufferPointer(start: raw.baseAddress! + 1, count: stored)
+
+            Defilter.apply(
+                filter,
+                to: row,
+                previous: UnsafeBufferPointer(
+                    start: context.previousRow.bytes.baseAddress! + 1,
+                    count: stored
+                ),
+                stride: header.filterStride
+            )
+
             context.previousRow.bytes.baseAddress!.advanced(by: 1)
                 .update(from: row.baseAddress!, count: stored)
+            self.servedFromRing = false
         }
 
+        self.ringServe += span
         self.rowIndex += 1
 
         // Applied here rather than at each caller, so that every way of reading a row goes through
@@ -569,8 +679,10 @@ final class SequentialReader {
         }
 
         // Each pass reconstructs from its own notional row of zeroes, so the reference row is
-        // cleared rather than carried over from the pass that just ended.
+        // cleared rather than carried over from the pass that just ended — and a reference
+        // still sitting in the ring is let go for the same reason.
         context.previousRow.zero()
+        self.ringReference = -1
     }
 
     /// Whether a row of the image is one the current pass carries.
@@ -617,9 +729,15 @@ final class SequentialReader {
         }
     }
 
-    /// The scanline last decoded, as it sits in the row buffer.
+    /// The scanline last decoded, wherever it sits: in the ring when it was served straight
+    /// from there, in the row buffer when transforms had their way with it.
     private func decodedRow(count: Int, context: PngContext) -> UnsafeBufferPointer<UInt8> {
-        UnsafeBufferPointer(start: context.rowBuffer.bytes.baseAddress! + 1, count: count)
+        self.servedFromRing
+            ? UnsafeBufferPointer(
+                start: context.decodeRing.bytes.baseAddress! + self.servedOffset + 1,
+                count: count
+            )
+            : UnsafeBufferPointer(start: context.rowBuffer.bytes.baseAddress! + 1, count: count)
     }
 
     /// Produces the next row into `destination`.
@@ -774,26 +892,69 @@ final class SequentialReader {
         }
     }
 
-    /// Fills the start of the row buffer with exactly `count` decompressed bytes.
-    private func inflateExactly(count: Int, context: PngContext) throws(Diagnostic) {
+    /// Ensures the ring holds at least `needed` unserved bytes, decompressing ahead as far as
+    /// there is room and image left for.
+    ///
+    /// The point is the shape of the calls: one decompression of everything the input in hand
+    /// can produce, instead of one per scanline.  Entering and leaving the decompressor's fast
+    /// loop costs the same whether it decodes a scanline or a quarter megabyte, so the cost is
+    /// paid per fill here rather than per row.
+    ///
+    /// New image data chunks are still fetched only while the row being asked for is
+    /// incomplete — reading ahead in the *file* would change which chunks a damaged image
+    /// gets to complain about, and this changes nothing observable at all.
+    private func fillRing(until needed: Int, context: PngContext) throws(Diagnostic) {
+        guard self.ringFill - self.ringServe < needed else { return }
+
         guard let inflater = context.inflater else {
             throw Diagnostic("no image data to read")
         }
 
-        let destination = context.rowBuffer.bytes.baseAddress!
-        var produced = 0
+        let ring = context.decodeRing.bytes
 
-        while produced < count {
+        while self.ringFill - self.ringServe < needed {
+            // Recycle when the tail cannot take what this serve still lacks: the live region —
+            // from the reference span, when one is being kept, through the last byte decoded —
+            // slides to the front whole, so that spans stay contiguous.
+            let liveStart = self.ringReference >= 0 ? self.ringReference : self.ringServe
+
+            if liveStart > 0, ring.count - self.ringFill < needed - (self.ringFill - self.ringServe) {
+                let live = self.ringFill - liveStart
+
+                if live > 0 {
+                    ring.baseAddress!.update(from: ring.baseAddress! + liveStart, count: live)
+                }
+
+                self.ringServe -= liveStart
+                self.ringFill -= liveStart
+
+                if self.ringReference >= 0 {
+                    self.ringReference -= liveStart
+                }
+            }
+
             if inflater.needsInput {
                 try self.refillInput(context: context)
             }
 
-            let made = try inflater.inflate(
-                into: destination + produced,
-                count: count - produced
+            // Never past the image's own bytes: the checksum and anything left over after the
+            // last scanline are the end-of-image walk's questions, asked where they always were.
+            let budget = min(
+                ring.count - self.ringFill,
+                self.imageSpanTotal - self.ringDecodedTotal
             )
 
-            produced += made
+            guard budget > 0 else {
+                throw Diagnostic("Not enough image data")
+            }
+
+            let made = try inflater.inflate(
+                into: ring.baseAddress! + self.ringFill,
+                count: budget
+            )
+
+            self.ringFill += made
+            self.ringDecodedTotal += made
 
             if made == 0 {
                 // The stream ended before the image did, which is a truncated file.
