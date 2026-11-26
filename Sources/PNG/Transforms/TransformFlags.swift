@@ -135,6 +135,14 @@ public struct TransformFlags: OptionSet, Sendable {
             flags.insert([.expand, .expandTransparency])
         }
 
+        // A transparent colour on a greyscale image narrower than a byte has nowhere to go until the
+        // samples are a byte wide, since the format has no sub-byte alpha.  Turning it into a channel
+        // widens them first, as the reference does — after the compositing above, which can ask for
+        // the channel itself.
+        if flags.contains(.expandTransparency), header.colorType == .grayscale, header.bitDepth < 8 {
+            flags.insert(.expandGrayTo8)
+        }
+
         // Discarding colour from an indexed image means expanding the palette first: the colour is in
         // the palette, and an index is not something to take a weighted sum of.  Only for an indexed
         // image, though — a low-depth greyscale one has no colour to discard, so it is left alone
