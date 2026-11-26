@@ -409,6 +409,121 @@ struct TransformTests {
         #expect(Array(bytes[8 ..< 12]) == [70, 80, 90, 0xFF])
         #expect(shape.colorType == .rgba)
     }
+
+    /// Runs the pipeline over the given row and returns the bytes it came out as, cut to the final
+    /// shape.
+    private func transform(
+        _ flags: TransformFlags,
+        _ header: Header,
+        row: [UInt8],
+        key: Rgb16
+    ) -> (bytes: [UInt8], shape: RowInfo) {
+        let program = self.program(flags, header, transparency: true)
+        let start = RowInfo(header)
+        let capacity = program.maximumRowBytes(from: start, hasTransparency: true)
+
+        let inputs = TransformInputs()
+        inputs.transparentColor = key
+
+        var shape = start
+        var bytes = row + [UInt8](repeating: 0, count: max(0, capacity - row.count))
+
+        bytes.withUnsafeMutableBufferPointer { buffer in
+            program.apply(to: buffer, info: &shape, inputs: inputs)
+        }
+
+        return (Array(bytes.prefix(shape.rowBytes)), shape)
+    }
+
+    /// Packs one sample per pixel at a depth below a byte, most significant first.
+    private func pack(_ samples: [UInt8], depth: Int) -> [UInt8] {
+        let perByte = 8 / depth
+        var bytes = [UInt8](repeating: 0, count: (samples.count + perByte - 1) / perByte)
+
+        for (pixel, sample) in samples.enumerated() {
+            bytes[pixel / perByte] |= sample << ((perByte - 1 - pixel % perByte) * depth)
+        }
+
+        return bytes
+    }
+
+    /// A greyscale key below a byte is recorded at the file's depth, and the samples it is compared
+    /// with have been widened by then — so the key has to be widened the same way or it never matches.
+    @Test("Applies a narrow greyscale key after widening", arguments: [1, 2, 4])
+    func narrowGrayKey(depth: Int) {
+        let width = 19
+        let levels = 1 << depth
+        let samples = (0 ..< width).map { UInt8($0 % levels) }
+        let keyValue = UInt8(levels - 1) / 2 + 1
+        let multiplier: UInt8 = depth == 1 ? 0xFF : (depth == 2 ? 0x55 : 0x11)
+
+        let header = self.header(width: width, depth: UInt8(depth), colorType: 0)
+        let row = self.pack(samples, depth: depth)
+
+        var key = Rgb16()
+        key.gray = UInt16(keyValue)
+
+        // The plain expansion, and asking for the channel alone, which has to widen the samples too.
+        for flags: TransformFlags in [[.expand, .expandTransparency], [.expandTransparency]] {
+            let (bytes, shape) = self.transform(flags, header, row: row, key: key)
+
+            #expect(shape.colorType == .grayscaleAlpha, "\(flags) at depth \(depth)")
+            #expect(shape.bitDepth == 8)
+
+            for (pixel, sample) in samples.enumerated() {
+                #expect(bytes[pixel * 2] == sample &* multiplier, "pixel \(pixel) at depth \(depth)")
+                #expect(
+                    bytes[pixel * 2 + 1] == (sample == keyValue ? 0 : 0xFF),
+                    "alpha of pixel \(pixel) at depth \(depth) for \(flags)"
+                )
+            }
+        }
+
+        // Through to colour, with an added alpha that the expanded one takes the place of.
+        let (bytes, shape) = self.transform(
+            [.expand, .expandTransparency, .grayToRgb, .addAlpha], header, row: row, key: key
+        )
+
+        #expect(shape.colorType == .rgba)
+
+        for (pixel, sample) in samples.enumerated() {
+            let value = sample &* multiplier
+            #expect(Array(bytes[pixel * 4 ..< pixel * 4 + 3]) == [value, value, value])
+            #expect(bytes[pixel * 4 + 3] == (sample == keyValue ? 0 : 0xFF), "pixel \(pixel)")
+        }
+    }
+
+    /// Keys already at the depth of the samples are compared as they are.
+    @Test("Leaves byte-wide keys as they were")
+    func byteWideKeys() {
+        var key = Rgb16()
+
+        // Eight bit greyscale.
+        key.gray = 0x05
+        var (bytes, _) = self.transform(
+            [.expand, .expandTransparency], self.header(width: 3, depth: 8, colorType: 0),
+            row: [0x05, 0x55, 0x06], key: key
+        )
+        #expect(bytes == [0x05, 0x00, 0x55, 0xFF, 0x06, 0xFF])
+
+        // Sixteen bit greyscale.
+        key.gray = 0x1234
+        (bytes, _) = self.transform(
+            [.expand, .expandTransparency], self.header(width: 2, depth: 16, colorType: 0),
+            row: [0x12, 0x34, 0x12, 0x35], key: key
+        )
+        #expect(bytes == [0x12, 0x34, 0x00, 0x00, 0x12, 0x35, 0xFF, 0xFF])
+
+        // Eight bit colour.
+        key.red = 1
+        key.green = 2
+        key.blue = 3
+        (bytes, _) = self.transform(
+            [.expand, .expandTransparency], self.header(width: 2, depth: 8, colorType: 2),
+            row: [1, 2, 3, 1, 2, 4], key: key
+        )
+        #expect(bytes == [1, 2, 3, 0x00, 1, 2, 4, 0xFF])
+    }
 }
 
 /// Gamma is the one place where agreeing with the reference to the last bit is both the point and
