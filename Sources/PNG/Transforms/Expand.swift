@@ -94,7 +94,8 @@ extension Transform {
     static func transparencyToAlpha(
         _ row: UnsafeMutableBufferPointer<UInt8>,
         _ info: inout RowInfo,
-        transparent: Rgb16
+        transparent: Rgb16,
+        keyDepth: Int
     ) {
         guard !info.colorType.hasAlpha, !info.colorType.isIndexed, info.bitDepth >= 8 else {
             return
@@ -112,7 +113,16 @@ extension Transform {
         let keyRed = width == 2 ? transparent.red : UInt16(transparent.red & 0xFF)
         let keyGreen = width == 2 ? transparent.green : UInt16(transparent.green & 0xFF)
         let keyBlue = width == 2 ? transparent.blue : UInt16(transparent.blue & 0xFF)
-        let keyGray = width == 2 ? transparent.gray : UInt16(transparent.gray & 0xFF)
+        var keyGray = width == 2 ? transparent.gray : UInt16(transparent.gray & 0xFF)
+
+        // A greyscale key recorded below a byte names a sample that has since been widened, so it is
+        // widened the same way before the two are compared — otherwise a 4 bit key of 5 would be
+        // looking for 5 among samples that now read 85, and find nothing.
+        if !isColor, keyDepth < 8 {
+            let mask = UInt16((1 << keyDepth) - 1)
+            let multiplier: UInt16 = keyDepth == 1 ? 0xFF : (keyDepth == 2 ? 0x55 : 0x11)
+            keyGray = (transparent.gray & mask) * multiplier
+        }
 
         for pixel in stride(from: info.width - 1, through: 0, by: -1) {
             let source = pixel * sourceChannels * width
