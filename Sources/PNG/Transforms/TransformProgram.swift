@@ -23,7 +23,7 @@ struct TransformProgram {
     enum Step {
         case expandPalette
         case expandGrayTo8
-        case expandTransparency
+        case expandTransparency(keyDepth: Int)
         case stripAlpha
         case rgbToGray
         case grayToRgb
@@ -141,7 +141,9 @@ struct TransformProgram {
         // Only for a non-indexed image: an indexed one gets its alpha from the palette during the
         // expansion above, so there is nothing left to derive here.
         if flags.contains(.expandTransparency), !header.colorType.isIndexed, hasTransparency {
-            self.steps.append(.expandTransparency)
+            // The file's depth goes with it, because that is the depth the key was recorded at, and
+            // by the time this runs a narrow greyscale row has already been widened to a byte.
+            self.steps.append(.expandTransparency(keyDepth: header.bitDepth))
             self.consumesTransparency = true
         }
 
@@ -411,8 +413,10 @@ struct TransformProgram {
             case .expandGrayTo8:
                 Transform.grayTo8(row, &info)
 
-            case .expandTransparency:
-                Transform.transparencyToAlpha(row, &info, transparent: inputs.transparentColor)
+            case let .expandTransparency(keyDepth):
+                Transform.transparencyToAlpha(
+                    row, &info, transparent: inputs.transparentColor, keyDepth: keyDepth
+                )
 
             case .stripAlpha:
                 Transform.stripAlpha(row, &info)
